@@ -55,6 +55,8 @@ export interface Campaign {
   savedSlots: string[]
   createdAt: string
   adminCode: string | null
+  organizerCode: string | null
+  participantCode: string | null
   admins: CampaignAdmin[]
   choreographers: Person[]
   dancers: Person[]

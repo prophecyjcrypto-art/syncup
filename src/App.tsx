@@ -8,24 +8,28 @@ import { ResultsPanel } from './components/ResultsPanel'
 import { RosterPanel } from './components/RosterPanel'
 import { SetupPanel } from './components/SetupPanel'
 import { LANGUAGES, t } from './i18n'
-import { canManageRoster, isAdmin } from './lib/access'
+import { canManageRoster, isAdmin, isChoreographer } from './lib/access'
 import {
   claimAdminInvite,
   claimAdminInvites,
+  claimOrganizerInvite,
+  claimParticipantInvite,
   createCampaign,
   deleteCampaign,
   deletePerson,
-  ensureAccess,
+  campaignVisible,
   fetchCampaigns,
   InviteError,
   removeAdmin,
   rotateAdminInvite,
+  rotateOrganizerInvite,
+  rotateParticipantInvite,
   savePortalPerson,
   saveRosterPerson,
   setSavedSlots,
   updateCampaign,
 } from './lib/db'
-import { parseAdminInvite } from './lib/invites'
+import { parseAdminInvite, parseOrganizerInvite, parseParticipantInvite } from './lib/invites'
 import { captureGoogleSession, clearGoogleToken, GOOGLE_CALENDAR_SCOPES, readGoogleToken } from './lib/googleCalendar'
 import { CalendarProvider } from './lib/calendarContext'
 import { supabase, supabaseConfigError } from './lib/supabase'
@@ -48,20 +52,32 @@ function readRole(value: string | null): PersonRole | null {
   return null
 }
 
-function readUrl(): { campaign: string | null; role: PersonRole | null; admin: string | null } {
+function readUrl(): {
+  campaign: string | null
+  role: PersonRole | null
+  admin: string | null
+  organizer: string | null
+  participant: string | null
+} {
   const params = new URLSearchParams(window.location.search)
   return {
     campaign: params.get('campaign'),
     role: readRole(params.get('role')),
     admin: params.get('admin'),
+    organizer: params.get('organizer'),
+    participant: params.get('participant'),
   }
 }
 
-function clearAdminParam() {
+function replaceSearch(mutate: (params: URLSearchParams) => void) {
   const next = new URL(window.location.href)
-  next.searchParams.delete('admin')
+  mutate(next.searchParams)
   const search = next.searchParams.toString()
   window.history.replaceState({}, '', `${next.pathname}${search ? `?${search}` : ''}${next.hash}`)
+}
+
+function clearAdminParam() {
+  replaceSearch((params) => params.delete('admin'))
 }
 
 export default function App() {
@@ -102,9 +118,11 @@ export default function App() {
   }, [isDarkMode])
 
   useEffect(() => {
-    if (!ready || user || !urlState.admin) return
-    setBanner(t(lang, 'invite_sign_in'))
-  }, [ready, user, urlState.admin, lang])
+    if (!ready || user) return
+    if (urlState.organizer) setBanner(t(lang, 'organizer_sign_in'))
+    else if (urlState.participant) setBanner(t(lang, 'participant_sign_in'))
+    else if (urlState.admin) setBanner(t(lang, 'invite_sign_in'))
+  }, [ready, user, urlState.admin, urlState.organizer, urlState.participant, lang])
 
   useEffect(() => {
     if (!supabase) {
@@ -153,7 +171,51 @@ export default function App() {
           setBanner(error instanceof InviteError ? t(lang, 'invite_invalid') : error instanceof Error ? error.message : t(lang, 'invite_invalid'))
         }
       }
-      if (urlState.campaign) setLinkMissing(!(await ensureAccess(urlState.campaign, user.id)))
+      if (urlState.organizer) {
+        const code = parseOrganizerInvite(urlState.organizer) ?? ''
+        replaceSearch((params) => params.delete('organizer'))
+        setUrlState(readUrl())
+        if (!code) {
+          setBanner(t(lang, 'invite_invalid'))
+        } else {
+          try {
+            const id = await claimOrganizerInvite(code)
+            replaceSearch((params) => {
+              params.set('campaign', id)
+              params.set('role', 'organizer')
+            })
+            setUrlState(readUrl())
+            setActiveId(id)
+            setPortalRole('choreographer')
+            setBanner(t(lang, 'organizer_joined'))
+          } catch (error) {
+            setBanner(error instanceof InviteError ? t(lang, 'invite_invalid') : error instanceof Error ? error.message : t(lang, 'invite_invalid'))
+          }
+        }
+      }
+      if (urlState.participant) {
+        const code = parseParticipantInvite(urlState.participant) ?? ''
+        replaceSearch((params) => params.delete('participant'))
+        setUrlState(readUrl())
+        if (!code) {
+          setBanner(t(lang, 'invite_invalid'))
+        } else {
+          try {
+            const id = await claimParticipantInvite(code)
+            replaceSearch((params) => {
+              params.set('campaign', id)
+              params.set('role', 'participant')
+            })
+            setUrlState(readUrl())
+            setActiveId(id)
+            setPortalRole('dancer')
+            setBanner(t(lang, 'participant_joined'))
+          } catch (error) {
+            setBanner(error instanceof InviteError ? t(lang, 'invite_invalid') : error instanceof Error ? error.message : t(lang, 'invite_invalid'))
+          }
+        }
+      }
+      if (urlState.campaign) setLinkMissing(!(await campaignVisible(urlState.campaign)))
       else setLinkMissing(false)
       setCampaigns(await fetchCampaigns())
       hasLoaded.current = true
@@ -173,7 +235,7 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [user, urlState.campaign, urlState.admin, lang])
+  }, [user, urlState.campaign, urlState.admin, urlState.organizer, urlState.participant, lang])
 
   useEffect(() => {
     reloadRef.current = reload
@@ -216,8 +278,9 @@ export default function App() {
       }
       didRoute.current = true
       setActiveId(target.id)
-      if (urlState.role) {
-        setPortalRole(urlState.role)
+      const openedAsOrganizer = urlState.role === 'choreographer' && isChoreographer(target, user.id)
+      if (urlState.role === 'dancer' || openedAsOrganizer) {
+        setPortalRole(openedAsOrganizer ? 'choreographer' : 'dancer')
         setStep('portal')
       } else if (canManageRoster(target, user.id, user.email)) {
         setStep('choreographers')
@@ -260,7 +323,7 @@ export default function App() {
   function goHome() {
     window.history.replaceState({}, '', window.location.pathname)
     didRoute.current = true
-    setUrlState({ campaign: null, role: null, admin: null })
+    setUrlState({ campaign: null, role: null, admin: null, organizer: null, participant: null })
     setActiveId(null)
     setStep('campaigns')
   }
@@ -484,8 +547,8 @@ export default function App() {
               current={step}
               enabled={{
                 setup: true,
-                choreographers: Boolean(active),
-                dancers: Boolean(active),
+                choreographers: Boolean(active && canManageRoster(active, user.id, user.email)),
+                dancers: Boolean(active && canManageRoster(active, user.id, user.email)),
                 results: Boolean(active),
               }}
               onJump={jumpFlow}
@@ -509,6 +572,24 @@ export default function App() {
                     ? () =>
                         void run(async () => {
                           await rotateAdminInvite(editing.id)
+                          setBanner(t(lang, 'invite_rotated'))
+                        })
+                    : undefined
+                }
+                onRotateOrganizer={
+                  editing
+                    ? () =>
+                        void run(async () => {
+                          await rotateOrganizerInvite(editing.id)
+                          setBanner(t(lang, 'invite_rotated'))
+                        })
+                    : undefined
+                }
+                onRotateParticipant={
+                  editing
+                    ? () =>
+                        void run(async () => {
+                          await rotateParticipantInvite(editing.id)
                           setBanner(t(lang, 'invite_rotated'))
                         })
                     : undefined
@@ -546,8 +627,10 @@ export default function App() {
                 lang={lang}
                 isDarkMode={isDarkMode}
                 campaign={active}
-                onBack={() => setStep('dancers')}
+                onBack={() => setStep(canManageRoster(active, user.id, user.email) ? 'dancers' : 'campaigns')}
+                canPin={canManageRoster(active, user.id, user.email)}
                 onSaveSlots={(slots) => {
+                  if (!canManageRoster(active, user.id, user.email)) return
                   setCampaigns((current) => current.map((campaign) => (campaign.id === active.id ? { ...campaign, savedSlots: slots } : campaign)))
                   void run(() => setSavedSlots(active.id, slots))
                 }}

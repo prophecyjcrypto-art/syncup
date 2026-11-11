@@ -100,7 +100,12 @@ function mapPerson(row: PersonRow): Person {
   }
 }
 
-function mapCampaign(row: CampaignRow, adminCode: string | null): Campaign {
+function mapCampaign(
+  row: CampaignRow,
+  adminCode: string | null,
+  organizerCode: string | null,
+  participantCode: string | null,
+): Campaign {
   const people = (row.people ?? []).map(mapPerson).sort((left, right) => left.name.localeCompare(right.name))
   return {
     id: row.id,
@@ -114,6 +119,8 @@ function mapCampaign(row: CampaignRow, adminCode: string | null): Campaign {
     savedSlots: row.saved_slots ?? [],
     createdAt: row.created_at,
     adminCode,
+    organizerCode,
+    participantCode,
     admins: (row.admins ?? [])
       .map((admin) => ({ id: admin.id, userId: admin.user_id, email: admin.email }))
       .sort((left, right) => left.email.localeCompare(right.email)),
@@ -122,23 +129,40 @@ function mapCampaign(row: CampaignRow, adminCode: string | null): Campaign {
   }
 }
 
+function missingRelation(error: { message: string } | null, relation: string): boolean {
+  if (!error) return false
+  const message = error.message.toLowerCase()
+  return message.includes(relation) && (message.includes('schema cache') || message.includes('does not exist') || message.includes('could not find'))
+}
+
+async function inviteCodes(
+  relation: 'hupaak_admin_invites' | 'hupaak_organizer_invites' | 'hupaak_participant_invites',
+): Promise<Map<string, string>> {
+  const invites = await client().from(relation).select('campaign_id, code')
+  if (missingRelation(invites.error, relation)) return new Map()
+  fail(invites.error)
+  return new Map(
+    ((invites.data ?? []) as { campaign_id: string; code: string }[]).map((invite) => [invite.campaign_id, invite.code]),
+  )
+}
+
 export async function fetchCampaigns(): Promise<Campaign[]> {
   const db = client()
   const { data, error } = await db.from('hupaak_campaigns').select(campaignSelect).order('created_at', { ascending: false })
   fail(error)
-  const invites = await db.from('hupaak_admin_invites').select('campaign_id, code')
-  fail(invites.error)
-  const codes = new Map(
-    ((invites.data ?? []) as { campaign_id: string; code: string }[]).map((invite) => [invite.campaign_id, invite.code]),
+  const codes = await inviteCodes('hupaak_admin_invites')
+  const organizerCodes = await inviteCodes('hupaak_organizer_invites')
+  const participantCodes = await inviteCodes('hupaak_participant_invites')
+  return ((data ?? []) as CampaignRow[]).map((row) =>
+    mapCampaign(row, codes.get(row.id) ?? null, organizerCodes.get(row.id) ?? null, participantCodes.get(row.id) ?? null),
   )
-  return ((data ?? []) as CampaignRow[]).map((row) => mapCampaign(row, codes.get(row.id) ?? null))
 }
 
-export async function ensureAccess(campaignId: string, userId: string): Promise<boolean> {
-  const { error } = await client().from('hupaak_access').insert({ campaign_id: campaignId, user_id: userId })
-  if (!error || error.code === '23505') return true
-  if (error.code === '23503') return false
-  throw new Error(error.message)
+export async function campaignVisible(campaignId: string): Promise<boolean> {
+  const { data, error } = await client().from('hupaak_campaigns').select('id').eq('id', campaignId).maybeSingle()
+  if (error?.code === '22P02') return false
+  fail(error)
+  return Boolean(data)
 }
 
 export async function claimAdminInvites(userId: string, email: string): Promise<void> {
@@ -169,6 +193,36 @@ export async function claimAdminInvite(invite: string): Promise<string> {
 
 export async function rotateAdminInvite(campaignId: string): Promise<void> {
   const { error } = await client().rpc('rotate_hupaak_admin_invite', { campaign: campaignId })
+  fail(error)
+}
+
+export async function claimOrganizerInvite(invite: string): Promise<string> {
+  const { data, error } = await client().rpc('claim_hupaak_organizer', { invite })
+  if (error) {
+    if (/invalid invite/i.test(error.message)) throw new InviteError()
+    throw new Error(error.message)
+  }
+  if (typeof data !== 'string') throw new InviteError()
+  return data
+}
+
+export async function rotateOrganizerInvite(campaignId: string): Promise<void> {
+  const { error } = await client().rpc('rotate_hupaak_organizer_invite', { campaign: campaignId })
+  fail(error)
+}
+
+export async function claimParticipantInvite(invite: string): Promise<string> {
+  const { data, error } = await client().rpc('claim_hupaak_participant', { invite })
+  if (error) {
+    if (/invalid invite/i.test(error.message)) throw new InviteError()
+    throw new Error(error.message)
+  }
+  if (typeof data !== 'string') throw new InviteError()
+  return data
+}
+
+export async function rotateParticipantInvite(campaignId: string): Promise<void> {
+  const { error } = await client().rpc('rotate_hupaak_participant_invite', { campaign: campaignId })
   fail(error)
 }
 
