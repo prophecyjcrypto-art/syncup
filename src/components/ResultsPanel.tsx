@@ -3,9 +3,9 @@ import { t } from '../i18n'
 import { useCalendar } from '../lib/calendarContext'
 import { buildIcs, formatSlotText } from '../lib/export'
 import { clearGoogleToken, createCalendarEvents, GoogleCalendarError } from '../lib/googleCalendar'
-import { formatLongDate, formatTime, getDaysArray, parseISODate, toISODateString } from '../lib/dates'
-import { calculateBestSlots, compulsoryReport, sharedFreeByDay } from '../lib/schedule'
-import { cardClass, textMuted, textPrimary } from '../lib/ui'
+import { formatLongDate, formatTime, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
+import { availabilityHeatmap, calculateBestSlots, compulsoryReport, sharedFreeByDay, type OverlapCell } from '../lib/schedule'
+import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { GuideNote, InfoTip } from './Guide'
 import type { Campaign, Language, TimeSlot } from '../types'
 import { MonthBoards } from './MonthBoards'
@@ -20,12 +20,14 @@ export function ResultsPanel({
   campaign,
   onBack,
   onSaveSlots,
+  onSaveDuration,
 }: {
   lang: Language
   isDarkMode: boolean
   campaign: Campaign
   onBack: () => void
   onSaveSlots: (slots: string[]) => void
+  onSaveDuration?: (hours: number) => void
 }) {
   const choreoKey = campaign.choreographers.map((person) => person.id).join('|')
   const dancerKey = campaign.dancers.map((person) => person.id).join('|')
@@ -37,6 +39,8 @@ export function ResultsPanel({
   const [expanded, setExpanded] = useState<string | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [notice, setNotice] = useState('')
+  const [draftHours, setDraftHours] = useState<number | null>(campaign.config.durationHours)
+  const [focusStart, setFocusStart] = useState<string | null>(null)
   const calendar = useCalendar()
 
   useEffect(() => {
@@ -45,6 +49,9 @@ export function ResultsPanel({
   useEffect(() => {
     setDancerIds(dancerKey ? dancerKey.split('|') : [])
   }, [dancerKey])
+  useEffect(() => {
+    setDraftHours(campaign.config.durationHours)
+  }, [campaign.config.durationHours])
 
   const days = useMemo(
     () => getDaysArray(parseISODate(campaign.config.startDate), parseISODate(campaign.config.endDate)),
@@ -53,9 +60,11 @@ export function ResultsPanel({
   const required = campaign.choreographers.filter((person) => requiredIds.includes(person.id))
   const dancers = campaign.dancers.filter((person) => dancerIds.includes(person.id))
   const everyone = [...campaign.choreographers, ...campaign.dancers]
+  const durationUnset = draftHours == null
+  const slotConfig = { ...campaign.config, durationHours: draftHours }
   const slots = useMemo(
-    () => calculateBestSlots(campaign.config, required, dancers),
-    [campaign.config, required, dancers],
+    () => calculateBestSlots(slotConfig, required, dancers),
+    [slotConfig, required, dancers],
   )
 
   const dated = slots.filter((slot) => {
@@ -76,6 +85,7 @@ export function ResultsPanel({
       : days.map((day) => toISODateString(day))
   ).sort()
   const overlap = sharedFreeByDay(campaign.config, required, overlapDates)
+  const heat = availabilityHeatmap(campaign.config, dancers, overlapDates)
   const openDays = overlap.filter((day) => day.windows.length > 0)
   const closedDays = overlap.length - openDays.length
   const report = compulsoryReport(campaign.config, everyone, campaign.compulsoryDays)
@@ -89,6 +99,12 @@ export function ResultsPanel({
   }
 
   function scoreFor(iso: string): number {
+    if (durationUnset) {
+      const day = heat.find((item) => item.iso === iso)
+      if (!day || dancers.length === 0 || day.cells.length === 0) return 0
+      const peak = day.cells.reduce((max, cell) => Math.max(max, cell.freeIds.length), 0)
+      return (peak / dancers.length) * 100
+    }
     const daySlots = slots.filter((slot) => {
       if (toISODateString(slot.start) !== iso || slot.attendanceScore < minAttendance) return false
       if (onDaysOnly && !campaign.onDays.includes(iso)) return false
@@ -96,6 +112,23 @@ export function ResultsPanel({
     })
     if (daySlots.length === 0) return 0
     return daySlots.reduce((sum, slot) => sum + slot.attendanceScore, 0) / daySlots.length
+  }
+
+  function toggleSaved(key: string) {
+    const next = campaign.savedSlots.includes(key)
+      ? campaign.savedSlots.filter((item) => item !== key)
+      : [...campaign.savedSlots, key]
+    onSaveSlots(next)
+  }
+
+  function chooseLength(raw: string) {
+    if (raw === '') {
+      setDraftHours(null)
+      return
+    }
+    const hours = Number(raw)
+    setDraftHours(hours)
+    if (hours !== campaign.config.durationHours) onSaveDuration?.(hours)
   }
 
   function targets(): TimeSlot[] {
@@ -172,12 +205,7 @@ export function ResultsPanel({
             <button
               type="button"
               title={t(lang, 'pin_hint')}
-              onClick={() => {
-                const next = campaign.savedSlots.includes(key)
-                  ? campaign.savedSlots.filter((item) => item !== key)
-                  : [...campaign.savedSlots, key]
-                onSaveSlots(next)
-              }}
+              onClick={() => toggleSaved(key)}
               className={`text-xl ${campaign.savedSlots.includes(key) ? 'text-[#f6cf7a]' : 'text-zinc-500'}`}
             >
               {campaign.savedSlots.includes(key) ? '★' : '☆'}
@@ -237,7 +265,7 @@ export function ResultsPanel({
           <section className={`${cardClass(isDarkMode)} space-y-3 rounded-[1.5rem] p-5`}>
             <h3 className={`inline-flex items-center gap-2 font-medium ${textPrimary(isDarkMode)}`}>
               {t(lang, 'choreographer_filter')}
-              <InfoTip lang={lang} text={t(lang, 'slots_rule')} />
+              <InfoTip lang={lang} text={t(lang, durationUnset ? 'duration_not_set' : 'slots_rule')} />
             </h3>
             <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'choreographer_filter_hint')}</p>
             {campaign.choreographers.length === 0 && <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>}
@@ -252,7 +280,7 @@ export function ResultsPanel({
               </label>
             ))}
             {requiredIds.length === 0 && <p className="text-xs text-[#f6cf7a]">{t(lang, 'none_required')}</p>}
-            <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'slots_rule')}</p>
+            <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, durationUnset ? 'duration_not_set' : 'slots_rule')}</p>
             <label className="flex items-center gap-2 text-sm font-bold">
               <input type="checkbox" checked={onDaysOnly} onChange={(event) => setOnDaysOnly(event.target.checked)} disabled={campaign.onDays.length === 0} />
               {t(lang, 'on_days_only')}
@@ -284,7 +312,6 @@ export function ResultsPanel({
                 const iso = toISODateString(day)
                 const score = scoreFor(iso)
                 const selected = selectedDates.has(iso)
-                const tone = score >= 90 ? 'bg-[#7c7bb9] text-white' : score >= 70 ? 'bg-[#93ba8c] text-white' : score >= 50 ? 'bg-[#f6cf7a] text-zinc-900' : score > 0 ? (isDarkMode ? 'bg-white/10 text-zinc-200' : 'bg-white text-zinc-600') : (isDarkMode ? 'bg-black/30 text-zinc-500' : 'bg-zinc-100 text-zinc-400')
                 return (
                   <button
                     type="button"
@@ -295,7 +322,7 @@ export function ResultsPanel({
                       else next.add(iso)
                       setSelectedDates(next)
                     }}
-                    className={`flex aspect-square w-full flex-col items-center justify-center rounded-lg text-xs font-bold ${tone} ${selected ? 'ring-2 ring-white' : ''} ${campaign.compulsoryDays.includes(iso) ? 'outline outline-2 outline-[#f19ba8]' : ''}`}
+                    className={`flex aspect-square w-full flex-col items-center justify-center rounded-lg text-xs font-bold ${scoreTone(score, isDarkMode)} ${selected ? 'ring-2 ring-white' : ''} ${campaign.compulsoryDays.includes(iso) ? 'outline outline-2 outline-[#f19ba8]' : ''}`}
                   >
                     {campaign.onDays.includes(iso) ? '★' : ''}
                     {day.getDate()}
@@ -340,7 +367,33 @@ export function ResultsPanel({
           <h3 className={`font-serif text-2xl ${textPrimary(isDarkMode)}`}>
             {selectedDates.size > 0 ? t(lang, 'dates_selected', { n: selectedDates.size }) : t(lang, 'rehearsal_recommendations')}
           </h3>
-          <p className={`mt-1 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'found_slots', { n: dated.length })}</p>
+          {durationUnset ? null : <p className={`mt-1 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'found_slots', { n: dated.length })}</p>}
+          <OverlapHeat
+            lang={lang}
+            isDarkMode={isDarkMode}
+            dancers={dancers}
+            heat={heat}
+            slots={slots}
+            savedSlots={campaign.savedSlots}
+            durationHours={draftHours}
+            focusStart={focusStart}
+            nameOf={nameOf}
+            onFocus={setFocusStart}
+            onToggleSaved={toggleSaved}
+          />
+          <label className="mt-4 block space-y-2">
+            <span className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'rehearsal_length')}</span>
+            <select
+              value={draftHours ?? ''}
+              onChange={(event) => chooseLength(event.target.value)}
+              className={`w-full max-w-xs rounded-xl px-3 py-3 font-bold ${inputClass(isDarkMode)}`}
+            >
+              {campaign.config.durationHours == null ? <option value="">{t(lang, 'choose_length_blank')}</option> : null}
+              {rangeOptions(0.5, 24).map((hour) => (
+                <option key={hour} value={hour}>{hour} {t(lang, 'hours')}</option>
+              ))}
+            </select>
+          </label>
           <div className="mt-4 max-h-48 space-y-2 overflow-y-auto custom-scrollbar">
             <p className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'choreographer_overlap')}</p>
             {required.length === 0 ? (
@@ -376,12 +429,14 @@ export function ResultsPanel({
                 {others.map(renderSlot)}
               </div>
             )}
-            {dated.length === 0 && (
+            {durationUnset ? (
+              <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'choose_length_first')}</p>
+            ) : dated.length === 0 ? (
               <div className="py-16 text-center">
                 <p className="font-medium text-zinc-400">{t(lang, 'no_results')}</p>
                 <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'guide_empty_results')}</p>
               </div>
-            )}
+            ) : null}
           </div>
         </section>
       </div>
@@ -394,6 +449,131 @@ function NameGroup({ title, names, tone }: { title: string; names: string[]; ton
     <div>
       <p className={`text-[10px] font-bold uppercase ${tone}`}>{title}</p>
       <p className="text-sm">{names.join(', ') || '-'}</p>
+    </div>
+  )
+}
+
+function axisLabel(date: Date): string {
+  if (date.getMinutes() !== 0) return ''
+  const hour = date.getHours()
+  const suffix = hour >= 12 ? 'p' : 'a'
+  const display = hour % 12 || 12
+  return `${display}${suffix}`
+}
+
+function scoreTone(score: number, isDarkMode: boolean): string {
+  if (score >= 90) return 'bg-[#7c7bb9] text-white'
+  if (score >= 70) return 'bg-[#93ba8c] text-white'
+  if (score >= 50) return 'bg-[#f6cf7a] text-zinc-900'
+  if (score > 0) return isDarkMode ? 'bg-white/10 text-zinc-200' : 'bg-white text-zinc-600'
+  return isDarkMode ? 'bg-black/30 text-zinc-500' : 'bg-zinc-100 text-zinc-400'
+}
+
+function OverlapHeat({
+  lang,
+  isDarkMode,
+  dancers,
+  heat,
+  slots,
+  savedSlots,
+  durationHours,
+  focusStart,
+  nameOf,
+  onFocus,
+  onToggleSaved,
+}: {
+  lang: Language
+  isDarkMode: boolean
+  dancers: { id: string; name: string }[]
+  heat: { iso: string; cells: OverlapCell[] }[]
+  slots: TimeSlot[]
+  savedSlots: string[]
+  durationHours: number | null
+  focusStart: string | null
+  nameOf: (id: string) => string
+  onFocus: (start: string) => void
+  onToggleSaved: (key: string) => void
+}) {
+  const focused = heat.flatMap((day) => day.cells).find((cell) => cell.start.toISOString() === focusStart) ?? null
+  const matching = focused ? slots.find((slot) => slot.start.getTime() === focused.start.getTime()) ?? null : null
+  const matchingKey = matching ? slotKey(matching) : null
+  const saved = matchingKey != null && savedSlots.includes(matchingKey)
+  const header = heat[0]?.cells ?? []
+
+  return (
+    <div className="mt-4 space-y-3">
+      <div>
+        <h4 className={`font-bold ${textPrimary(isDarkMode)}`}>{t(lang, 'heat_title')}</h4>
+        <p className={`mt-1 text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'heat_hint')}</p>
+      </div>
+      {dancers.length === 0 ? (
+        <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>
+      ) : (
+        <div className="max-h-72 space-y-1 overflow-auto custom-scrollbar">
+          <div className="flex items-end gap-2">
+            <span className="w-24 shrink-0" />
+            <div className="flex gap-0.5">
+              {header.map((cell) => (
+                <span key={cell.start.toISOString()} className="w-8 text-center text-[9px] font-bold text-zinc-400">
+                  {axisLabel(cell.start)}
+                </span>
+              ))}
+            </div>
+          </div>
+          {heat.map((day) => (
+            <div key={day.iso} className="flex items-center gap-2">
+              <span className={`w-24 shrink-0 text-xs font-bold ${textPrimary(isDarkMode)}`}>{formatLongDate(parseISODate(day.iso), lang)}</span>
+              <div className="flex gap-0.5">
+                {day.cells.map((cell) => {
+                  const ratio = dancers.length === 0 ? 0 : (cell.freeIds.length / dancers.length) * 100
+                  const key = cell.start.toISOString()
+                  const pinned = slots.some(
+                    (slot) => savedSlots.includes(slotKey(slot)) && cell.start.getTime() >= slot.start.getTime() && cell.start.getTime() < slot.end.getTime(),
+                  )
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      title={`${formatTime(cell.start, lang)} · ${t(lang, 'heat_free', { n: cell.freeIds.length, total: dancers.length })}`}
+                      aria-label={`${formatLongDate(cell.start, lang)} ${formatTime(cell.start, lang)} ${t(lang, 'heat_free', { n: cell.freeIds.length, total: dancers.length })}`}
+                      onClick={() => onFocus(key)}
+                      className={`flex h-8 w-8 items-center justify-center rounded-md text-[10px] font-bold ${scoreTone(ratio, isDarkMode)} ${
+                        focusStart === key ? 'ring-2 ring-[#7c7bb9]' : ''
+                      } ${pinned ? 'outline outline-2 outline-[#f6cf7a]' : ''}`}
+                    >
+                      {cell.freeIds.length}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {focused ? (
+        <div className="space-y-2">
+          <p className={`text-sm font-bold ${textPrimary(isDarkMode)}`}>
+            {formatLongDate(focused.start, lang)} · {formatTime(focused.start, lang)} – {formatTime(focused.end, lang)}
+          </p>
+          <p className={`text-xs ${textMuted(isDarkMode)}`}>
+            {t(lang, 'heat_free', { n: focused.freeIds.length, total: dancers.length })}
+            {focused.freeIds.length > 0 ? ` · ${focused.freeIds.map(nameOf).join(', ')}` : ''}
+          </p>
+          {durationHours == null ? (
+            <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'choose_length_first')}</p>
+          ) : matching ? (
+            <button
+              type="button"
+              onClick={() => onToggleSaved(matchingKey!)}
+              className="rounded-full btn-glow bg-[#7c7bb9] px-4 py-2 text-xs font-bold text-white"
+            >
+              {saved ? t(lang, 'on_shortlist') : t(lang, 'use_this_time')}
+            </button>
+          ) : (
+            <p className="text-xs text-[#f19ba8]">{t(lang, 'slot_blocked')}</p>
+          )}
+        </div>
+      ) : null}
     </div>
   )
 }

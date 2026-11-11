@@ -41,7 +41,7 @@ export function SetupPanel({
     initial?.config ?? {
       startDate: toISODateString(new Date()),
       endDate: toISODateString(new Date(Date.now() + 14 * 86400000)),
-      durationHours: 3,
+      durationHours: null,
       dayStartHour: 9,
       dayEndHour: 22,
       attendanceTolerance: 0,
@@ -56,6 +56,7 @@ export function SetupPanel({
     [config.startDate, config.endDate],
   )
   const lock = readOnly ? 'pointer-events-none opacity-70' : ''
+  const durationOptional = !initial || initial.config.durationHours == null
 
   function setRange(field: 'startDate' | 'endDate', value: string) {
     setConfig((current) => {
@@ -165,13 +166,22 @@ export function SetupPanel({
             </div>
           </div>
           <label className="space-y-2">
-            <FieldLabel lang={lang} label={t(lang, 'rehearsal_length')} tip={t(lang, 'tip_duration')} className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`} />
+            <FieldLabel
+              lang={lang}
+              label={durationOptional ? `${t(lang, 'rehearsal_length')} (${t(lang, 'optional')})` : t(lang, 'rehearsal_length')}
+              tip={t(lang, durationOptional ? 'tip_duration_optional' : 'tip_duration')}
+              className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}
+            />
             <select
               disabled={readOnly}
-              value={config.durationHours}
-              onChange={(event) => setConfig({ ...config, durationHours: Number(event.target.value) })}
+              value={config.durationHours ?? ''}
+              onChange={(event) => {
+                const raw = event.target.value
+                setConfig({ ...config, durationHours: raw === '' ? null : Number(raw) })
+              }}
               className={`w-full rounded-xl px-3 py-3 font-bold ${inputClass(isDarkMode)} ${lock}`}
             >
+              {durationOptional ? <option value="">{t(lang, 'duration_unset')}</option> : null}
               {rangeOptions(0.5, 24).map((hour) => (
                 <option key={hour} value={hour}>{hour} {t(lang, 'hours')}</option>
               ))}

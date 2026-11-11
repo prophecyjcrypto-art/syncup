@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AppConfig, BlockKind, Campaign, CampaignInput, Person, PersonRole, TimeBlock } from '../types'
 import { sortBlocks } from './blocks'
 import { todayISO } from './dates'
+import { normalizeDurationHours } from './schedule'
 import { supabase } from './supabase'
 
 function client(): SupabaseClient {
@@ -66,7 +67,7 @@ function asConfig(value: unknown): AppConfig {
   return {
     startDate: typeof config.startDate === 'string' ? config.startDate : todayISO(),
     endDate: typeof config.endDate === 'string' ? config.endDate : todayISO(),
-    durationHours: Number(config.durationHours ?? 3),
+    durationHours: normalizeDurationHours(config.durationHours),
     dayStartHour: Number(config.dayStartHour ?? 9),
     dayEndHour: Number(config.dayEndHour ?? 22),
     attendanceTolerance: Number(config.attendanceTolerance ?? 0),

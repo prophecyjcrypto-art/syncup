@@ -543,6 +543,7 @@ export default function App() {
               />
             ) : step === 'results' && active ? (
               <ResultsPanel
+                key={active.id}
                 lang={lang}
                 isDarkMode={isDarkMode}
                 campaign={active}
@@ -550,6 +551,20 @@ export default function App() {
                 onSaveSlots={(slots) => {
                   setCampaigns((current) => current.map((campaign) => (campaign.id === active.id ? { ...campaign, savedSlots: slots } : campaign)))
                   void run(() => setSavedSlots(active.id, slots))
+                }}
+                onSaveDuration={(hours) => {
+                  const config = { ...active.config, durationHours: hours }
+                  setCampaigns((current) => current.map((campaign) => (campaign.id === active.id ? { ...campaign, config } : campaign)))
+                  void run(() =>
+                    updateCampaign(active.id, {
+                      name: active.name,
+                      remarks: active.remarks,
+                      config,
+                      expiryDate: active.expiryDate,
+                      onDays: active.onDays,
+                      compulsoryDays: active.compulsoryDays,
+                    }),
+                  )
                 }}
               />
             ) : null}
