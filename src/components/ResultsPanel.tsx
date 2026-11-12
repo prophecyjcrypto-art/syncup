@@ -3,12 +3,14 @@ import { t } from '../i18n'
 import { useCalendar } from '../lib/calendarContext'
 import { buildIcs, formatSlotText } from '../lib/export'
 import { clearGoogleToken, createCalendarEvents, GOOGLE_CALENDAR_ENABLED, GoogleCalendarError } from '../lib/googleCalendar'
-import { formatLongDate, formatTime, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
+import { formatLongDate, formatTime, getDaysArray, parseISODate, rangeOptions, setTime, toISODateString } from '../lib/dates'
+import { durationHours, type HourRange } from '../lib/timeRange'
 import { availabilityHeatmap, calculateBestSlots, compulsoryReport, sharedFreeByDay, type OverlapCell } from '../lib/schedule'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { GuideNote, InfoTip } from './Guide'
 import type { Campaign, Language, TimeSlot } from '../types'
 import { MonthBoards } from './MonthBoards'
+import { TimeSlotGrid } from './TimeSlotGrid'
 
 function slotKey(slot: TimeSlot): string {
   return slot.start.toISOString()
@@ -44,6 +46,7 @@ export function ResultsPanel({
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [notice, setNotice] = useState('')
   const [draftHours, setDraftHours] = useState<number | null>(campaign.config.durationHours)
+  const [sessionRange, setSessionRange] = useState<HourRange | null>(null)
   const [focusStart, setFocusStart] = useState<string | null>(null)
   const calendar = useCalendar()
 
@@ -130,11 +133,35 @@ export function ResultsPanel({
     if (!canSetDuration) return
     if (raw === '') {
       setDraftHours(null)
+      setSessionRange(null)
       return
     }
     const hours = Number(raw)
     setDraftHours(hours)
+    setSessionRange((current) => {
+      if (!current) return current
+      const end = Math.round((current.startHour + hours) * 2) / 2
+      if (end > campaign.config.dayEndHour) return null
+      return { startHour: current.startHour, endHour: end }
+    })
     if (hours !== campaign.config.durationHours) onSaveDuration?.(hours)
+  }
+
+  function applySession(range: HourRange | null) {
+    setSessionRange(range)
+    if (!canSetDuration) return
+    if (!range) {
+      if (campaign.config.durationHours == null) setDraftHours(null)
+      return
+    }
+    const hours = durationHours(range)
+    setDraftHours(hours)
+    if (hours !== campaign.config.durationHours) onSaveDuration?.(hours)
+    const iso = (selectedDates.size > 0 ? [...selectedDates].sort()[0] : heat[0]?.iso) ?? null
+    if (!iso) return
+    const target = setTime(parseISODate(iso), range.startHour).getTime()
+    const cell = heat.find((day) => day.iso === iso)?.cells.find((item) => item.start.getTime() === target)
+    if (cell) setFocusStart(cell.start.toISOString())
   }
 
   function targets(): TimeSlot[] {
@@ -214,7 +241,7 @@ export function ResultsPanel({
               title={t(lang, 'pin_hint')}
               disabled={!canPin}
               onClick={() => toggleSaved(key)}
-              className={`text-xl disabled:cursor-default ${campaign.savedSlots.includes(key) ? 'text-[#f6cf7a]' : 'text-zinc-500'}`}
+              className={`flex h-11 w-11 items-center justify-center text-xl disabled:cursor-default ${campaign.savedSlots.includes(key) ? 'text-[#f6cf7a]' : 'text-zinc-500'}`}
             >
               {campaign.savedSlots.includes(key) ? '★' : '☆'}
             </button>
@@ -226,8 +253,10 @@ export function ResultsPanel({
                 else next.add(key)
                 setPicked(next)
               }}
-              className={`h-6 w-6 rounded-full border ${picked.has(key) ? 'bg-[#7c7bb9] border-[#7c7bb9]' : 'border-zinc-400'}`}
-            />
+              className="flex h-11 w-11 items-center justify-center"
+            >
+              <span className={`h-6 w-6 rounded-full border ${picked.has(key) ? 'border-[#7c7bb9] bg-[#7c7bb9]' : 'border-zinc-400'}`} />
+            </button>
           </div>
         </div>
         {expanded === key && (
@@ -253,16 +282,16 @@ export function ResultsPanel({
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <button type="button" onClick={onBack} className={`text-xs font-bold uppercase ${textMuted(isDarkMode)}`}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <button type="button" onClick={onBack} className={`min-h-11 self-start text-xs font-bold uppercase ${textMuted(isDarkMode)}`}>
           ← {t(lang, 'roster')}
         </button>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => void copy(false)} className="glass-well rounded-full px-4 py-2 text-xs font-bold">{t(lang, 'copy_basic')}</button>
-          <button type="button" onClick={() => void copy(true)} className="rounded-full btn-glow bg-[#7c7bb9] px-4 py-2 text-xs font-bold text-white">{t(lang, 'copy_full')}</button>
-          <button type="button" onClick={exportCalendar} className="rounded-full border border-[#f6cf7a] px-4 py-2 text-xs font-bold text-[#f6cf7a]">{t(lang, 'export_calendar')}</button>
+        <div className="chip-row">
+          <button type="button" onClick={() => void copy(false)} className="glass-well min-h-11 shrink-0 whitespace-nowrap rounded-full px-4 text-xs font-bold">{t(lang, 'copy_basic')}</button>
+          <button type="button" onClick={() => void copy(true)} className="min-h-11 shrink-0 whitespace-nowrap rounded-full btn-glow bg-[#7c7bb9] px-4 text-xs font-bold text-white">{t(lang, 'copy_full')}</button>
+          <button type="button" onClick={exportCalendar} className="min-h-11 shrink-0 whitespace-nowrap rounded-full border border-[#f6cf7a] px-4 text-xs font-bold text-[#f6cf7a]">{t(lang, 'export_calendar')}</button>
           {GOOGLE_CALENDAR_ENABLED && (
-            <button type="button" onClick={() => void saveGoogle()} className="glass-well rounded-full px-4 py-2 text-xs font-medium">
+            <button type="button" onClick={() => void saveGoogle()} className="glass-well min-h-11 shrink-0 whitespace-nowrap rounded-full px-4 text-xs font-medium">
               {calendar.token ? t(lang, 'calendar_save') : t(lang, 'calendar_connect')}
             </button>
           )}
@@ -270,9 +299,9 @@ export function ResultsPanel({
       </div>
       <GuideNote>{t(lang, 'guide_results')}</GuideNote>
       {notice && <p className="text-sm font-medium text-[#93ba8c]">{notice}</p>}
-      <div className="grid gap-6 lg:grid-cols-[22rem_1fr]">
-        <div className="space-y-4">
-          <section className={`${cardClass(isDarkMode)} space-y-3 rounded-[1.5rem] p-5`}>
+      <div className="grid gap-4 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] md:items-start">
+        <div className="order-2 min-w-0 space-y-3 md:order-1">
+          <section className={`${cardClass(isDarkMode)} space-y-3 rounded-[1.5rem] p-4 sm:p-5`}>
             <h3 className={`inline-flex items-center gap-2 font-medium ${textPrimary(isDarkMode)}`}>
               {t(lang, 'choreographer_filter')}
               <InfoTip lang={lang} text={t(lang, durationUnset ? 'duration_not_set' : 'slots_rule')} />
@@ -280,7 +309,7 @@ export function ResultsPanel({
             <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'choreographer_filter_hint')}</p>
             {campaign.choreographers.length === 0 && <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>}
             {campaign.choreographers.map((person) => (
-              <label key={person.id} className="flex items-center gap-2 text-sm font-bold">
+              <label key={person.id} className="flex min-h-11 items-center gap-2 text-sm font-bold">
                 <input
                   type="checkbox"
                   checked={requiredIds.includes(person.id)}
@@ -291,12 +320,12 @@ export function ResultsPanel({
             ))}
             {requiredIds.length === 0 && <p className="text-xs text-[#f6cf7a]">{t(lang, 'none_required')}</p>}
             <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, durationUnset ? 'duration_not_set' : 'slots_rule')}</p>
-            <label className="flex items-center gap-2 text-sm font-bold">
+            <label className="flex min-h-11 items-center gap-2 text-sm font-bold">
               <input type="checkbox" checked={onDaysOnly} onChange={(event) => setOnDaysOnly(event.target.checked)} disabled={campaign.onDays.length === 0} />
               {t(lang, 'on_days_only')}
             </label>
           </section>
-          <section className={`${cardClass(isDarkMode)} rounded-[1.5rem] p-5`}>
+          <section className={`${cardClass(isDarkMode)} rounded-[1.5rem] p-4 sm:p-5`}>
             <div className="mb-3 flex items-center justify-between">
               <h3 className={`font-bold ${textPrimary(isDarkMode)}`}>{t(lang, 'availability_map')}</h3>
               {(selectedDates.size > 0 || minAttendance !== 70 || onDaysOnly) && (
@@ -332,7 +361,7 @@ export function ResultsPanel({
                       else next.add(iso)
                       setSelectedDates(next)
                     }}
-                    className={`flex aspect-square w-full flex-col items-center justify-center rounded-lg text-xs font-bold ${scoreTone(score, isDarkMode)} ${selected ? 'ring-2 ring-white' : ''} ${campaign.compulsoryDays.includes(iso) ? 'outline outline-2 outline-[#f19ba8]' : ''}`}
+                    className={`cal-day flex w-full items-center justify-center rounded-md text-xs font-bold leading-none ${scoreTone(score, isDarkMode)} ${selected ? 'ring-2 ring-white' : ''} ${campaign.compulsoryDays.includes(iso) ? 'outline outline-2 outline-[#f19ba8]' : ''}`}
                   >
                     {campaign.onDays.includes(iso) ? '★' : ''}
                     {day.getDate()}
@@ -345,14 +374,14 @@ export function ResultsPanel({
               <input type="range" min={0} max={100} step={10} value={minAttendance} onChange={(event) => setMinAttendance(Number(event.target.value))} className="mt-2 w-full accent-[#7c7bb9]" />
             </label>
           </section>
-          <details className={`${cardClass(isDarkMode)} rounded-[1.5rem] p-5`}>
-            <summary className="cursor-pointer font-bold">{t(lang, 'dancers_filter')} ({dancerIds.length}/{campaign.dancers.length})</summary>
+          <details className={`${cardClass(isDarkMode)} rounded-[1.5rem] p-4 sm:p-5`}>
+            <summary className="flex min-h-11 cursor-pointer items-center font-bold">{t(lang, 'dancers_filter')} ({dancerIds.length}/{campaign.dancers.length})</summary>
             <button type="button" className="mt-3 text-xs font-bold text-[#7c7bb9]" onClick={() => setDancerIds(campaign.dancers.map((person) => person.id))}>
               {t(lang, 'select_all')}
             </button>
             <div className="mt-3 space-y-2">
               {campaign.dancers.map((person) => (
-                <label key={person.id} className="flex items-center gap-2 text-sm">
+                <label key={person.id} className="flex min-h-11 items-center gap-2 text-sm">
                   <input type="checkbox" checked={dancerIds.includes(person.id)} onChange={() => toggleId(dancerIds, person.id, setDancerIds)} />
                   {person.name}
                 </label>
@@ -360,7 +389,7 @@ export function ResultsPanel({
             </div>
           </details>
           {report.length > 0 && (
-            <section className={`${cardClass(isDarkMode)} space-y-3 rounded-[1.5rem] p-5`}>
+            <section className={`${cardClass(isDarkMode)} space-y-3 rounded-[1.5rem] p-4 sm:p-5`}>
               <h3 className={`font-bold ${textPrimary(isDarkMode)}`}>{t(lang, 'compulsory_report')}</h3>
               {report.map((day) => (
                 <div key={day.iso}>
@@ -373,11 +402,45 @@ export function ResultsPanel({
             </section>
           )}
         </div>
-        <section className={`${cardClass(isDarkMode)} rounded-[1.5rem] p-5`}>
-          <h3 className={`font-serif text-2xl ${textPrimary(isDarkMode)}`}>
+        <section className={`${cardClass(isDarkMode)} order-1 min-w-0 rounded-[1.5rem] p-4 sm:p-5 md:order-2`}>
+          <h3 className={`font-serif text-xl sm:text-2xl ${textPrimary(isDarkMode)}`}>
             {selectedDates.size > 0 ? t(lang, 'dates_selected', { n: selectedDates.size }) : t(lang, 'rehearsal_recommendations')}
           </h3>
           {durationUnset ? null : <p className={`mt-1 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'found_slots', { n: dated.length })}</p>}
+          <div className="mt-4">
+            <p className={`mb-2 text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'session_grid')}</p>
+            {canSetDuration ? (
+              <TimeSlotGrid
+                lang={lang}
+                isDarkMode={isDarkMode}
+                label={t(lang, 'session_grid')}
+                windowStart={campaign.config.dayStartHour}
+                windowEnd={campaign.config.dayEndHour}
+                value={sessionRange}
+                allowClear={campaign.config.durationHours == null}
+                onChange={applySession}
+              />
+            ) : (
+              <p className={`text-sm font-semibold ${textPrimary(isDarkMode)}`}>
+                {draftHours == null ? t(lang, 'duration_not_set') : `${draftHours} ${t(lang, 'hours_unit')}`}
+              </p>
+            )}
+            {canSetDuration && (
+              <details className="mt-2">
+                <summary className={`min-h-11 cursor-pointer py-2 text-xs font-bold ${textMuted(isDarkMode)}`}>{t(lang, 'rehearsal_length')}</summary>
+                <select
+                  value={draftHours ?? ''}
+                  onChange={(event) => chooseLength(event.target.value)}
+                  className={`w-full max-w-xs rounded-xl px-3 py-3 font-bold ${inputClass(isDarkMode)}`}
+                >
+                  {campaign.config.durationHours == null ? <option value="">{t(lang, 'choose_length_blank')}</option> : null}
+                  {rangeOptions(0.5, 24).map((hour) => (
+                    <option key={hour} value={hour}>{hour} {t(lang, 'hours')}</option>
+                  ))}
+                </select>
+              </details>
+            )}
+          </div>
           <OverlapHeat
             lang={lang}
             isDarkMode={isDarkMode}
@@ -386,26 +449,13 @@ export function ResultsPanel({
             slots={slots}
             savedSlots={campaign.savedSlots}
             durationHours={draftHours}
+            sessionRange={sessionRange}
             focusStart={focusStart}
             canPin={canPin}
             nameOf={nameOf}
             onFocus={setFocusStart}
             onToggleSaved={toggleSaved}
           />
-          <label className="mt-4 block space-y-2">
-            <span className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'rehearsal_length')}</span>
-            <select
-              disabled={!canSetDuration}
-              value={draftHours ?? ''}
-              onChange={(event) => chooseLength(event.target.value)}
-              className={`w-full max-w-xs rounded-xl px-3 py-3 font-bold ${inputClass(isDarkMode)} disabled:cursor-default disabled:opacity-70`}
-            >
-              {campaign.config.durationHours == null ? <option value="">{t(lang, 'choose_length_blank')}</option> : null}
-              {rangeOptions(0.5, 24).map((hour) => (
-                <option key={hour} value={hour}>{hour} {t(lang, 'hours')}</option>
-              ))}
-            </select>
-          </label>
           <div className="mt-4 max-h-48 space-y-2 overflow-y-auto custom-scrollbar">
             <p className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'choreographer_overlap')}</p>
             {required.length === 0 ? (
@@ -489,6 +539,7 @@ function OverlapHeat({
   slots,
   savedSlots,
   durationHours,
+  sessionRange,
   focusStart,
   canPin,
   nameOf,
@@ -502,6 +553,7 @@ function OverlapHeat({
   slots: TimeSlot[]
   savedSlots: string[]
   durationHours: number | null
+  sessionRange: HourRange | null
   focusStart: string | null
   canPin: boolean
   nameOf: (id: string) => string
@@ -523,12 +575,13 @@ function OverlapHeat({
       {dancers.length === 0 ? (
         <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>
       ) : (
-        <div className="max-h-72 space-y-1 overflow-auto custom-scrollbar">
+        <div className="max-h-72 max-w-full overflow-auto custom-scrollbar">
+          <div className="w-max min-w-full space-y-1">
           <div className="flex items-end gap-2">
-            <span className="w-24 shrink-0" />
+            <span className="w-16 shrink-0 sm:w-24" />
             <div className="flex gap-0.5">
               {header.map((cell) => (
-                <span key={cell.start.toISOString()} className="w-8 text-center text-[9px] font-bold text-zinc-400">
+                <span key={cell.start.toISOString()} className="w-9 text-center text-[9px] font-bold text-zinc-400">
                   {axisLabel(cell.start)}
                 </span>
               ))}
@@ -536,11 +589,13 @@ function OverlapHeat({
           </div>
           {heat.map((day) => (
             <div key={day.iso} className="flex items-center gap-2">
-              <span className={`w-24 shrink-0 text-xs font-bold ${textPrimary(isDarkMode)}`}>{formatLongDate(parseISODate(day.iso), lang)}</span>
+              <span className={`w-16 shrink-0 text-[11px] font-bold leading-tight sm:w-24 sm:text-xs ${textPrimary(isDarkMode)}`}>{formatLongDate(parseISODate(day.iso), lang)}</span>
               <div className="flex gap-0.5">
                 {day.cells.map((cell) => {
                   const ratio = dancers.length === 0 ? 0 : (cell.freeIds.length / dancers.length) * 100
                   const key = cell.start.toISOString()
+                  const hour = (cell.start.getTime() - parseISODate(day.iso).getTime()) / 3600000
+                  const inSession = sessionRange != null && hour >= sessionRange.startHour - 1e-6 && hour < sessionRange.endHour - 1e-6
                   const pinned = slots.some(
                     (slot) => savedSlots.includes(slotKey(slot)) && cell.start.getTime() >= slot.start.getTime() && cell.start.getTime() < slot.end.getTime(),
                   )
@@ -551,9 +606,9 @@ function OverlapHeat({
                       title={`${formatTime(cell.start, lang)} · ${t(lang, 'heat_free', { n: cell.freeIds.length, total: dancers.length })}`}
                       aria-label={`${formatLongDate(cell.start, lang)} ${formatTime(cell.start, lang)} ${t(lang, 'heat_free', { n: cell.freeIds.length, total: dancers.length })}`}
                       onClick={() => onFocus(key)}
-                      className={`flex h-8 w-8 items-center justify-center rounded-md text-[10px] font-bold ${scoreTone(ratio, isDarkMode)} ${
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[10px] font-bold ${scoreTone(ratio, isDarkMode)} ${
                         focusStart === key ? 'ring-2 ring-[#7c7bb9]' : ''
-                      } ${pinned ? 'outline outline-2 outline-[#f6cf7a]' : ''}`}
+                      } ${pinned ? 'outline outline-2 outline-[#f6cf7a]' : inSession ? 'outline outline-2 outline-white/80' : ''}`}
                     >
                       {cell.freeIds.length}
                     </button>
@@ -562,6 +617,7 @@ function OverlapHeat({
               </div>
             </div>
           ))}
+          </div>
         </div>
       )}
       {focused ? (

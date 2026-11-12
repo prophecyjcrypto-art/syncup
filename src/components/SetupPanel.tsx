@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { t } from '../i18n'
-import { formatHourOption, formatLongDate, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
+import { formatLongDate, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
 import { adminInviteUrl, organizerInviteUrl, participantInviteUrl } from '../lib/invites'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { FieldLabel, GuideNote } from './Guide'
 import type { AppConfig, Campaign, CampaignInput, Language } from '../types'
 import { MonthBoards } from './MonthBoards'
+import { DurationGrid, TimeSlotGrid } from './TimeSlotGrid'
 
 export function SetupPanel({
   lang,
@@ -102,7 +103,7 @@ export function SetupPanel({
   return (
     <div className="mx-auto w-full max-w-4xl">
       <div className="mb-8 text-center">
-        <h2 className={`font-serif text-4xl font-semibold ${textPrimary(isDarkMode)}`}>
+        <h2 className={`font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
           {readOnly ? initial?.name : initial ? t(lang, 'edit_event') : t(lang, 'new_campaign')}
         </h2>
         <GuideNote className="mx-auto">
@@ -110,7 +111,7 @@ export function SetupPanel({
           {readOnly ? ` · ${t(lang, 'view_only')}` : ''}
         </GuideNote>
       </div>
-      <div className={`${cardClass(isDarkMode)} space-y-8 rounded-[2rem] p-8`}>
+      <div className={`${cardClass(isDarkMode)} space-y-6 rounded-[1.5rem] p-4 sm:space-y-8 sm:rounded-[2rem] sm:p-8`}>
         <label className="block space-y-2">
           <span className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'campaign_name')}</span>
           <input
@@ -144,53 +145,56 @@ export function SetupPanel({
           </label>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
+          <div className={`min-w-0 space-y-2 ${lock}`}>
             <FieldLabel lang={lang} label={t(lang, 'daily_availability')} tip={t(lang, 'tip_daily')} className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`} />
-            <div className="flex gap-2">
-              <select
-                disabled={readOnly}
-                value={config.dayStartHour}
-                onChange={(event) => setConfig({ ...config, dayStartHour: Number(event.target.value) })}
-                className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)} ${lock}`}
-              >
-                {rangeOptions(6, 23).map((hour) => (
-                  <option key={hour} value={hour}>{formatHourOption(hour)}</option>
-                ))}
-              </select>
-              <select
-                disabled={readOnly}
-                value={config.dayEndHour}
-                onChange={(event) => setConfig({ ...config, dayEndHour: Number(event.target.value) })}
-                className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)} ${lock}`}
-              >
-                {rangeOptions(9, 28).map((hour) => (
-                  <option key={hour} value={hour}>{formatHourOption(hour)}</option>
-                ))}
-              </select>
-            </div>
+            <TimeSlotGrid
+              lang={lang}
+              isDarkMode={isDarkMode}
+              label={t(lang, 'daily_availability')}
+              windowStart={6}
+              windowEnd={28}
+              disabled={readOnly}
+              value={{ startHour: config.dayStartHour, endHour: config.dayEndHour }}
+              onChange={(range) => {
+                if (!range) return
+                setConfig({ ...config, dayStartHour: range.startHour, dayEndHour: range.endHour })
+              }}
+            />
           </div>
-          <label className="space-y-2">
+          <div className={`min-w-0 space-y-2 ${lock}`}>
             <FieldLabel
               lang={lang}
               label={durationOptional ? `${t(lang, 'rehearsal_length')} (${t(lang, 'optional')})` : t(lang, 'rehearsal_length')}
               tip={t(lang, durationOptional ? 'tip_duration_optional' : 'tip_duration')}
               className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}
             />
-            <select
+            <DurationGrid
+              lang={lang}
+              isDarkMode={isDarkMode}
+              label={t(lang, 'rehearsal_length')}
+              value={config.durationHours}
               disabled={readOnly}
-              value={config.durationHours ?? ''}
-              onChange={(event) => {
-                const raw = event.target.value
-                setConfig({ ...config, durationHours: raw === '' ? null : Number(raw) })
-              }}
-              className={`w-full rounded-xl px-3 py-3 font-bold ${inputClass(isDarkMode)} ${lock}`}
-            >
-              {durationOptional ? <option value="">{t(lang, 'duration_unset')}</option> : null}
-              {rangeOptions(0.5, 24).map((hour) => (
-                <option key={hour} value={hour}>{hour} {t(lang, 'hours')}</option>
-              ))}
-            </select>
-          </label>
+              allowClear={durationOptional}
+              onChange={(hours) => setConfig({ ...config, durationHours: hours })}
+            />
+            <details>
+              <summary className={`min-h-11 cursor-pointer py-2 text-xs font-bold ${textMuted(isDarkMode)}`}>{t(lang, 'precise_time')}</summary>
+              <select
+                disabled={readOnly}
+                value={config.durationHours ?? ''}
+                onChange={(event) => {
+                  const raw = event.target.value
+                  setConfig({ ...config, durationHours: raw === '' ? null : Number(raw) })
+                }}
+                className={`w-full rounded-xl px-3 py-3 font-bold ${inputClass(isDarkMode)}`}
+              >
+                {durationOptional ? <option value="">{t(lang, 'duration_unset')}</option> : null}
+                {rangeOptions(0.5, 24).map((hour) => (
+                  <option key={hour} value={hour}>{hour} {t(lang, 'hours')}</option>
+                ))}
+              </select>
+            </details>
+          </div>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <label className="space-y-2">
@@ -248,6 +252,7 @@ export function SetupPanel({
               </button>
             </div>
           </div>
+          <div className="mx-auto w-full max-w-md">
           <MonthBoards
             days={days}
             lang={lang}
@@ -262,20 +267,17 @@ export function SetupPanel({
                   disabled={readOnly}
                   onClick={() => toggleMark(iso)}
                   aria-label={formatLongDate(day, lang)}
-                  className={`glass-well flex aspect-square w-full flex-col items-center justify-center rounded-xl text-sm font-bold ${
+                  className={`cal-day glass-well flex w-full items-center justify-center rounded-lg text-xs font-bold leading-none ${
                     isDarkMode ? 'text-white' : 'text-zinc-800'
                   } ${show ? 'ring-2 ring-[#f6cf7a]' : ''} ${must ? 'outline outline-2 outline-[#f19ba8]' : ''}`}
                 >
+                  {show ? '★' : ''}
                   {day.getDate()}
-                  <span className="text-[8px]">
-                    {show ? t(lang, 'show_badge') : ''}
-                    {show && must ? ' · ' : ''}
-                    {must ? t(lang, 'must_badge') : ''}
-                  </span>
                 </button>
               )
             }}
           />
+          </div>
         </div>
 
         {(!readOnly || initial?.organizerCode || initial?.participantCode) && (
@@ -360,17 +362,17 @@ export function SetupPanel({
         </div>
         {note && <p className="font-bold text-[#f19ba8]">{note}</p>}
       </div>
-      <div className="mt-8 flex justify-center gap-3">
-        <button type="button" onClick={onCancel} className={`px-6 py-3 font-bold ${textMuted(isDarkMode)}`}>
+      <div className="dock mt-6 flex justify-center gap-3 sm:mt-8">
+        <button type="button" onClick={onCancel} className={`min-h-11 px-6 py-3 font-bold ${textMuted(isDarkMode)}`}>
           {t(lang, 'cancel')}
         </button>
         {readOnly && onEdit ? (
-          <button type="button" onClick={onEdit} className="rounded-full btn-glow bg-[#7c7bb9] px-8 py-3 font-bold text-white">
+          <button type="button" onClick={onEdit} className="min-h-11 rounded-full btn-glow bg-[#7c7bb9] px-8 py-3 font-bold text-white">
             {t(lang, 'edit_event')}
           </button>
         ) : (
           !readOnly && (
-            <button type="button" disabled={!name.trim()} onClick={confirm} className="rounded-full btn-glow bg-[#7c7bb9] px-8 py-3 font-bold text-white disabled:opacity-40">
+            <button type="button" disabled={!name.trim()} onClick={confirm} className="min-h-11 rounded-full btn-glow bg-[#7c7bb9] px-8 py-3 font-bold text-white disabled:opacity-40">
               {initial ? t(lang, 'save_campaign') : t(lang, 'create_campaign')}
             </button>
           )

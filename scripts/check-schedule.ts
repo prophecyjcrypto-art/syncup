@@ -1,5 +1,15 @@
 import { getDaysArray, groupByMonth, parseISODate, setTime, toISODateString } from '../src/lib/dates.ts'
 import { availabilityHeatmap, calculateBestSlots, coveredMs, freeIntervals, normalizeDurationHours, uncoveredDays } from '../src/lib/schedule.ts'
+import {
+  durationFromCellCount,
+  durationHours,
+  formatClock,
+  moveHourRange,
+  parseClock,
+  rangeFromCellIndexes,
+  rangeFromDrag,
+  resizeHourRange,
+} from '../src/lib/timeRange.ts'
 
 function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
@@ -83,5 +93,23 @@ assert(mixedFull.length === 0, 'both kinds are complete when the daily range is 
 
 const naGap = uncoveredDays(config, [block(10, 12, 'unavailable')])
 assert(naGap.length === 0, 'NA only does not require the other days to be filled')
+
+const dragged = rangeFromCellIndexes(9, 20, 24)
+assert(dragged.startHour === 19 && dragged.endHour === 21.5, 'dragging 19:00 through the 21:00 cell ends at 21:30')
+assert(durationHours(dragged) === 2.5, 'that range lasts 2.5 hours')
+assert(formatClock(dragged.startHour) === '19:00' && formatClock(dragged.endHour) === '21:30', 'the range reads 19:00–21:30')
+const fromDrag = rangeFromDrag({ kind: 'create', origin: 20 }, 24, 9, 22)
+assert(durationHours(fromDrag) === 2.5, 'a create-drag across those cells is 2.5 hours')
+const moved = moveHourRange(dragged, 1, 9, 22)
+assert(moved.startHour === 19.5 && moved.endHour === 22 && durationHours(moved) === 2.5, 'moving the block later keeps the 2.5 hour length')
+const clamped = moveHourRange(dragged, 20, 9, 22)
+assert(clamped.endHour === 22 && durationHours(clamped) === 2.5, 'a move stays inside the day and keeps its length')
+const shorter = resizeHourRange(dragged, 'end', -1, 9, 22)
+assert(shorter.endHour === 21 && durationHours(shorter) === 2, 'shortening the end by one slot drops half an hour')
+const earlier = resizeHourRange(dragged, 'start', -2, 9, 22)
+assert(earlier.startHour === 18 && earlier.endHour === 21.5, 'the start can move earlier without changing the end')
+assert(parseClock('19:00') === 19 && parseClock('21:30') === 21.5, 'typed times parse to hours')
+assert(parseClock('02:00+1') === 26, 'a next-day time parses past midnight')
+assert(durationFromCellCount(5) === 2.5, 'five half-hour cells are 2.5 hours')
 
 console.log('schedule checks passed')

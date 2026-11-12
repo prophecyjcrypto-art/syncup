@@ -72,7 +72,7 @@ export function CampaignList({
         {joinForm}
       <div className={`${cardClass(isDarkMode)} rounded-[2rem] px-8 py-16 text-center`}>
         <img src="/logo.png" alt="" className="mx-auto mb-6 h-20 w-20 object-contain" />
-        <h2 className={`font-serif text-4xl font-semibold ${textPrimary(isDarkMode)}`}>{t(lang, 'no_active_projects')}</h2>
+        <h2 className={`font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>{t(lang, 'no_active_projects')}</h2>
         <p className={`mt-3 ${textMuted(isDarkMode)}`}>{t(lang, 'create_project_desc')}</p>
         <p className={`mx-auto mt-6 max-w-md text-sm leading-relaxed ${textMuted(isDarkMode)}`}>{t(lang, 'guide_events')}</p>
         <button type="button" onClick={onCreate} className={primaryButton('mt-8 px-8 py-3')}>
@@ -85,15 +85,15 @@ export function CampaignList({
 
   return (
     <div className="mx-auto w-full max-w-7xl">
-      <div className="mb-8 flex items-end justify-between gap-4">
+      <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className={`inline-flex items-center gap-2 font-serif text-4xl font-semibold ${textPrimary(isDarkMode)}`}>
+          <h2 className={`inline-flex items-center gap-2 font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
             {t(lang, 'campaigns')}
             <InfoTip lang={lang} text={t(lang, 'tip_links')} />
           </h2>
           <GuideNote>{t(lang, 'guide_events')}</GuideNote>
         </div>
-        <button type="button" onClick={onCreate} className={primaryButton('shrink-0 px-6 py-3 text-sm')}>
+        <button type="button" onClick={onCreate} className={primaryButton('min-h-11 w-full shrink-0 px-6 py-3 text-sm sm:w-auto')}>
           + {t(lang, 'new_campaign')}
         </button>
       </div>
@@ -107,7 +107,7 @@ export function CampaignList({
           const expired = isPast(campaign.expiryDate)
           const participantLink = campaign.participantCode ? participantInviteUrl(campaign.participantCode) : ''
           return (
-            <article key={campaign.id} className={`${cardClass(isDarkMode)} glass-lift flex flex-col rounded-[2rem] p-6`}>
+            <article key={campaign.id} className={`${cardClass(isDarkMode)} glass-lift flex flex-col rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6`}>
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="flex flex-wrap gap-2">
                   <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase ${expired ? 'bg-zinc-700 text-zinc-300' : 'bg-[#93ba8c]/20 text-[#93ba8c]'}`}>
@@ -119,12 +119,12 @@ export function CampaignList({
                 </div>
                 <div className="flex gap-2">
                   {admin && (
-                    <button type="button" onClick={() => onOpen(campaign, 'edit')} aria-label={t(lang, 'edit_event')}>
+                    <button type="button" onClick={() => onOpen(campaign, 'edit')} aria-label={t(lang, 'edit_event')} className="flex h-11 w-11 items-center justify-center">
                       ✎
                     </button>
                   )}
                   {owner && (
-                    <button type="button" className="text-xl text-zinc-400 hover:text-[#f19ba8]" onClick={() => onDelete(campaign)}>
+                    <button type="button" className="flex h-11 w-11 items-center justify-center text-xl text-zinc-400 hover:text-[#f19ba8]" onClick={() => onDelete(campaign)} aria-label={t(lang, 'delete_confirm')}>
                       ×
                     </button>
                   )}

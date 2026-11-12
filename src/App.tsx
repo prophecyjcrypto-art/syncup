@@ -442,46 +442,61 @@ export default function App() {
 
   return (
     <CalendarProvider value={calendarApi}>
-    <div className={`${isDarkMode ? 'theme-dark' : 'theme-light'} min-h-screen`}>
+    <div className={`${isDarkMode ? 'theme-dark' : 'theme-light'} min-h-dvh`}>
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
         <div className={`absolute -left-32 top-[-8rem] h-[26rem] w-[26rem] animate-blob rounded-full bg-[#7c7bb9] blur-3xl ${isDarkMode ? 'opacity-40' : 'opacity-25'}`} />
         <div className={`absolute bottom-[-10rem] right-[-4rem] h-[22rem] w-[22rem] animate-blob rounded-full bg-[#93ba8c] blur-3xl [animation-delay:6s] ${isDarkMode ? 'opacity-25' : 'opacity-20'}`} />
       </div>
 
       <div className="relative z-10">
-      <header className="glass-bar sticky top-0 z-20">
-        <div className="mx-auto flex min-h-16 max-w-6xl items-center justify-between px-4 py-2 sm:px-6">
-          <button type="button" onClick={() => (user ? goHome() : focusAuth('signin'))} className="flex items-center gap-2.5 text-left">
-            <img src="/logo.png" alt="" className="h-8 w-8 object-contain" />
-            <span>
-              <span className={`block text-[15px] font-semibold tracking-tight ${textPrimary(isDarkMode)}`}>{t(lang, 'app_title')}</span>
+      <header className="glass-bar sticky top-0 z-30 pt-[env(safe-area-inset-top)]">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-3 sm:h-16 sm:px-6">
+          <button type="button" onClick={() => (user ? goHome() : focusAuth('signin'))} className="flex min-w-0 items-center gap-2.5 text-left">
+            <img src="/logo.png" alt="" className="h-8 w-8 shrink-0 object-contain" />
+            <span className="min-w-0">
+              <span className={`block truncate text-[15px] font-semibold tracking-tight ${textPrimary(isDarkMode)}`}>{t(lang, 'app_title')}</span>
               {active && step !== 'campaigns' && step !== 'login' && step !== 'portal' && (
-                <span className={`block text-xs ${textMuted(isDarkMode)}`}>{active.name}</span>
+                <span className={`block truncate text-xs ${textMuted(isDarkMode)}`}>{active.name}</span>
               )}
             </span>
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             {!user && (
-              <button type="button" onClick={() => focusAuth('signin')} className="rounded-full px-3 py-2 text-sm font-medium">
+              <button type="button" onClick={() => focusAuth('signin')} className="min-h-11 rounded-full px-3 text-sm font-medium">
                 {t(lang, 'sign_in')}
               </button>
             )}
-            <button type="button" onClick={() => setSettingsOpen(true)} className="glass-well flex h-9 w-9 items-center justify-center rounded-full" aria-label={t(lang, 'settings')}>
+            <button type="button" onClick={() => setSettingsOpen(true)} className="glass-well flex h-11 w-11 items-center justify-center rounded-full" aria-label={t(lang, 'settings')}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.4" />
                 <path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
               </svg>
             </button>
             {user && (
-              <button type="button" onClick={() => void supabase?.auth.signOut()} className={`rounded-full px-3 py-2 text-sm ${textMuted(isDarkMode)}`}>
+              <button type="button" onClick={() => void supabase?.auth.signOut()} className={`min-h-11 rounded-full px-3 text-sm ${textMuted(isDarkMode)}`}>
                 {t(lang, 'sign_out')}
               </button>
             )}
           </div>
         </div>
+        {user && (step === 'setup' || step === 'choreographers' || step === 'dancers' || step === 'results') && (
+          <div className="mx-auto max-w-6xl px-3 pb-1 sm:px-6">
+            <FlowSteps
+              lang={lang}
+              current={step}
+              enabled={{
+                setup: true,
+                choreographers: Boolean(active && canManageRoster(active, user.id, user.email)),
+                dancers: Boolean(active && canManageRoster(active, user.id, user.email)),
+                results: Boolean(active),
+              }}
+              onJump={jumpFlow}
+            />
+          </div>
+        )}
       </header>
 
-      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+      <main className="mx-auto w-full max-w-6xl px-3 py-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-8">
         {banner && <p className="glass mb-4 rounded-2xl px-4 py-3 text-sm font-bold text-[#f19ba8]">{banner}</p>}
         {linkMissing && step === 'campaigns' && (
           <p className="glass mb-4 rounded-2xl px-4 py-3 text-sm font-bold text-[#c9a227]">{t(lang, 'not_found')}</p>
@@ -556,17 +571,6 @@ export default function App() {
           />
         ) : step === 'setup' || step === 'choreographers' || step === 'dancers' || step === 'results' ? (
           <>
-            <FlowSteps
-              lang={lang}
-              current={step}
-              enabled={{
-                setup: true,
-                choreographers: Boolean(active && canManageRoster(active, user.id, user.email)),
-                dancers: Boolean(active && canManageRoster(active, user.id, user.email)),
-                results: Boolean(active),
-              }}
-              onJump={jumpFlow}
-            />
             {step === 'setup' ? (
               <SetupPanel
                 key={editing?.id ?? 'new'}
@@ -701,11 +705,11 @@ export default function App() {
       </main>
 
       {settingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-md" onClick={() => setSettingsOpen(false)}>
-          <div className={`${cardClass(isDarkMode)} w-full max-w-sm space-y-4 rounded-[1.75rem] p-6`} onClick={(event) => event.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-md sm:items-center sm:p-4" onClick={() => setSettingsOpen(false)}>
+          <div className={`${cardClass(isDarkMode)} max-h-[85dvh] w-full max-w-sm space-y-4 overflow-y-auto rounded-t-[1.75rem] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-[1.75rem] sm:p-6`} onClick={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className={`font-serif text-2xl ${textPrimary(isDarkMode)}`}>{t(lang, 'settings')}</h3>
-              <button type="button" onClick={() => setSettingsOpen(false)} className="text-2xl text-zinc-400">×</button>
+              <button type="button" onClick={() => setSettingsOpen(false)} className="flex h-11 w-11 items-center justify-center text-2xl text-zinc-400" aria-label={t(lang, 'cancel')}>×</button>
             </div>
             <label className="block space-y-2 text-xs font-bold uppercase tracking-widest text-zinc-400">
               {t(lang, 'language')}
