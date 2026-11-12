@@ -152,12 +152,91 @@
   background: rgba(124, 123, 185, 0.14);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
   padding: 0.95rem 1.05rem 0.85rem;
+  color: #f5f5f7;
 }
 
 .theme-light .guide-box {
   border-color: rgba(124, 123, 185, 0.32);
   background: rgba(124, 123, 185, 0.1);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  color: #1d1d1f;
+}
+
+.guide-dialog {
+  width: min(36rem, calc(100% - 2rem));
+  max-width: calc(100% - 2rem);
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  overflow: auto;
+  color: #f5f5f7;
+  background: #1a1a24;
+  border: 1px solid rgba(124, 123, 185, 0.55);
+}
+
+.guide-dialog::backdrop {
+  background: rgba(5, 5, 6, 0.72);
+}
+
+.theme-light .guide-dialog {
+  color: #1d1d1f;
+  background: #f4f3fb;
+  border-color: rgba(124, 123, 185, 0.4);
+}
+
+.theme-light .guide-dialog::backdrop {
+  background: rgba(29, 29, 31, 0.4);
+}
+
+.guide-dialog:focus,
+.guide-dialog :focus {
+  outline: 2px solid #f6cf7a;
+  outline-offset: 2px;
+}
+
+.theme-light .guide-dialog:focus,
+.theme-light .guide-dialog :focus {
+  outline-color: #3c3a6e;
+}
+
+.guide-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.guide-check {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 2.75rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.guide-check-input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: #7c7bb9;
+  cursor: pointer;
+}
+
+.guide-confirm {
+  cursor: pointer;
+}
+
+.guide-confirm:disabled {
+  cursor: not-allowed;
+}
+
+@media (min-width: 640px) {
+  .guide-actions {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
 }
 
 .guide-box-title {
@@ -189,6 +268,11 @@
   list-style: disc;
   font-size: 0.75rem;
   line-height: 1.45;
+  color: #e4e4e7;
+}
+
+.theme-light .hint-list {
+  color: #3f3f46;
 }
 
 .hint-list li + li {
@@ -257,6 +341,12 @@
 
 .chip-row::-webkit-scrollbar {
   display: none;
+}
+
+.chip-wrap {
+  flex-wrap: wrap;
+  overflow: visible;
+  align-items: flex-start;
 }
 
 .heat-scroll {
@@ -466,6 +556,17 @@ button.heat-day:disabled {
 .theme-light .dock {
   border-top-color: rgba(0, 0, 0, 0.06);
   background: rgba(245, 245, 247, 0.9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 @media (min-width: 640px) {

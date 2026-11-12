@@ -332,8 +332,10 @@ export function HeatBook({
     <div className="mt-4 space-y-3">
       <h4 className={`font-bold ${textPrimary(isDarkMode)}`}>{t(lang, 'heat_title')}</h4>
       {dancers.length === 0 ? (
-        <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>
-      ) : cols === 0 ? null : (
+        <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'list_empty')}</p>
+      ) : cols === 0 ? (
+        <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_times')}</p>
+      ) : (
         <>
           <HintList
             id={helpId}

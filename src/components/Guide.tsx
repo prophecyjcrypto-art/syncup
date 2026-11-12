@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { t } from '../i18n'
 import { primaryButton } from '../lib/ui'
 import type { Language } from '../types'
@@ -54,11 +54,11 @@ export type GuideId = 'events' | 'setup' | 'organizers' | 'participants' | 'resu
 
 const GUIDE_POINTS: Record<GuideId, Parameters<typeof t>[1][]> = {
   events: ['guide_events_1', 'guide_events_2', 'guide_events_3'],
-  setup: ['guide_setup_1', 'guide_setup_2', 'guide_setup_3', 'guide_setup_4'],
-  organizers: ['guide_choreo_1', 'guide_choreo_2', 'guide_choreo_3', 'guide_choreo_4'],
+  setup: ['guide_setup_1', 'guide_setup_2', 'guide_setup_3'],
+  organizers: ['guide_choreo_1', 'guide_choreo_2', 'guide_choreo_3'],
   participants: ['guide_dancers_1', 'guide_dancers_2', 'guide_dancers_3'],
-  results: ['guide_results_1', 'guide_results_2', 'guide_results_3', 'guide_results_4', 'guide_results_5', 'guide_results_6'],
-  portal: ['guide_portal_1', 'guide_portal_2', 'guide_portal_3', 'guide_portal_4'],
+  results: ['guide_results_1', 'guide_results_2', 'guide_results_3'],
+  portal: ['guide_portal_1', 'guide_portal_2', 'guide_portal_3'],
 }
 
 function storageKey(id: GuideId): string {
@@ -76,8 +76,41 @@ function readDismissed(id: GuideId): boolean {
 export function InstructionBox({ id, lang, className = '' }: { id: GuideId; lang: Language; className?: string }) {
   const [gone, setGone] = useState(() => readDismissed(id))
   const [checked, setChecked] = useState(false)
-  if (gone) return null
+  const dialogRef = useRef<HTMLDialogElement>(null)
   const titleId = `guide-${id}-title`
+
+  useEffect(() => {
+    if (gone) return
+    const dialog = dialogRef.current
+    if (!dialog) return
+    const modal: HTMLDialogElement = dialog
+    modal.setAttribute('closedby', 'none')
+    if (!modal.open) modal.showModal()
+    const keepOpen = (event: Event) => {
+      event.preventDefault()
+    }
+    modal.addEventListener('cancel', keepOpen)
+    const focusFirst = () => {
+      const first = modal.querySelector<HTMLElement>('[data-guide-never], button:not(:disabled)')
+      ;(first ?? modal).focus({ preventScroll: true, focusVisible: true } as FocusOptions)
+    }
+    focusFirst()
+    const onFocusIn = (event: FocusEvent) => {
+      if (!modal.open) return
+      if (event.target instanceof Node && modal.contains(event.target)) return
+      focusFirst()
+    }
+    document.addEventListener('focusin', onFocusIn)
+    return () => {
+      modal.removeEventListener('cancel', keepOpen)
+      document.removeEventListener('focusin', onFocusIn)
+      try {
+        if (modal.open) modal.close()
+      } catch {
+        // The dialog can already be disconnected when the page changes.
+      }
+    }
+  }, [gone])
 
   function confirm() {
     if (!checked) return
@@ -89,8 +122,17 @@ export function InstructionBox({ id, lang, className = '' }: { id: GuideId; lang
     setGone(true)
   }
 
+  if (gone) return null
+
   return (
-    <aside className={`guide-box ${className}`} data-guide={id} role="region" aria-labelledby={titleId}>
+    <dialog
+      ref={dialogRef}
+      className={`guide-dialog guide-box ${className}`}
+      data-guide={id}
+      aria-modal="true"
+      aria-labelledby={titleId}
+      closedby="none"
+    >
       <h3 id={titleId} className="guide-box-title">
         {t(lang, 'guide_title')}
       </h3>
@@ -99,11 +141,11 @@ export function InstructionBox({ id, lang, className = '' }: { id: GuideId; lang
           <li key={key}>{t(lang, key)}</li>
         ))}
       </ul>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <label className="flex min-h-11 cursor-pointer items-center gap-2.5 text-sm font-medium">
+      <div className="guide-actions">
+        <label className="guide-check">
           <input
             type="checkbox"
-            className="h-4 w-4 shrink-0 accent-[#7c7bb9]"
+            className="guide-check-input"
             checked={checked}
             data-guide-never=""
             onChange={(event) => setChecked(event.target.checked)}
@@ -112,7 +154,7 @@ export function InstructionBox({ id, lang, className = '' }: { id: GuideId; lang
         </label>
         <button
           type="button"
-          className={primaryButton('min-h-11 w-full px-5 py-2 text-sm sm:w-auto')}
+          className={primaryButton('guide-confirm min-h-11 w-full cursor-pointer px-5 py-2 text-sm sm:w-auto')}
           disabled={!checked}
           data-guide-confirm=""
           onClick={confirm}
@@ -120,7 +162,7 @@ export function InstructionBox({ id, lang, className = '' }: { id: GuideId; lang
           {t(lang, 'guide_got_it')}
         </button>
       </div>
-    </aside>
+    </dialog>
   )
 }
 

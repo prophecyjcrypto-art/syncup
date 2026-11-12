@@ -92,6 +92,99 @@ async function shot(cdp: Cdp, file: string) {
   await writeFile(file, Buffer.from(result.data, 'base64'))
 }
 
+function boundsExpression(selectors: string[], text: boolean): string {
+  return `(() => {
+    const selectors = ${JSON.stringify(selectors)}
+    const text = ${text ? 'true' : 'false'}
+    const nodes = selectors.map((selector) => document.querySelector(selector)).filter((node) => node instanceof Element)
+    if (nodes.length !== selectors.length) return null
+    let left = Infinity
+    let top = Infinity
+    let right = -Infinity
+    let bottom = -Infinity
+    for (const node of nodes) {
+      if (!text) {
+        const rect = node.getBoundingClientRect()
+        left = Math.min(left, rect.left)
+        top = Math.min(top, rect.top)
+        right = Math.max(right, rect.right)
+        bottom = Math.max(bottom, rect.bottom)
+        continue
+      }
+      const range = document.createRange()
+      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
+      while (walker.nextNode()) {
+        if (!walker.currentNode.textContent?.trim()) continue
+        range.selectNodeContents(walker.currentNode)
+        const rect = range.getBoundingClientRect()
+        if (rect.width < 1 || rect.height < 1) continue
+        left = Math.min(left, rect.left - 18)
+        top = Math.min(top, rect.top)
+        right = Math.max(right, rect.right)
+        bottom = Math.max(bottom, rect.bottom)
+      }
+    }
+    if (!Number.isFinite(left)) return null
+    return { left, top, right, bottom }
+  })()`
+}
+
+async function shotElements(cdp: Cdp, file: string, selectors: string[], text = false) {
+  const box = await cdp.eval<{ x: number; y: number; width: number; height: number } | null>(`(() => {
+    const bounds = ${boundsExpression(selectors, text)}
+    if (!bounds) return null
+    const pad = 12
+    const x = Math.max(0, Math.floor(bounds.left - pad))
+    const y = Math.max(0, Math.floor(bounds.top - pad))
+    const width = Math.min(window.innerWidth - x, Math.ceil(bounds.right + pad) - x)
+    const height = Math.min(window.innerHeight - y, Math.ceil(bounds.bottom + pad) - y)
+    const cut = bounds.bottom > window.innerHeight - 4 || bounds.top < 4
+    if (width < 8 || height < 8 || cut) return null
+    return { x, y, width, height }
+  })()`)
+  if (!box) throw new Error(`missing crop: ${selectors.join(', ')}`)
+  const result = (await cdp.send('Page.captureScreenshot', {
+    format: 'png',
+    clip: { ...box, scale: 1 },
+  })) as { data: string }
+  await writeFile(file, Buffer.from(result.data, 'base64'))
+}
+
+async function centerSelectors(cdp: Cdp, selectors: string[]) {
+  await cdp.eval(`(() => {
+    const margin = 36
+    const read = ${boundsExpression(selectors, true)}
+    if (!read) return
+    if (read.bottom > window.innerHeight - margin) window.scrollBy(0, read.bottom - (window.innerHeight - margin))
+    const next = ${boundsExpression(selectors, true)}
+    if (next && next.top < margin) window.scrollBy(0, next.top - margin)
+  })()`)
+  await delay(120)
+}
+
+async function dismissGuide(cdp: Cdp, id: string) {
+  const armed = await cdp.eval<string>(`(() => {
+    const box = document.querySelector('dialog[data-guide="${id}"] [data-guide-never]')
+    if (!(box instanceof HTMLInputElement) || box.checked) return 'bad-initial'
+    box.click()
+    const confirm = document.querySelector('dialog[data-guide="${id}"] [data-guide-confirm]')
+    return confirm instanceof HTMLButtonElement && !confirm.disabled ? 'armed' : 'still-disabled'
+  })()`)
+  assert(armed === 'armed', `guide ${id} did not enable confirm: ${armed}`)
+  const closed = await cdp.eval<string>(`(() => {
+    const confirm = document.querySelector('dialog[data-guide="${id}"] [data-guide-confirm]')
+    if (!(confirm instanceof HTMLButtonElement) || confirm.disabled) return 'not-ready'
+    confirm.click()
+    return 'clicked'
+  })()`)
+  assert(closed === 'clicked', `guide ${id} confirm failed: ${closed}`)
+  await delay(50)
+  const still = await cdp.eval<boolean>(`document.querySelector('dialog[data-guide="${id}"]') != null`)
+  assert(!still, `guide ${id} stayed open after confirm`)
+  const stored = await cdp.eval<string>(`localStorage.getItem('syncup.guide.dismissed.${id}') ?? ''`)
+  assert(stored === '1', `guide ${id} did not persist dismissal`)
+}
+
 async function dragEdge(cdp: Cdp, toHour: string) {
   return cdp.eval<string>(`(async () => {
     const handle = document.querySelector('[data-edge="end"]')
@@ -218,6 +311,7 @@ async function main() {
     await cdp.connect(page.webSocketDebuggerUrl)
     await cdp.send('Page.enable')
     await cdp.send('Runtime.enable')
+    await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true })
 
     const widths: { name: string; path: string; width: number; height: number; shot?: string }[] = [
       { name: 'results phone', path: '/?preview=results&lang=zh', width: 390, height: 844, shot: '/opt/cursor/artifacts/results-mobile.png' },
@@ -242,10 +336,111 @@ async function main() {
         const grids = await cdp.eval<number>(`document.querySelectorAll('[data-slot-grid]').length`)
         assert(grids === 0, `${item.name} still has a drag grid`)
       }
+      if (item.path.includes('results')) {
+        const guide = JSON.parse(await cdp.eval<string>(`(() => {
+          const dialog = document.querySelector('dialog[data-guide="results"]')
+          const confirm = dialog?.querySelector('[data-guide-confirm]')
+          const box = dialog?.querySelector('[data-guide-never]')
+          const active = document.activeElement
+          const ring = active instanceof Element ? getComputedStyle(active) : null
+          const sample = dialog?.querySelector('li')
+          return JSON.stringify({
+            open: dialog instanceof HTMLDialogElement && dialog.open,
+            modal: dialog?.getAttribute('aria-modal') ?? '',
+            labelled: dialog?.getAttribute('aria-labelledby') ?? '',
+            bullets: [...(dialog?.querySelectorAll('li') ?? [])].map((node) => node.textContent),
+            disabled: confirm instanceof HTMLButtonElement ? confirm.disabled : null,
+            checked: box instanceof HTMLInputElement ? box.checked : null,
+            focused: dialog?.contains(active) === true,
+            active: active instanceof Element ? active.tagName + '.' + active.className : '',
+            outline: ring?.outlineWidth ?? '',
+            style: ring?.outlineStyle ?? '',
+            offset: ring?.outlineOffset ?? '',
+            ring: ring?.outlineColor ?? '',
+            color: sample ? getComputedStyle(sample).color : '',
+          })
+        })()`)) as {
+          open: boolean
+          modal: string
+          labelled: string
+          bullets: string[]
+          disabled: boolean | null
+          checked: boolean | null
+          focused: boolean
+          outline: string
+          offset: string
+          color: string
+        }
+        assert(guide.open && guide.modal === 'true' && guide.labelled === 'guide-results-title', `${item.name} guide is not a named dialog`)
+        assert(guide.disabled === true && guide.checked === false, `${item.name} confirm should stay disabled until the box is ticked`)
+        assert(guide.focused, `${item.name} did not move focus into the guide`)
+        assert(
+          guide.style === 'solid' && parseFloat(guide.outline) >= 2 && parseFloat(guide.offset) >= 2 && guide.ring === 'rgb(246, 207, 122)',
+          `${item.name} focus ring is ${guide.outline} ${guide.style} ${guide.ring} offset ${guide.offset}`,
+        )
+        assert(
+          guide.bullets.join('\n') === '拖曳訂時段，拉邊改長度\n點其他日期，加上同一時間\n數字是有空人數，顏色越深越多',
+          `${item.name} results copy was ${guide.bullets.join(' | ')}`,
+        )
+        assert(guide.color === 'rgb(245, 245, 247)', `${item.name} guide text color is ${guide.color}`)
+        await shotElements(
+          cdp,
+          item.width < 800 ? '/opt/cursor/artifacts/results-phone-guide.png' : '/opt/cursor/artifacts/results-desktop-guide.png',
+          ['dialog[data-guide="results"]'],
+        )
+      }
       if (item.shot) await shot(cdp, item.shot)
     }
 
+    await openPage(cdp, '/?preview=organizers&lang=zh', 390, 844)
+    const organizerSize = await overflow(cdp)
+    assert(organizerSize.scrollWidth <= organizerSize.clientWidth + 1, `organizers phone overflows: ${organizerSize.scrollWidth}`)
+    const organizers = JSON.parse(await cdp.eval<string>(`(() => {
+      const dialog = document.querySelector('dialog[data-guide="organizers"]')
+      const confirm = dialog?.querySelector('[data-guide-confirm]')
+      return JSON.stringify({
+        open: dialog instanceof HTMLDialogElement && dialog.open,
+        disabled: confirm instanceof HTMLButtonElement ? confirm.disabled : null,
+        bullets: [...(dialog?.querySelectorAll('li') ?? [])].map((node) => node.textContent),
+      })
+    })()`)) as { open: boolean; disabled: boolean | null; bullets: string[] }
+    assert(organizers.open && organizers.disabled === true, 'organizers guide was not waiting for a tick')
+    assert(
+      organizers.bullets.join('\n') === '輸入名稱來加入\n標上 Avail 或 NA\n已勾選的主辦人都有空，才會有結果',
+      `organizers copy was ${organizers.bullets.join(' | ')}`,
+    )
+    await shotElements(cdp, '/opt/cursor/artifacts/organizers-phone-guide.png', ['dialog[data-guide="organizers"]'])
+
     await openPage(cdp, '/?preview=results&lang=zh', 390, 844)
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+    await delay(60)
+    const stayed = await cdp.eval<boolean>(`document.querySelector('dialog[data-guide="results"]')?.open === true`)
+    assert(stayed, 'Escape dismissed the results guide')
+    const chips = JSON.parse(await cdp.eval<string>(`(() => {
+      const row = document.querySelector('.chip-wrap')
+      const buttons = [...(row?.querySelectorAll('button') ?? [])]
+      return JSON.stringify({
+        wrap: row ? getComputedStyle(row).flexWrap : '',
+        count: buttons.length,
+        buttons: buttons.every((button) => button.tagName === 'BUTTON' && button.getAttribute('aria-pressed') != null),
+      })
+    })()`)) as { wrap: string; count: number; buttons: boolean }
+    assert(chips.wrap === 'wrap' && chips.count === 5 && chips.buttons, `dancer filters were ${JSON.stringify(chips)}`)
+    await dismissGuide(cdp, 'results')
+    const hints = JSON.parse(await cdp.eval<string>(`JSON.stringify({
+      list: [...document.querySelectorAll('.hint-list li')].map((node) => node.textContent),
+      length: document.querySelector('[data-hint-length]')?.textContent ?? '',
+      color: getComputedStyle(document.querySelector('.hint-list')).color,
+    })`)) as { list: string[]; length: string; color: string }
+    assert(
+      hints.list.join('\n') === '數字是有空人數，顏色越深越多\n拖曳訂時段，拉邊改長度\n點其他日期，加上同一時間',
+      `leftover hints were ${hints.list.join(' | ')}`,
+    )
+    assert(hints.length === '+ / − 每次改半小時', `length hint was "${hints.length}"`)
+    assert(hints.color === 'rgb(228, 228, 231)', `hint color is ${hints.color}`)
+    await centerSelectors(cdp, ['[data-hint-length]', '.chip-wrap', '.hint-list'])
+    await shotElements(cdp, '/opt/cursor/artifacts/results-phone-hints.png', ['[data-hint-length]', '.chip-wrap', '.hint-list'], true)
     await cdp.eval(`document.querySelector('.cal-day')?.scrollIntoView({ block: 'center' })`)
     await delay(100)
     const calendarHeight = await cdp.eval<number>(`document.querySelector('.cal-day')?.getBoundingClientRect().height ?? 0`)
@@ -376,6 +571,12 @@ async function main() {
     assert(phone.scrollWidth <= phone.clientWidth + 1, `results still overflows after drag: ${phone.scrollWidth}`)
 
     await openPage(cdp, '/?preview=results&lang=zh', 1280, 800)
+    const desktopGuide = await cdp.eval<boolean>(`document.querySelector('dialog[data-guide="results"]') != null`)
+    assert(!desktopGuide, 'dismissing the results guide did not stick')
+    const organizersStill = await cdp.eval<string>(`localStorage.getItem('syncup.guide.dismissed.organizers') ?? ''`)
+    assert(organizersStill === '', 'dismissing results also hid the organizers guide')
+    await centerSelectors(cdp, ['[data-hint-length]', '.chip-wrap', '.hint-list'])
+    await shotElements(cdp, '/opt/cursor/artifacts/results-desktop-hints.png', ['[data-hint-length]', '.chip-wrap', '.hint-list'], true)
     const desktopBooked = await dragHours(cdp, '19', '21', 'mouse', true)
     assert(desktopBooked.includes('19:00') && desktopBooked.includes('2.5'), `desktop block was "${desktopBooked}"`)
     await cdp.eval(`document.querySelector('[data-booked]')?.scrollIntoView({ block: 'center', inline: 'center' })`)

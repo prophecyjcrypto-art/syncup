@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { Language } from '../types'
+import { t } from '../i18n'
 import { groupByMonth, toISODateString, weekdayLabels } from '../lib/dates'
 import { textMuted } from '../lib/ui'
 
@@ -16,6 +17,10 @@ export function MonthBoards({
 }) {
   const months = groupByMonth(days, lang)
   const labels = weekdayLabels(lang)
+
+  if (months.length === 0) {
+    return <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_times')}</p>
+  }
 
   return (
     <div className="space-y-6">

@@ -398,7 +398,7 @@ export function ResultsPanel({
               <InfoTip lang={lang} text={t(lang, durationUnset ? 'duration_not_set' : 'slots_rule')} />
             </h3>
             <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'choreographer_filter_hint')}</p>
-            {campaign.choreographers.length === 0 && <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>}
+            {campaign.choreographers.length === 0 && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'list_empty')}</p>}
             {campaign.choreographers.map((person) => (
               <label key={person.id} className="flex min-h-11 items-center gap-2 text-sm font-bold">
                 <input
@@ -512,17 +512,17 @@ export function ResultsPanel({
               </button>
             </div>
           </div>
-          <p className={`mt-1 text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'hint_length')}</p>
+          <p data-hint-length="" className={`mt-1 text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'hint_length')}</p>
           <div className="mt-4 space-y-2">
             <p className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'filter_dancers')}</p>
             <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, dancerFilter.length === 0 ? 'filter_hint' : 'filter_active')}</p>
-            <div className="chip-row py-1">
+            <div className="chip-row chip-wrap py-1">
               <button
                 type="button"
                 data-dancer-id="all"
                 aria-pressed={dancerFilter.length === 0}
                 onClick={() => setDancerFilter([])}
-                className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${dancerFilter.length === 0 ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
+                className={`min-h-11 cursor-pointer rounded-full px-3 text-xs font-bold ${dancerFilter.length === 0 ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
               >
                 {t(lang, 'filter_all')}
               </button>
@@ -535,7 +535,7 @@ export function ResultsPanel({
                     data-dancer-id={person.id}
                     aria-pressed={on}
                     onClick={() => toggleDancer(person.id)}
-                    className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
+                    className={`min-h-11 cursor-pointer rounded-full px-3 text-xs font-bold ${on ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
                   >
                     {person.name}
                   </button>
@@ -571,15 +571,15 @@ export function ResultsPanel({
           <div className="mt-4 max-h-48 space-y-2 overflow-y-auto custom-scrollbar">
             <p className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'choreographer_overlap')}</p>
             {required.length === 0 ? (
-              <p className="text-sm text-zinc-400">{t(lang, 'none_required')}</p>
+              <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'none_required')}</p>
             ) : openDays.length === 0 ? (
-              <p className="text-sm text-zinc-400">{t(lang, 'no_shared_time', { n: closedDays })}</p>
+              <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_shared_time', { n: closedDays })}</p>
             ) : (
               openDays.map((day) => (
                 <div key={day.iso}>
                   <p className="text-sm font-bold">{formatLongDate(parseISODate(day.iso), lang)}</p>
                   {day.windows.map((window) => (
-                    <p key={`${day.iso}-${window.start.toISOString()}`} className="text-xs text-zinc-400">
+                    <p key={`${day.iso}-${window.start.toISOString()}`} className={`text-xs ${textMuted(isDarkMode)}`}>
                       {formatTime(window.start, lang)} – {formatTime(window.end, lang)}
                     </p>
                   ))}
@@ -587,7 +587,7 @@ export function ResultsPanel({
               ))
             )}
             {closedDays > 0 && openDays.length > 0 && (
-              <p className="text-xs text-zinc-500">{t(lang, 'no_shared_time', { n: closedDays })}</p>
+              <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'no_shared_time', { n: closedDays })}</p>
             )}
           </div>
           <div className="mt-6 space-y-4">
@@ -607,7 +607,7 @@ export function ResultsPanel({
               <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'choose_length_first')}</p>
             ) : listed.length === 0 ? (
               <div className="py-16 text-center">
-                <p className="font-medium text-zinc-400">{t(lang, 'no_results')}</p>
+                <p className={`font-medium ${textMuted(isDarkMode)}`}>{t(lang, 'no_results')}</p>
                 <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'guide_empty_results')}</p>
               </div>
             ) : null}
