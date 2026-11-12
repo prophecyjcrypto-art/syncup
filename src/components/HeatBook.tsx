@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { t } from '../i18n'
 import { formatLongDate, formatTime, parseISODate, toISODateString } from '../lib/dates'
 import {
@@ -15,7 +15,6 @@ import {
   type HourRange,
 } from '../lib/timeRange'
 import { textMuted, textPrimary } from '../lib/ui'
-import { HintList } from './Guide'
 import type { Language, TimeSlot } from '../types'
 import type { OverlapCell } from '../lib/schedule'
 
@@ -89,7 +88,7 @@ function sessionFromDrag(
 }
 
 export function sessionSummary(range: HourRange | null, lang: Language): string {
-  if (!range) return t(lang, 'range_empty')
+  if (!range) return t(lang, 'no_times')
   return `${formatClock(range.startHour)}–${formatClock(range.endHour)} · ${durationHours(range)} ${t(lang, 'hours_unit')}`
 }
 
@@ -157,7 +156,6 @@ export function HeatBook({
   onClearAll: () => void
   onToggleSaved: (keys: string[]) => void
 }) {
-  const helpId = useId()
   const scrollRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<HeatDrag | null>(null)
@@ -337,11 +335,6 @@ export function HeatBook({
         <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_times')}</p>
       ) : (
         <>
-          <HintList
-            id={helpId}
-            className={textMuted(isDarkMode)}
-            items={[t(lang, 'hint_heat'), t(lang, 'hint_drag'), t(lang, 'hint_days')]}
-          />
           <div className="flex items-center justify-between gap-3">
             <p className={`text-sm font-semibold tabular-nums ${textPrimary(isDarkMode)}`} data-range-summary="" aria-live="polite">
               {summary}
@@ -366,7 +359,6 @@ export function HeatBook({
             role="grid"
             tabIndex={editable ? 0 : -1}
             aria-label={t(lang, 'heat_title')}
-            aria-describedby={helpId}
             onKeyDown={onKeyDown}
           >
             <div

@@ -5,7 +5,6 @@ import { formatBlockLabel } from '../lib/blocks'
 import { formatDate, formatLongDate, parseISODate } from '../lib/dates'
 import { uncoveredDays } from '../lib/schedule'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
-import { InstructionBox } from './Guide'
 import type { Campaign, Language, PersonRole, TimeBlock } from '../types'
 
 export function RosterPanel({
@@ -69,7 +68,6 @@ export function RosterPanel({
           {variant === 'choreographer' ? t(lang, 'next_dancers') : t(lang, 'view_results')}
         </button>
       </div>
-      <InstructionBox key={variant} id={variant === 'choreographer' ? 'organizers' : 'participants'} lang={lang} />
       {editingId && (
         <p className="text-sm font-bold text-[#f6cf7a]">
           {t(lang, 'editing', { name })}

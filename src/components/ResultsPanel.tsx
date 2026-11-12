@@ -7,7 +7,6 @@ import { formatLongDate, formatTime, getDaysArray, parseISODate, toISODateString
 import { durationHours, fitDuration, roundHour, SLOT_STEP } from '../lib/timeRange'
 import { availabilityHeatmap, calculateBestSlots, compulsoryReport, sharedFreeByDay } from '../lib/schedule'
 import { cardClass, textMuted, textPrimary } from '../lib/ui'
-import { InfoTip, InstructionBox } from './Guide'
 import type { Campaign, Language, TimeSlot } from '../types'
 import { MonthBoards } from './MonthBoards'
 import { HeatBook, slotMatchesSession, type SessionRange } from './HeatBook'
@@ -388,16 +387,11 @@ export function ResultsPanel({
           )}
         </div>
       </div>
-      <InstructionBox id="results" lang={lang} />
       {notice && <p className="text-sm font-medium text-[#93ba8c]">{notice}</p>}
       <div className="grid gap-4 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] md:items-start">
         <div className="order-2 min-w-0 space-y-3 md:order-1">
           <section className={`${cardClass(isDarkMode)} space-y-3 rounded-[1.5rem] p-4 sm:p-5`}>
-            <h3 className={`inline-flex items-center gap-2 font-medium ${textPrimary(isDarkMode)}`}>
-              {t(lang, 'choreographer_filter')}
-              <InfoTip lang={lang} text={t(lang, durationUnset ? 'duration_not_set' : 'slots_rule')} />
-            </h3>
-            <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'choreographer_filter_hint')}</p>
+            <h3 className={`font-medium ${textPrimary(isDarkMode)}`}>{t(lang, 'choreographer_filter')}</h3>
             {campaign.choreographers.length === 0 && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'list_empty')}</p>}
             {campaign.choreographers.map((person) => (
               <label key={person.id} className="flex min-h-11 items-center gap-2 text-sm font-bold">
@@ -410,7 +404,6 @@ export function ResultsPanel({
               </label>
             ))}
             {requiredIds.length === 0 && <p className="text-xs text-[#f6cf7a]">{t(lang, 'none_required')}</p>}
-            <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, durationUnset ? 'duration_not_set' : 'slots_rule')}</p>
             <label className="flex min-h-11 items-center gap-2 text-sm font-bold">
               <input type="checkbox" checked={onDaysOnly} onChange={(event) => setOnDaysOnly(event.target.checked)} disabled={campaign.onDays.length === 0} />
               {t(lang, 'on_days_only')}
@@ -433,7 +426,6 @@ export function ResultsPanel({
                 </button>
               )}
             </div>
-            <p className={`mb-3 text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'tip_click_dates')}</p>
             <MonthBoards
               days={days}
               lang={lang}
@@ -512,10 +504,9 @@ export function ResultsPanel({
               </button>
             </div>
           </div>
-          <p data-hint-length="" className={`mt-1 text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'hint_length')}</p>
           <div className="mt-4 space-y-2">
             <p className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'filter_dancers')}</p>
-            <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, dancerFilter.length === 0 ? 'filter_hint' : 'filter_active')}</p>
+            {dancerFilter.length > 0 ? <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'filter_active')}</p> : null}
             <div className="chip-row chip-wrap py-1">
               <button
                 type="button"

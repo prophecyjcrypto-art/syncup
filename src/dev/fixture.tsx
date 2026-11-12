@@ -1,6 +1,8 @@
 import { StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AvailabilityEditor } from '../components/AvailabilityEditor'
+import { CampaignList } from '../components/CampaignList'
+import { DancerPortal } from '../components/DancerPortal'
 import { FlowSteps, type FlowStep } from '../components/Guide'
 import { Landing } from '../components/Landing'
 import { ResultsPanel } from '../components/ResultsPanel'
@@ -187,6 +189,28 @@ function Preview({ name }: { name: string }) {
       </div>
     )
   }
+  if (name === 'events') {
+    return (
+      <Shell>
+        <CampaignList
+          lang={lang}
+          isDarkMode
+          campaigns={[]}
+          userId="owner"
+          email="owner@example.com"
+          onCreate={() => undefined}
+          onOpen={() => undefined}
+          onDelete={() => undefined}
+          onChoreographers={() => undefined}
+          onDancers={() => undefined}
+          onResults={() => undefined}
+          onPortal={() => undefined}
+          onCopy={() => undefined}
+          onJoinAdmin={() => undefined}
+        />
+      </Shell>
+    )
+  }
   if (name === 'setup') {
     return (
       <Shell>
@@ -206,6 +230,38 @@ function Preview({ name }: { name: string }) {
           onNext={() => undefined}
           onSave={async () => true}
           onDelete={async () => undefined}
+        />
+      </Shell>
+    )
+  }
+  if (name === 'participants') {
+    return (
+      <Shell flow step="dancers">
+        <RosterPanel
+          lang={lang}
+          isDarkMode
+          campaign={campaign}
+          variant="dancer"
+          onBack={() => undefined}
+          onNext={() => undefined}
+          onSave={async () => true}
+          onDelete={async () => undefined}
+        />
+      </Shell>
+    )
+  }
+  if (name === 'portal') {
+    return (
+      <Shell>
+        <DancerPortal
+          lang={lang}
+          isDarkMode
+          campaign={campaign}
+          userId="guest"
+          email="guest@example.com"
+          linkRole="dancer"
+          onBack={() => undefined}
+          onSave={async () => true}
         />
       </Shell>
     )

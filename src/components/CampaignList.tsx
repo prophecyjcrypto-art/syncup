@@ -1,5 +1,4 @@
 import { useState, type FormEvent } from 'react'
-import { InfoTip, InstructionBox } from './Guide'
 import { t } from '../i18n'
 import { canManageRoster, isAdmin, isChoreographer, isOwner } from '../lib/access'
 import { formatDate, isPast } from '../lib/dates'
@@ -74,7 +73,6 @@ export function CampaignList({
         <img src="/logo.png" alt="" className="mx-auto mb-6 h-20 w-20 object-contain" />
         <h2 className={`font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>{t(lang, 'no_active_projects')}</h2>
         <p className={`mt-3 ${textMuted(isDarkMode)}`}>{t(lang, 'create_project_desc')}</p>
-        <InstructionBox id="events" lang={lang} className="mx-auto mt-6" />
         <button type="button" onClick={onCreate} className={primaryButton('mt-8 px-8 py-3')}>
           {t(lang, 'create_first_project')}
         </button>
@@ -87,16 +85,14 @@ export function CampaignList({
     <div className="mx-auto w-full max-w-7xl">
       <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className={`inline-flex items-center gap-2 font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
+          <h2 className={`font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
             {t(lang, 'campaigns')}
-            <InfoTip lang={lang} text={t(lang, 'tip_links')} />
           </h2>
         </div>
         <button type="button" onClick={onCreate} className={primaryButton('min-h-11 w-full shrink-0 px-6 py-3 text-sm sm:w-auto')}>
           + {t(lang, 'new_campaign')}
         </button>
       </div>
-      <InstructionBox id="events" lang={lang} className="mb-6" />
       {joinForm}
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {campaigns.map((campaign) => {
