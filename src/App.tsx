@@ -705,8 +705,11 @@ export default function App() {
       </main>
 
       {settingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-md sm:items-center sm:p-4" onClick={() => setSettingsOpen(false)}>
-          <div className={`${cardClass(isDarkMode)} max-h-[85dvh] w-full max-w-sm space-y-4 overflow-y-auto rounded-t-[1.75rem] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-[1.75rem] sm:p-6`} onClick={(event) => event.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 pt-[max(1rem,env(safe-area-inset-top))] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(1rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] backdrop-blur-md"
+          onClick={() => setSettingsOpen(false)}
+        >
+          <div className={`${cardClass(isDarkMode)} max-h-[85dvh] w-full max-w-sm space-y-4 overflow-y-auto rounded-[1.75rem] p-5 sm:p-6`} onClick={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className={`font-serif text-2xl ${textPrimary(isDarkMode)}`}>{t(lang, 'settings')}</h3>
               <button type="button" onClick={() => setSettingsOpen(false)} className="flex h-11 w-11 items-center justify-center text-2xl text-zinc-400" aria-label={t(lang, 'cancel')}>×</button>
