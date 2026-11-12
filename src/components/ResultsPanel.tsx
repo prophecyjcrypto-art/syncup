@@ -20,12 +20,14 @@ export function ResultsPanel({
   campaign,
   onBack,
   onSaveSlots,
+  canPin = true,
 }: {
   lang: Language
   isDarkMode: boolean
   campaign: Campaign
   onBack: () => void
   onSaveSlots: (slots: string[]) => void
+  canPin?: boolean
 }) {
   const choreoKey = campaign.choreographers.map((person) => person.id).join('|')
   const dancerKey = campaign.dancers.map((person) => person.id).join('|')
@@ -172,13 +174,15 @@ export function ResultsPanel({
             <button
               type="button"
               title={t(lang, 'pin_hint')}
+              disabled={!canPin}
               onClick={() => {
+                if (!canPin) return
                 const next = campaign.savedSlots.includes(key)
                   ? campaign.savedSlots.filter((item) => item !== key)
                   : [...campaign.savedSlots, key]
                 onSaveSlots(next)
               }}
-              className={`text-xl ${campaign.savedSlots.includes(key) ? 'text-[#f6cf7a]' : 'text-zinc-500'}`}
+              className={`text-xl disabled:cursor-default ${campaign.savedSlots.includes(key) ? 'text-[#f6cf7a]' : 'text-zinc-500'}`}
             >
               {campaign.savedSlots.includes(key) ? '★' : '☆'}
             </button>
