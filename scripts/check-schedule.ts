@@ -4,6 +4,7 @@ import {
   durationFromCellCount,
   durationHours,
   formatClock,
+  fitDuration,
   moveHourRange,
   parseClock,
   rangeFromCellIndexes,
@@ -111,5 +112,9 @@ assert(earlier.startHour === 18 && earlier.endHour === 21.5, 'the start can move
 assert(parseClock('19:00') === 19 && parseClock('21:30') === 21.5, 'typed times parse to hours')
 assert(parseClock('02:00+1') === 26, 'a next-day time parses past midnight')
 assert(durationFromCellCount(5) === 2.5, 'five half-hour cells are 2.5 hours')
+const fitted = fitDuration({ startHour: 18, endHour: 20 }, 1.5, 9, 22)
+assert(fitted.startHour === 18 && fitted.endHour === 19.5, 'a shorter length keeps the start and moves the end')
+const shifted = fitDuration({ startHour: 21, endHour: 22 }, 2, 9, 22)
+assert(shifted.startHour === 20 && shifted.endHour === 22 && durationHours(shifted) === 2, 'a length that would pass the day end shifts earlier')
 
 console.log('schedule checks passed')

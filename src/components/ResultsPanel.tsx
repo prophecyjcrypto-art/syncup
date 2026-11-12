@@ -3,17 +3,33 @@ import { t } from '../i18n'
 import { useCalendar } from '../lib/calendarContext'
 import { buildIcs, formatSlotText } from '../lib/export'
 import { clearGoogleToken, createCalendarEvents, GOOGLE_CALENDAR_ENABLED, GoogleCalendarError } from '../lib/googleCalendar'
-import { formatLongDate, formatTime, getDaysArray, parseISODate, rangeOptions, setTime, toISODateString } from '../lib/dates'
-import { durationHours, type HourRange } from '../lib/timeRange'
-import { availabilityHeatmap, calculateBestSlots, compulsoryReport, sharedFreeByDay, type OverlapCell } from '../lib/schedule'
+import { formatLongDate, formatTime, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
+import { durationHours, fitDuration, roundHour, SLOT_STEP } from '../lib/timeRange'
+import { availabilityHeatmap, calculateBestSlots, compulsoryReport, sharedFreeByDay } from '../lib/schedule'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { GuideNote, InfoTip } from './Guide'
 import type { Campaign, Language, TimeSlot } from '../types'
 import { MonthBoards } from './MonthBoards'
-import { TimeSlotGrid } from './TimeSlotGrid'
+import { HeatBook, slotMatchesSession, type SessionRange } from './HeatBook'
+
+const LENGTH_PRESETS = [1, 1.5, 2, 2.5, 3]
 
 function slotKey(slot: TimeSlot): string {
   return slot.start.toISOString()
+}
+
+function lengthLabel(hours: number, lang: Language): string {
+  return lang === 'zh' ? `${hours}小時` : `${hours}h`
+}
+
+function windowHours(slot: TimeSlot): { iso: string; startHour: number; endHour: number } {
+  const iso = toISODateString(slot.start)
+  const midnight = parseISODate(iso).getTime()
+  return {
+    iso,
+    startHour: roundHour((slot.start.getTime() - midnight) / 3600000),
+    endHour: roundHour((slot.end.getTime() - midnight) / 3600000),
+  }
 }
 
 export function ResultsPanel({
@@ -38,7 +54,7 @@ export function ResultsPanel({
   const choreoKey = campaign.choreographers.map((person) => person.id).join('|')
   const dancerKey = campaign.dancers.map((person) => person.id).join('|')
   const [requiredIds, setRequiredIds] = useState<string[]>(() => campaign.choreographers.map((person) => person.id))
-  const [dancerIds, setDancerIds] = useState<string[]>(() => campaign.dancers.map((person) => person.id))
+  const [dancerFilter, setDancerFilter] = useState<string[]>([])
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set())
   const [onDaysOnly, setOnDaysOnly] = useState(false)
   const [minAttendance, setMinAttendance] = useState(70)
@@ -46,15 +62,14 @@ export function ResultsPanel({
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [notice, setNotice] = useState('')
   const [draftHours, setDraftHours] = useState<number | null>(campaign.config.durationHours)
-  const [sessionRange, setSessionRange] = useState<HourRange | null>(null)
-  const [focusStart, setFocusStart] = useState<string | null>(null)
+  const [session, setSession] = useState<SessionRange | null>(null)
   const calendar = useCalendar()
 
   useEffect(() => {
     setRequiredIds(choreoKey ? choreoKey.split('|') : [])
   }, [choreoKey])
   useEffect(() => {
-    setDancerIds(dancerKey ? dancerKey.split('|') : [])
+    setDancerFilter([])
   }, [dancerKey])
   useEffect(() => {
     setDraftHours(campaign.config.durationHours)
@@ -65,7 +80,8 @@ export function ResultsPanel({
     [campaign.config.startDate, campaign.config.endDate],
   )
   const required = campaign.choreographers.filter((person) => requiredIds.includes(person.id))
-  const dancers = campaign.dancers.filter((person) => dancerIds.includes(person.id))
+  const dancers =
+    dancerFilter.length === 0 ? campaign.dancers : campaign.dancers.filter((person) => dancerFilter.includes(person.id))
   const everyone = [...campaign.choreographers, ...campaign.dancers]
   const durationUnset = draftHours == null
   const slotConfig = { ...campaign.config, durationHours: draftHours }
@@ -80,10 +96,13 @@ export function ResultsPanel({
     if (selectedDates.size > 0 && !selectedDates.has(iso)) return false
     return slot.attendanceScore >= minAttendance
   })
-  const pinned = dated
+  const listed = dated.filter(
+    (slot) => dancerFilter.length === 0 || dancerFilter.every((id) => slot.availableMembers.includes(id)),
+  )
+  const pinned = listed
     .filter((slot) => campaign.savedSlots.includes(slotKey(slot)))
     .sort((left, right) => left.start.getTime() - right.start.getTime())
-  const others = dated.filter((slot) => !campaign.savedSlots.includes(slotKey(slot)))
+  const others = listed.filter((slot) => !campaign.savedSlots.includes(slotKey(slot)))
 
   const overlapDates = (selectedDates.size > 0
     ? [...selectedDates]
@@ -129,39 +148,40 @@ export function ResultsPanel({
     onSaveSlots(next)
   }
 
-  function chooseLength(raw: string) {
+  function setLength(hours: number | null) {
     if (!canSetDuration) return
-    if (raw === '') {
+    if (hours == null || !Number.isFinite(hours) || hours <= 0) {
       setDraftHours(null)
-      setSessionRange(null)
+      setSession(null)
       return
     }
-    const hours = Number(raw)
+    const span = Math.max(SLOT_STEP, campaign.config.dayEndHour - campaign.config.dayStartHour)
+    const fitted = Math.min(roundHour(hours), span)
+    setDraftHours(fitted)
+    setSession((current) =>
+      current ? { ...current, ...fitDuration(current, fitted, campaign.config.dayStartHour, campaign.config.dayEndHour) } : current,
+    )
+    if (fitted !== campaign.config.durationHours) onSaveDuration?.(fitted)
+  }
+
+  function applySession(next: SessionRange | null) {
+    setSession(next)
+    if (!next || !canSetDuration) return
+    const hours = durationHours(next)
     setDraftHours(hours)
-    setSessionRange((current) => {
-      if (!current) return current
-      const end = Math.round((current.startHour + hours) * 2) / 2
-      if (end > campaign.config.dayEndHour) return null
-      return { startHour: current.startHour, endHour: end }
-    })
     if (hours !== campaign.config.durationHours) onSaveDuration?.(hours)
   }
 
-  function applySession(range: HourRange | null) {
-    setSessionRange(range)
-    if (!canSetDuration) return
-    if (!range) {
-      if (campaign.config.durationHours == null) setDraftHours(null)
-      return
-    }
-    const hours = durationHours(range)
-    setDraftHours(hours)
-    if (hours !== campaign.config.durationHours) onSaveDuration?.(hours)
-    const iso = (selectedDates.size > 0 ? [...selectedDates].sort()[0] : heat[0]?.iso) ?? null
-    if (!iso) return
-    const target = setTime(parseISODate(iso), range.startHour).getTime()
-    const cell = heat.find((day) => day.iso === iso)?.cells.find((item) => item.start.getTime() === target)
-    if (cell) setFocusStart(cell.start.toISOString())
+  function toggleDancer(id: string) {
+    setDancerFilter((current) => {
+      if (current.length === 0) return [id]
+      return current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+    })
+  }
+
+  function selectSlot(slot: TimeSlot) {
+    const hours = windowHours(slot)
+    setSession(hours)
   }
 
   function targets(): TimeSlot[] {
@@ -222,17 +242,32 @@ export function ResultsPanel({
   function renderSlot(slot: TimeSlot) {
     const key = slotKey(slot)
     const iso = toISODateString(slot.start)
+    const hours = windowHours(slot)
+    const onCalendar = session != null && slotMatchesSession(slot, session)
+    const names = slot.availableMembers.map(nameOf)
     return (
-      <article key={key} className={`glass-well rounded-2xl p-4 ${picked.has(key) ? 'ring-2 ring-[#7c7bb9]' : ''}`}>
+      <article
+        key={key}
+        data-slot-card=""
+        data-day={iso}
+        data-start={hours.startHour}
+        data-end={hours.endHour}
+        data-selected-slot={onCalendar ? '' : undefined}
+        onClick={() => selectSlot(slot)}
+        className={`glass-well cursor-pointer rounded-2xl p-4 ${onCalendar ? 'ring-2 ring-[#f6cf7a]' : picked.has(key) ? 'ring-2 ring-[#7c7bb9]' : ''}`}
+      >
         <div className="flex items-start justify-between gap-3">
-          <button type="button" className="text-left" onClick={() => setExpanded(expanded === key ? null : key)}>
+          <button type="button" className="min-w-0 text-left" onClick={() => setExpanded(expanded === key ? null : key)}>
             <p className={`font-bold ${textPrimary(isDarkMode)}`}>{formatLongDate(slot.start, lang)}</p>
             <p className="text-xs font-bold uppercase text-zinc-400">
               {formatTime(slot.start, lang)} – {formatTime(slot.end, lang)}
               {campaign.onDays.includes(iso) ? ` · ${t(lang, 'show_badge')}` : ''}
               {campaign.compulsoryDays.includes(iso) ? ` · ${t(lang, 'must_badge')}` : ''}
             </p>
-            <p className="mt-1 text-xs text-zinc-400">{t(lang, 'fully_available', { n: slot.score, total: dancers.length })}</p>
+            <p className="mt-1 text-xs text-zinc-400">
+              {t(lang, 'fully_available', { n: slot.score, total: dancers.length })}
+              {names.length > 0 && names.length <= 4 ? ` · ${names.join(', ')}` : ''}
+            </p>
           </button>
           <div className="flex items-center gap-2">
             <span className="rounded-xl bg-[#93ba8c] px-2 py-1 text-xs font-bold text-white">{slot.attendanceScore}%</span>
@@ -374,20 +409,6 @@ export function ResultsPanel({
               <input type="range" min={0} max={100} step={10} value={minAttendance} onChange={(event) => setMinAttendance(Number(event.target.value))} className="mt-2 w-full accent-[#7c7bb9]" />
             </label>
           </section>
-          <details className={`${cardClass(isDarkMode)} rounded-[1.5rem] p-4 sm:p-5`}>
-            <summary className="flex min-h-11 cursor-pointer items-center font-bold">{t(lang, 'dancers_filter')} ({dancerIds.length}/{campaign.dancers.length})</summary>
-            <button type="button" className="mt-3 text-xs font-bold text-[#7c7bb9]" onClick={() => setDancerIds(campaign.dancers.map((person) => person.id))}>
-              {t(lang, 'select_all')}
-            </button>
-            <div className="mt-3 space-y-2">
-              {campaign.dancers.map((person) => (
-                <label key={person.id} className="flex min-h-11 items-center gap-2 text-sm">
-                  <input type="checkbox" checked={dancerIds.includes(person.id)} onChange={() => toggleId(dancerIds, person.id, setDancerIds)} />
-                  {person.name}
-                </label>
-              ))}
-            </div>
-          </details>
           {report.length > 0 && (
             <section className={`${cardClass(isDarkMode)} space-y-3 rounded-[1.5rem] p-4 sm:p-5`}>
               <h3 className={`font-bold ${textPrimary(isDarkMode)}`}>{t(lang, 'compulsory_report')}</h3>
@@ -406,54 +427,83 @@ export function ResultsPanel({
           <h3 className={`font-serif text-xl sm:text-2xl ${textPrimary(isDarkMode)}`}>
             {selectedDates.size > 0 ? t(lang, 'dates_selected', { n: selectedDates.size }) : t(lang, 'rehearsal_recommendations')}
           </h3>
-          {durationUnset ? null : <p className={`mt-1 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'found_slots', { n: dated.length })}</p>}
-          <div className="mt-4">
-            <p className={`mb-2 text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'session_grid')}</p>
-            {canSetDuration ? (
-              <TimeSlotGrid
-                lang={lang}
-                isDarkMode={isDarkMode}
-                label={t(lang, 'session_grid')}
-                windowStart={campaign.config.dayStartHour}
-                windowEnd={campaign.config.dayEndHour}
-                value={sessionRange}
-                allowClear
-                onChange={applySession}
-              />
-            ) : (
-              <p className={`text-sm font-semibold ${textPrimary(isDarkMode)}`}>
-                {draftHours == null ? t(lang, 'duration_not_set') : `${draftHours} ${t(lang, 'hours_unit')}`}
-              </p>
-            )}
-            {canSetDuration && (
-              <details className="mt-2">
-                <summary className={`min-h-11 cursor-pointer py-2 text-xs font-bold ${textMuted(isDarkMode)}`}>{t(lang, 'rehearsal_length')}</summary>
-                <select
-                  value={draftHours ?? ''}
-                  onChange={(event) => chooseLength(event.target.value)}
-                  className={`w-full max-w-xs rounded-xl px-3 py-3 font-bold ${inputClass(isDarkMode)}`}
+          {durationUnset ? null : <p className={`mt-1 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'found_slots', { n: listed.length })}</p>}
+          <div className="mt-4 space-y-2">
+            <p className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'rehearsal_length')}</p>
+            <div className="flex flex-wrap gap-2">
+              {LENGTH_PRESETS.map((hour) => (
+                <button
+                  key={hour}
+                  type="button"
+                  data-duration={hour}
+                  disabled={!canSetDuration}
+                  aria-pressed={draftHours === hour}
+                  onClick={() => setLength(hour)}
+                  className={`min-h-11 rounded-full px-3 text-xs font-bold disabled:cursor-default disabled:opacity-50 ${
+                    draftHours === hour ? 'bg-[#7c7bb9] text-white' : 'glass-well'
+                  }`}
                 >
-                  {campaign.config.durationHours == null ? <option value="">{t(lang, 'choose_length_blank')}</option> : null}
-                  {rangeOptions(0.5, 24).map((hour) => (
-                    <option key={hour} value={hour}>{hour} {t(lang, 'hours')}</option>
-                  ))}
-                </select>
-              </details>
-            )}
+                  {lengthLabel(hour, lang)}
+                </button>
+              ))}
+            </div>
+            <select
+              disabled={!canSetDuration}
+              value={draftHours ?? ''}
+              onChange={(event) => setLength(event.target.value === '' ? null : Number(event.target.value))}
+              className={`w-full max-w-xs rounded-xl px-3 py-3 font-bold ${inputClass(isDarkMode)} disabled:cursor-default disabled:opacity-70`}
+            >
+              {campaign.config.durationHours == null ? <option value="">{t(lang, 'choose_length_blank')}</option> : null}
+              {rangeOptions(0.5, 24).map((hour) => (
+                <option key={hour} value={hour}>{hour} {t(lang, 'hours')}</option>
+              ))}
+            </select>
           </div>
-          <OverlapHeat
+          <div className="mt-4 space-y-2">
+            <p className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'filter_dancers')}</p>
+            <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, dancerFilter.length === 0 ? 'filter_hint' : 'filter_active')}</p>
+            <div className="chip-row py-1">
+              <button
+                type="button"
+                data-dancer-id="all"
+                aria-pressed={dancerFilter.length === 0}
+                onClick={() => setDancerFilter([])}
+                className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${dancerFilter.length === 0 ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
+              >
+                {t(lang, 'filter_all')}
+              </button>
+              {campaign.dancers.map((person) => {
+                const on = dancerFilter.includes(person.id)
+                return (
+                  <button
+                    key={person.id}
+                    type="button"
+                    data-dancer-id={person.id}
+                    aria-pressed={on}
+                    onClick={() => toggleDancer(person.id)}
+                    className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
+                  >
+                    {person.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <HeatBook
             lang={lang}
             isDarkMode={isDarkMode}
             dancers={dancers}
             heat={heat}
             slots={slots}
             savedSlots={campaign.savedSlots}
+            session={session}
             durationHours={draftHours}
-            sessionRange={sessionRange}
-            focusStart={focusStart}
+            editable={canSetDuration}
             canPin={canPin}
+            windowStart={campaign.config.dayStartHour}
+            windowEnd={campaign.config.dayEndHour}
             nameOf={nameOf}
-            onFocus={setFocusStart}
+            onSession={applySession}
             onToggleSaved={toggleSaved}
           />
           <div className="mt-4 max-h-48 space-y-2 overflow-y-auto custom-scrollbar">
@@ -493,7 +543,7 @@ export function ResultsPanel({
             )}
             {durationUnset ? (
               <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'choose_length_first')}</p>
-            ) : dated.length === 0 ? (
+            ) : listed.length === 0 ? (
               <div className="py-16 text-center">
                 <p className="font-medium text-zinc-400">{t(lang, 'no_results')}</p>
                 <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'guide_empty_results')}</p>
@@ -515,135 +565,10 @@ function NameGroup({ title, names, tone }: { title: string; names: string[]; ton
   )
 }
 
-function axisLabel(date: Date): string {
-  if (date.getMinutes() !== 0) return ''
-  const hour = date.getHours()
-  const suffix = hour >= 12 ? 'p' : 'a'
-  const display = hour % 12 || 12
-  return `${display}${suffix}`
-}
-
 function scoreTone(score: number, isDarkMode: boolean): string {
   if (score >= 90) return 'bg-[#7c7bb9] text-white'
   if (score >= 70) return 'bg-[#93ba8c] text-white'
   if (score >= 50) return 'bg-[#f6cf7a] text-zinc-900'
   if (score > 0) return isDarkMode ? 'bg-white/10 text-zinc-200' : 'bg-white text-zinc-600'
   return isDarkMode ? 'bg-black/30 text-zinc-500' : 'bg-zinc-100 text-zinc-400'
-}
-
-function OverlapHeat({
-  lang,
-  isDarkMode,
-  dancers,
-  heat,
-  slots,
-  savedSlots,
-  durationHours,
-  sessionRange,
-  focusStart,
-  canPin,
-  nameOf,
-  onFocus,
-  onToggleSaved,
-}: {
-  lang: Language
-  isDarkMode: boolean
-  dancers: { id: string; name: string }[]
-  heat: { iso: string; cells: OverlapCell[] }[]
-  slots: TimeSlot[]
-  savedSlots: string[]
-  durationHours: number | null
-  sessionRange: HourRange | null
-  focusStart: string | null
-  canPin: boolean
-  nameOf: (id: string) => string
-  onFocus: (start: string) => void
-  onToggleSaved: (key: string) => void
-}) {
-  const focused = heat.flatMap((day) => day.cells).find((cell) => cell.start.toISOString() === focusStart) ?? null
-  const matching = focused ? slots.find((slot) => slot.start.getTime() === focused.start.getTime()) ?? null : null
-  const matchingKey = matching ? slotKey(matching) : null
-  const saved = matchingKey != null && savedSlots.includes(matchingKey)
-  const header = heat[0]?.cells ?? []
-
-  return (
-    <div className="mt-4 space-y-3">
-      <div>
-        <h4 className={`font-bold ${textPrimary(isDarkMode)}`}>{t(lang, 'heat_title')}</h4>
-        <p className={`mt-1 text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'heat_hint')}</p>
-      </div>
-      {dancers.length === 0 ? (
-        <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>
-      ) : (
-        <div className="max-h-72 max-w-full overflow-auto custom-scrollbar">
-          <div className="w-max min-w-full space-y-1">
-          <div className="flex items-end gap-2">
-            <span className="w-16 shrink-0 sm:w-24" />
-            <div className="flex gap-0.5">
-              {header.map((cell) => (
-                <span key={cell.start.toISOString()} className="w-9 text-center text-[9px] font-bold text-zinc-400">
-                  {axisLabel(cell.start)}
-                </span>
-              ))}
-            </div>
-          </div>
-          {heat.map((day) => (
-            <div key={day.iso} className="flex items-center gap-2">
-              <span className={`w-16 shrink-0 text-[11px] font-bold leading-tight sm:w-24 sm:text-xs ${textPrimary(isDarkMode)}`}>{formatLongDate(parseISODate(day.iso), lang)}</span>
-              <div className="flex gap-0.5">
-                {day.cells.map((cell) => {
-                  const ratio = dancers.length === 0 ? 0 : (cell.freeIds.length / dancers.length) * 100
-                  const key = cell.start.toISOString()
-                  const hour = (cell.start.getTime() - parseISODate(day.iso).getTime()) / 3600000
-                  const inSession = sessionRange != null && hour >= sessionRange.startHour - 1e-6 && hour < sessionRange.endHour - 1e-6
-                  const pinned = slots.some(
-                    (slot) => savedSlots.includes(slotKey(slot)) && cell.start.getTime() >= slot.start.getTime() && cell.start.getTime() < slot.end.getTime(),
-                  )
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      title={`${formatTime(cell.start, lang)} · ${t(lang, 'heat_free', { n: cell.freeIds.length, total: dancers.length })}`}
-                      aria-label={`${formatLongDate(cell.start, lang)} ${formatTime(cell.start, lang)} ${t(lang, 'heat_free', { n: cell.freeIds.length, total: dancers.length })}`}
-                      onClick={() => onFocus(key)}
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[10px] font-bold ${scoreTone(ratio, isDarkMode)} ${
-                        focusStart === key ? 'ring-2 ring-[#7c7bb9]' : ''
-                      } ${pinned ? 'outline outline-2 outline-[#f6cf7a]' : inSession ? 'outline outline-2 outline-white/80' : ''}`}
-                    >
-                      {cell.freeIds.length}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
-          </div>
-        </div>
-      )}
-      {focused ? (
-        <div className="space-y-2">
-          <p className={`text-sm font-bold ${textPrimary(isDarkMode)}`}>
-            {formatLongDate(focused.start, lang)} · {formatTime(focused.start, lang)} – {formatTime(focused.end, lang)}
-          </p>
-          <p className={`text-xs ${textMuted(isDarkMode)}`}>
-            {t(lang, 'heat_free', { n: focused.freeIds.length, total: dancers.length })}
-            {focused.freeIds.length > 0 ? ` · ${focused.freeIds.map(nameOf).join(', ')}` : ''}
-          </p>
-          {durationHours == null ? (
-            <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'choose_length_first')}</p>
-          ) : matching && canPin ? (
-            <button
-              type="button"
-              onClick={() => onToggleSaved(matchingKey!)}
-              className="rounded-full btn-glow bg-[#7c7bb9] px-4 py-2 text-xs font-bold text-white"
-            >
-              {saved ? t(lang, 'on_shortlist') : t(lang, 'use_this_time')}
-            </button>
-          ) : matching ? null : (
-            <p className="text-xs text-[#f19ba8]">{t(lang, 'slot_blocked')}</p>
-          )}
-        </div>
-      ) : null}
-    </div>
-  )
 }

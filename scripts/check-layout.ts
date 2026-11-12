@@ -92,12 +92,61 @@ async function shot(cdp: Cdp, file: string) {
   await writeFile(file, Buffer.from(result.data, 'base64'))
 }
 
+async function dragEdge(cdp: Cdp, toHour: string) {
+  return cdp.eval<string>(`(async () => {
+    const handle = document.querySelector('[data-edge="end"]')
+    const row = document.querySelector('[data-booked]')?.closest('[data-day]')
+    const cell = row?.querySelector('[data-hour="${toHour}"]')
+    if (!(handle instanceof HTMLElement) || !(row instanceof HTMLElement) || !(cell instanceof HTMLElement)) return 'missing'
+    const scroller = row.closest('[data-slot-grid]')
+    if (!(scroller instanceof HTMLElement)) return 'missing'
+    scroller.scrollIntoView({ block: 'center' })
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const a = handle.getBoundingClientRect()
+      const b = cell.getBoundingClientRect()
+      const box = scroller.getBoundingClientRect()
+      scroller.scrollLeft += (a.left + b.right) / 2 - (box.left + box.width / 2)
+      scroller.scrollTop += (a.top + b.bottom) / 2 - (box.top + box.height / 2)
+    }
+    function center(el) {
+      const rect = el.getBoundingClientRect()
+      return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+    }
+    function fire(type, point, el) {
+      el.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, clientX: point.x, clientY: point.y,
+        pointerId: 1, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, isPrimary: true,
+      }))
+    }
+    const start = center(handle)
+    const end = center(cell)
+    fire('pointerdown', start, handle)
+    fire('pointermove', end, cell)
+    fire('pointerup', end, cell)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    return document.querySelector('[data-range-summary]')?.textContent ?? ''
+  })()`)
+}
+
 async function dragHours(cdp: Cdp, fromHour: string, toHour: string, pointerType: 'mouse' | 'touch', release: boolean) {
-  return cdp.eval<string>(`(() => {
-    const startEl = document.querySelector('[data-slot-grid] [data-hour="${fromHour}"]')
-    const endEl = document.querySelector('[data-slot-grid] [data-hour="${toHour}"]')
-    if (!startEl || !endEl) return 'missing'
-    startEl.scrollIntoView({ block: 'center' })
+  return cdp.eval<string>(`(async () => {
+    const row = document.querySelector('[data-slot-grid] [data-day]')
+    const startEl = row?.querySelector('[data-hour="${fromHour}"]')
+    const endEl = row?.querySelector('[data-hour="${toHour}"]')
+    if (!(row instanceof HTMLElement) || !(startEl instanceof HTMLElement) || !(endEl instanceof HTMLElement)) return 'missing'
+    const scroller = row.closest('[data-slot-grid]')
+    if (!(scroller instanceof HTMLElement)) return 'missing'
+    scroller.scrollIntoView({ block: 'center' })
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const a = startEl.getBoundingClientRect()
+      const b = endEl.getBoundingClientRect()
+      const box = scroller.getBoundingClientRect()
+      scroller.scrollLeft += (a.left + b.right) / 2 - (box.left + box.width / 2)
+      scroller.scrollTop += (a.top + b.bottom) / 2 - (box.top + box.height / 2)
+      const page = row.getBoundingClientRect()
+      window.scrollBy(0, (page.top + page.bottom) / 2 - window.innerHeight / 2)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 40))
     function center(el) {
       const rect = el.getBoundingClientRect()
       return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
@@ -117,12 +166,15 @@ async function dragHours(cdp: Cdp, fromHour: string, toHour: string, pointerType
     }
     const start = center(startEl)
     const end = center(endEl)
+    const inside = (point) => point.x >= 0 && point.x <= window.innerWidth && point.y >= 0 && point.y <= window.innerHeight
+    if (!inside(start) || !inside(end)) {
+      return 'offscreen ' + JSON.stringify({ start, end, innerWidth: window.innerWidth, innerHeight: window.innerHeight, sameRow: startEl.parentElement === endEl.parentElement })
+    }
     fire('pointerdown', start, startEl)
     fire('pointermove', end, endEl)
     if (${release}) fire('pointerup', end, endEl)
-    return new Promise((resolve) => {
-      setTimeout(() => resolve(document.querySelector('[data-range-summary]')?.textContent ?? ''), 50)
-    })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    return document.querySelector('[data-range-summary]')?.textContent ?? ''
   })()`)
 }
 
@@ -220,15 +272,86 @@ async function main() {
     const keyed = await cdp.eval<string>(`document.querySelector('[data-range-summary]')?.textContent ?? ''`)
     assert(keyed.includes('20:00') && keyed.includes('2 ') && !keyed.includes('2.5'), `keyboard shorten was "${keyed}"`)
 
+    const grids = await cdp.eval<number>(`document.querySelectorAll('[data-slot-grid]').length`)
+    assert(grids === 1, `results should have one booking grid, found ${grids}`)
+    const shortened = await cdp.eval<string>(`document.querySelector('[data-duration="1.5"]')?.click(); 'clicked'`)
+    assert(shortened === 'clicked', 'duration preset missing')
+    await delay(60)
+    const resized = await cdp.eval<string>(`document.querySelector('[data-range-summary]')?.textContent ?? ''`)
+    assert(resized.includes('18:00') && resized.includes('19:30') && resized.includes('1.5'), `duration resize was "${resized}"`)
+    const placed = await cdp.eval<string>(`(() => {
+      const card = document.querySelector('[data-slot-card]')
+      if (!(card instanceof HTMLElement)) return 'no-card'
+      card.click()
+      return card.dataset.day + ' ' + card.dataset.start + ' ' + card.dataset.end
+    })()`)
+    await delay(80)
+    const [placedDay, placedStart, placedEnd] = placed.split(' ')
+    const summaryAfterCard = await cdp.eval<string>(`document.querySelector('[data-range-summary]')?.textContent ?? ''`)
+    const clock = (hour: string) => {
+      const total = Math.round(Number(hour) * 60)
+      return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+    }
+    assert(
+      summaryAfterCard.includes(clock(placedStart)) && summaryAfterCard.includes(clock(placedEnd)),
+      `card did not move the block ("${placed}" -> "${summaryAfterCard}")`,
+    )
+    const blockDay = await cdp.eval<string>(`document.querySelector('[data-booked]')?.closest('[data-day]')?.getAttribute('data-day') ?? ''`)
+    assert(blockDay === placedDay, `block day ${blockDay} card ${placed}`)
+    const filtered = await cdp.eval<string>(`(() => {
+      document.querySelector('[data-dancer-id="dancer-ren"]')?.click()
+      return 'ok'
+    })()`)
+    assert(filtered === 'ok', 'dancer filter missing')
+    await delay(60)
+    const counts = await cdp.eval<string>(`(() => {
+      const morning = document.querySelector('[data-day="2026-11-12"] [data-hour="9"]')?.textContent ?? ''
+      const evening = document.querySelector('[data-day="2026-11-12"] [data-hour="18"]')?.textContent ?? ''
+      const starts = [...document.querySelectorAll('[data-slot-card]')].map((card) => Number(card.getAttribute('data-start')))
+      return JSON.stringify({ morning, evening, starts: starts.slice(0, 8), count: starts.length, late: starts.some((hour) => hour > 11.5) })
+    })()`)
+    const parsed = JSON.parse(counts) as { morning: string; evening: string; count: number; late: boolean }
+    assert(parsed.morning === '1' && parsed.evening === '0' && parsed.count > 0 && !parsed.late, `filtered heatmap/cards were ${counts}`)
+    await cdp.eval(`document.querySelector('[data-booked]')?.scrollIntoView({ block: 'center', inline: 'center' })`)
+    await delay(80)
+    await shot(cdp, '/opt/cursor/artifacts/results_phone_session_block.png')
+    await cdp.eval(`document.querySelector('[data-duration="1.5"]')?.scrollIntoView({ block: 'center' })`)
+    await delay(80)
+    await shot(cdp, '/opt/cursor/artifacts/results_phone_duration_filter.png')
+    await cdp.eval(`(document.querySelector('[data-selected-slot]') ?? document.querySelector('[data-slot-card]'))?.scrollIntoView({ block: 'center' })`)
+    await delay(80)
+    await shot(cdp, '/opt/cursor/artifacts/results_phone_filtered_cards.png')
+    await cdp.eval(`document.querySelector('[data-dancer-id="all"]')?.click()`)
+    await delay(40)
+    const restoredCount = await cdp.eval<string>(`document.querySelector('[data-day="2026-11-12"] [data-hour="18"]')?.textContent ?? ''`)
+    assert(restoredCount === '2', `clearing the dancer filter left the 18:00 count at "${restoredCount}"`)
+    const edgeResize = await dragEdge(cdp, '14')
+    assert(edgeResize.includes('14:30') && edgeResize.includes('11:30'), `pulling the end edge did not resize ("${edgeResize}")`)
+
     const phone = await overflow(cdp)
     assert(phone.scrollWidth <= phone.clientWidth + 1, `results still overflows after drag: ${phone.scrollWidth}`)
 
     await openPage(cdp, '/?preview=results&lang=zh', 1280, 800)
     const desktopBooked = await dragHours(cdp, '19', '21', 'mouse', true)
     assert(desktopBooked.includes('19:00') && desktopBooked.includes('2.5'), `desktop block was "${desktopBooked}"`)
-    await cdp.eval(`document.querySelector('[data-booked]')?.scrollIntoView({ block: 'center' })`)
+    await cdp.eval(`document.querySelector('[data-booked]')?.scrollIntoView({ block: 'center', inline: 'center' })`)
     await delay(80)
     await shot(cdp, '/opt/cursor/artifacts/results-block-desktop.png')
+    await cdp.eval(`document.querySelector('[data-duration="2"]')?.click()`)
+    await delay(40)
+    await cdp.eval(`document.querySelector('[data-slot-card]')?.click()`)
+    await delay(40)
+    await cdp.eval(`document.querySelector('[data-dancer-id="dancer-ren"]')?.click()`)
+    await delay(40)
+    await cdp.eval(`document.querySelector('[data-booked]')?.scrollIntoView({ block: 'center', inline: 'center' })`)
+    await delay(80)
+    await shot(cdp, '/opt/cursor/artifacts/results_desktop_session_block.png')
+    await cdp.eval(`document.querySelector('[data-duration="2"]')?.scrollIntoView({ block: 'center' })`)
+    await delay(80)
+    await shot(cdp, '/opt/cursor/artifacts/results_desktop_duration_filter.png')
+    await cdp.eval(`(document.querySelector('[data-selected-slot]') ?? document.querySelector('[data-slot-card]'))?.scrollIntoView({ block: 'center' })`)
+    await delay(80)
+    await shot(cdp, '/opt/cursor/artifacts/results_desktop_filtered_cards.png')
     const desktopOverflow = await overflow(cdp)
     assert(desktopOverflow.scrollWidth <= desktopOverflow.clientWidth + 1, `desktop block overflows: ${desktopOverflow.scrollWidth}`)
 

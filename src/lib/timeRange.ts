@@ -108,6 +108,22 @@ export function resizeHourRange(
   return resizeToCell('start', first + deltaSlots, range, windowStart, windowEnd, step)
 }
 
+/** Keep the start when the length changes, and slide earlier only if the new end would leave the day. */
+export function fitDuration(range: HourRange, hours: number, windowStart: number, windowEnd: number, step = SLOT_STEP): HourRange {
+  const span = roundHour(windowEnd - windowStart, step)
+  const length = roundHour(Math.min(Math.max(hours, step), Math.max(span, step)), step)
+  let start = range.startHour
+  let end = roundHour(start + length, step)
+  if (end > windowEnd) {
+    end = windowEnd
+    start = roundHour(end - length, step)
+  }
+  if (start < windowStart) start = windowStart
+  end = roundHour(Math.min(windowEnd, start + length), step)
+  if (end <= start) end = roundHour(Math.min(windowEnd, start + step), step)
+  return { startHour: start, endHour: end }
+}
+
 export function rangeFromDrag(drag: SlotDrag, index: number, windowStart: number, windowEnd: number): HourRange {
   if (drag.kind === 'create') return rangeFromCellIndexes(windowStart, drag.origin, index)
   if (drag.kind === 'move') return moveHourRange(drag.range, index - drag.origin, windowStart, windowEnd)
