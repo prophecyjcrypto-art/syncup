@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { t } from '../i18n'
 import { formatHourOption, formatLongDate, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
-import { adminInviteUrl } from '../lib/invites'
+import { adminInviteUrl, organizerInviteUrl, participantInviteUrl } from '../lib/invites'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { FieldLabel, GuideNote } from './Guide'
 import type { AppConfig, Campaign, CampaignInput, Language } from '../types'
@@ -17,6 +17,8 @@ export function SetupPanel({
   onConfirm,
   onCopy,
   onRotateInvite,
+  onRotateOrganizer,
+  onRotateParticipant,
   onRemoveAdmin,
 }: {
   lang: Language
@@ -28,6 +30,8 @@ export function SetupPanel({
   onConfirm: (input: CampaignInput) => void
   onCopy?: (value: string) => void
   onRotateInvite?: () => void
+  onRotateOrganizer?: () => void
+  onRotateParticipant?: () => void
   onRemoveAdmin?: (adminId: string) => void
 }) {
   const [name, setName] = useState(initial?.name ?? '')
@@ -41,7 +45,7 @@ export function SetupPanel({
     initial?.config ?? {
       startDate: toISODateString(new Date()),
       endDate: toISODateString(new Date(Date.now() + 14 * 86400000)),
-      durationHours: 3,
+      durationHours: null,
       dayStartHour: 9,
       dayEndHour: 22,
       attendanceTolerance: 0,
@@ -56,6 +60,7 @@ export function SetupPanel({
     [config.startDate, config.endDate],
   )
   const lock = readOnly ? 'pointer-events-none opacity-70' : ''
+  const durationOptional = !initial || initial.config.durationHours == null
 
   function setRange(field: 'startDate' | 'endDate', value: string) {
     setConfig((current) => {
@@ -165,13 +170,22 @@ export function SetupPanel({
             </div>
           </div>
           <label className="space-y-2">
-            <FieldLabel lang={lang} label={t(lang, 'rehearsal_length')} tip={t(lang, 'tip_duration')} className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`} />
+            <FieldLabel
+              lang={lang}
+              label={durationOptional ? `${t(lang, 'rehearsal_length')} (${t(lang, 'optional')})` : t(lang, 'rehearsal_length')}
+              tip={t(lang, durationOptional ? 'tip_duration_optional' : 'tip_duration')}
+              className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}
+            />
             <select
               disabled={readOnly}
-              value={config.durationHours}
-              onChange={(event) => setConfig({ ...config, durationHours: Number(event.target.value) })}
+              value={config.durationHours ?? ''}
+              onChange={(event) => {
+                const raw = event.target.value
+                setConfig({ ...config, durationHours: raw === '' ? null : Number(raw) })
+              }}
               className={`w-full rounded-xl px-3 py-3 font-bold ${inputClass(isDarkMode)} ${lock}`}
             >
+              {durationOptional ? <option value="">{t(lang, 'duration_unset')}</option> : null}
               {rangeOptions(0.5, 24).map((hour) => (
                 <option key={hour} value={hour}>{hour} {t(lang, 'hours')}</option>
               ))}
@@ -263,6 +277,45 @@ export function SetupPanel({
             }}
           />
         </div>
+
+        {(!readOnly || initial?.organizerCode || initial?.participantCode) && (
+          <div className="space-y-3">
+            <h3 className={`font-serif text-2xl ${textPrimary(isDarkMode)}`}>{t(lang, 'organizer_link')}</h3>
+            <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_link_hint')}</p>
+            {initial?.participantCode && (
+              <div className="space-y-3">
+                <p className={`break-all rounded-xl px-4 py-3 text-sm ${inputClass(isDarkMode)}`}>{participantInviteUrl(initial.participantCode)}</p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => onCopy?.(participantInviteUrl(initial.participantCode!))} className="rounded-xl border border-[#7c7bb9]/50 px-4 py-3 text-sm font-bold text-[#7c7bb9]">
+                    {t(lang, 'copy_link_dancer')}
+                  </button>
+                  {!readOnly && onRotateParticipant && (
+                    <button type="button" onClick={onRotateParticipant} className="rounded-xl px-4 py-3 text-sm font-bold text-[#f19ba8]">
+                      {t(lang, 'rotate_invite')}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {initial?.organizerCode ? (
+              <div className="space-y-3">
+                <p className={`break-all rounded-xl px-4 py-3 text-sm ${inputClass(isDarkMode)}`}>{organizerInviteUrl(initial.organizerCode)}</p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => onCopy?.(organizerInviteUrl(initial.organizerCode!))} className="rounded-xl btn-glow bg-[#f6cf7a] px-4 py-3 text-sm font-bold text-zinc-900">
+                    {t(lang, 'copy_link_leader')}
+                  </button>
+                  {!readOnly && onRotateOrganizer && (
+                    <button type="button" onClick={onRotateOrganizer} className="rounded-xl px-4 py-3 text-sm font-bold text-[#f19ba8]">
+                      {t(lang, 'rotate_invite')}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              !initial?.participantCode && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
+            )}
+          </div>
+        )}
 
         <div className="space-y-3">
           <h3 className={`font-serif text-2xl ${textPrimary(isDarkMode)}`}>{t(lang, 'admins_label')}</h3>

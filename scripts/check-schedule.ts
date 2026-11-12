@@ -1,5 +1,5 @@
 import { getDaysArray, groupByMonth, parseISODate, setTime, toISODateString } from '../src/lib/dates.ts'
-import { calculateBestSlots, coveredMs, freeIntervals, uncoveredDays } from '../src/lib/schedule.ts'
+import { availabilityHeatmap, calculateBestSlots, coveredMs, freeIntervals, normalizeDurationHours, uncoveredDays } from '../src/lib/schedule.ts'
 
 function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(message)
@@ -46,6 +46,24 @@ assert(evening.length > 0 && evening.every((slot) => slot.start.getHours() >= 18
 
 const open = calculateBestSlots(config, [], [{ id: 'd4', blocks: [] }])
 assert(open.every((slot) => slot.availableMembers.includes('d4')), 'an empty schedule is free all day')
+
+const unset = calculateBestSlots({ ...config, durationHours: null }, [], [naOnly])
+assert(unset.length === 0, 'a missing duration does not invent sessions')
+assert(normalizeDurationHours(3) === 3, 'an existing duration stays a number')
+assert(normalizeDurationHours(null) === null, 'null duration stays unset')
+assert(normalizeDurationHours(undefined) === null, 'a missing duration stays unset')
+assert(normalizeDurationHours('2.5') === 2.5, 'numeric strings still count as a duration')
+assert(normalizeDurationHours(0) === null, 'zero is not a session length')
+
+const heat = availabilityHeatmap({ ...config, dayEndHour: 12 }, [naOnly, { id: 'd4', blocks: [] }], [day])
+assert(heat.length === 1 && heat[0].cells.length === 6, 'heatmap uses half-hour cells inside the daily window')
+assert(heat[0].cells[0].freeIds.length === 2, 'both dancers are free before the NA block')
+assert(
+  heat[0].cells[2].freeIds.length === 1 && heat[0].cells[2].freeIds[0] === 'd4',
+  'a dancer marked NA drops out of that overlap cell',
+)
+const ranked = calculateBestSlots({ ...config, durationHours: 1, dayEndHour: 12 }, [], [naOnly, { id: 'd4', blocks: [] }])
+assert(ranked[0]?.start.getHours() === 9, 'the fullest hour is offered before a thinner one')
 
 const october = getDaysArray(parseISODate('2026-10-01'), parseISODate('2026-10-07'))
 const months = groupByMonth(october, 'en')

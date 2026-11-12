@@ -13,7 +13,7 @@ export type AppStep =
 export interface AppConfig {
   startDate: string
   endDate: string
-  durationHours: number
+  durationHours: number | null
   dayStartHour: number
   dayEndHour: number
   attendanceTolerance: number
@@ -55,6 +55,8 @@ export interface Campaign {
   savedSlots: string[]
   createdAt: string
   adminCode: string | null
+  organizerCode: string | null
+  participantCode: string | null
   admins: CampaignAdmin[]
   choreographers: Person[]
   dancers: Person[]

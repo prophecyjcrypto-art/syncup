@@ -3,7 +3,15 @@ import { t } from '../i18n'
 import { formatBlockLabel, makeBlock, withBlocks } from '../lib/blocks'
 import { useCalendar } from '../lib/calendarContext'
 import { formatHourOption, formatLongDate, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
-import { busyAsUnavailable, busyWindow, clearGoogleToken, fetchBusy, GoogleCalendarError, type BusyRange } from '../lib/googleCalendar'
+import {
+  busyAsUnavailable,
+  busyWindow,
+  clearGoogleToken,
+  fetchBusy,
+  GOOGLE_CALENDAR_ENABLED,
+  GoogleCalendarError,
+  type BusyRange,
+} from '../lib/googleCalendar'
 import { uncoveredDays } from '../lib/schedule'
 import { cardClass, inputClass, primaryButton, textMuted, textPrimary } from '../lib/ui'
 import { MiniSteps } from './Guide'
@@ -47,7 +55,7 @@ export function AvailabilityEditor({
   const missingLabel = missingDays.map((iso) => formatLongDate(parseISODate(iso), lang)).join(', ')
 
   useEffect(() => {
-    if (!calendar.token) {
+    if (!GOOGLE_CALENDAR_ENABLED || !calendar.token) {
       setBusy([])
       setBusyState('idle')
       return
@@ -115,30 +123,32 @@ export function AvailabilityEditor({
         {missingDays.length > 0 && (
           <p className="mt-3 text-sm text-[#f19ba8]">{t(lang, 'mixed_incomplete', { days: missingLabel })}</p>
         )}
-        <div className="mt-4 space-y-2">
-          <p className={`text-xs leading-relaxed ${textMuted(isDarkMode)}`}>{t(lang, 'calendar_hint')}</p>
-          {calendar.note && <p className="text-xs text-[#f19ba8]">{calendar.note}</p>}
-          {calendar.token ? (
-            <button
-              type="button"
-              disabled={disabled || busyState !== 'ready' || busy.length === 0}
-              onClick={() => onChange(withBlocks(blocks, busyAsUnavailable(config, busy)))}
-              className={primaryButton('px-4 py-2 text-sm')}
-            >
-              {busyState === 'loading'
-                ? t(lang, 'loading')
-                : busyState === 'ready'
-                  ? busy.length
-                    ? `${t(lang, 'calendar_suggest')} · ${t(lang, 'calendar_busy', { n: busy.length })}`
-                    : t(lang, 'calendar_none')
-                  : t(lang, 'calendar_suggest')}
-            </button>
-          ) : (
-            <button type="button" onClick={calendar.connect} className="glass-well rounded-full px-4 py-2 text-sm">
-              {t(lang, 'calendar_connect')}
-            </button>
-          )}
-        </div>
+        {GOOGLE_CALENDAR_ENABLED && (
+          <div className="mt-4 space-y-2">
+            <p className={`text-xs leading-relaxed ${textMuted(isDarkMode)}`}>{t(lang, 'calendar_hint')}</p>
+            {calendar.note && <p className="text-xs text-[#f19ba8]">{calendar.note}</p>}
+            {calendar.token ? (
+              <button
+                type="button"
+                disabled={disabled || busyState !== 'ready' || busy.length === 0}
+                onClick={() => onChange(withBlocks(blocks, busyAsUnavailable(config, busy)))}
+                className={primaryButton('px-4 py-2 text-sm')}
+              >
+                {busyState === 'loading'
+                  ? t(lang, 'loading')
+                  : busyState === 'ready'
+                    ? busy.length
+                      ? `${t(lang, 'calendar_suggest')} · ${t(lang, 'calendar_busy', { n: busy.length })}`
+                      : t(lang, 'calendar_none')
+                    : t(lang, 'calendar_suggest')}
+              </button>
+            ) : (
+              <button type="button" onClick={calendar.connect} className="glass-well rounded-full px-4 py-2 text-sm">
+                {t(lang, 'calendar_connect')}
+              </button>
+            )}
+          </div>
+        )}
         <div className="mt-6 max-h-80 space-y-2 overflow-y-auto pr-1 custom-scrollbar">
           {blocks.length === 0 ? (
             <p className={`text-sm italic ${textMuted(isDarkMode)}`}>{t(lang, 'no_times')}</p>

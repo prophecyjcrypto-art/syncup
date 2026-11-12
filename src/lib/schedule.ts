@@ -110,6 +110,13 @@ export function intersectRanges(left: Range[], right: Range[]): Range[] {
   return mergeRanges(overlaps)
 }
 
+/** Positive session length, or null when the organizer has not chosen one yet. */
+export function normalizeDurationHours(value: unknown): number | null {
+  const hours = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : Number.NaN
+  if (!Number.isFinite(hours) || hours <= 0) return null
+  return hours
+}
+
 function dayWindow(config: AppConfig, iso: string): { start: number; end: number } {
   const day = parseISODate(iso)
   return {
@@ -123,10 +130,11 @@ export function calculateBestSlots(
   choreographers: SchedulePerson[],
   dancers: SchedulePerson[],
 ): TimeSlot[] {
-  const durationMs = config.durationHours * 60 * 60 * 1000
+  const durationHours = normalizeDurationHours(config.durationHours)
+  if (durationHours == null) return []
+  const durationMs = durationHours * 60 * 60 * 1000
   const stepMs = 30 * 60 * 1000
   const toleranceMs = config.attendanceTolerance * 60 * 60 * 1000
-  if (durationMs <= 0) return []
 
   const slots: TimeSlot[] = []
   let day = parseISODate(config.startDate)
@@ -195,6 +203,33 @@ export function calculateBestSlots(
       left.start.getTime() - right.start.getTime(),
   )
   return slots
+}
+
+export interface OverlapCell {
+  start: Date
+  end: Date
+  freeIds: string[]
+}
+
+/** Half-hour dancer overlap. This does not depend on a chosen session length. */
+export function availabilityHeatmap(
+  config: AppConfig,
+  dancers: SchedulePerson[],
+  dates: string[],
+): { iso: string; cells: OverlapCell[] }[] {
+  const stepMs = 30 * 60 * 1000
+  return dates.map((iso) => {
+    const { start, end } = dayWindow(config, iso)
+    const cells: OverlapCell[] = []
+    for (let cursor = start; cursor + stepMs <= end; cursor += stepMs) {
+      const cellEnd = cursor + stepMs
+      const freeIds = dancers
+        .filter((person) => coveredMs(freeIntervals(person, cursor, cellEnd)) >= stepMs - 1000)
+        .map((person) => person.id)
+      cells.push({ start: new Date(cursor), end: new Date(cellEnd), freeIds })
+    }
+    return { iso, cells }
+  })
 }
 
 export function sharedFreeByDay(

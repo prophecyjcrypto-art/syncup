@@ -3,7 +3,7 @@ import { GuideNote, InfoTip } from './Guide'
 import { t } from '../i18n'
 import { canManageRoster, isAdmin, isChoreographer, isOwner } from '../lib/access'
 import { formatDate, isPast } from '../lib/dates'
-import { adminInviteUrl } from '../lib/invites'
+import { adminInviteUrl, organizerInviteUrl, participantInviteUrl } from '../lib/invites'
 import { cardClass, inputClass, primaryButton, textMuted, textPrimary } from '../lib/ui'
 import type { Campaign, Language, PersonRole } from '../types'
 
@@ -105,8 +105,7 @@ export function CampaignList({
           const choreographer = isChoreographer(campaign, userId)
           const manager = canManageRoster(campaign, userId, email)
           const expired = isPast(campaign.expiryDate)
-          const link = (role: 'choreographer' | 'dancer') =>
-            `${window.location.origin}${window.location.pathname}?campaign=${campaign.id}&role=${role === 'choreographer' ? 'organizer' : 'participant'}`
+          const participantLink = campaign.participantCode ? participantInviteUrl(campaign.participantCode) : ''
           return (
             <article key={campaign.id} className={`${cardClass(isDarkMode)} glass-lift flex flex-col rounded-[2rem] p-6`}>
               <div className="mb-4 flex items-start justify-between gap-3">
@@ -159,10 +158,20 @@ export function CampaignList({
                       </button>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <button type="button" onClick={() => onCopy(link('choreographer'))} className="rounded-xl border border-[#f6cf7a]/50 py-2 text-xs font-medium text-[#f6cf7a]">
+                      <button
+                        type="button"
+                        disabled={!campaign.organizerCode}
+                        onClick={() => campaign.organizerCode && onCopy(organizerInviteUrl(campaign.organizerCode))}
+                        className="rounded-xl border border-[#f6cf7a]/50 py-2 text-xs font-medium text-[#f6cf7a] disabled:opacity-40"
+                      >
                         {t(lang, 'copy_link_leader')}
                       </button>
-                      <button type="button" onClick={() => onCopy(link('dancer'))} className="rounded-xl border border-[#7c7bb9]/50 py-2 text-xs font-medium text-[#7c7bb9]">
+                      <button
+                        type="button"
+                        disabled={!participantLink}
+                        onClick={() => participantLink && onCopy(participantLink)}
+                        className="rounded-xl border border-[#7c7bb9]/50 py-2 text-xs font-medium text-[#7c7bb9] disabled:opacity-40"
+                      >
                         {t(lang, 'copy_link_dancer')}
                       </button>
                     </div>
@@ -179,9 +188,14 @@ export function CampaignList({
                     </button>
                   </>
                 ) : (
-                  <button type="button" onClick={() => onPortal(campaign, 'dancer')} className="btn-glow w-full rounded-2xl bg-[#7c7bb9] py-3 text-sm font-bold text-white">
-                    {t(lang, 'enter_availability')}
-                  </button>
+                  <>
+                    <button type="button" onClick={() => onResults(campaign)} className="glass-well w-full rounded-xl py-3 text-sm font-medium">
+                      {t(lang, 'view_results')}
+                    </button>
+                    <button type="button" onClick={() => onPortal(campaign, 'dancer')} className="btn-glow w-full rounded-2xl bg-[#7c7bb9] py-3 text-sm font-bold text-white">
+                      {t(lang, 'enter_availability')}
+                    </button>
+                  </>
                 )}
               </div>
             </article>

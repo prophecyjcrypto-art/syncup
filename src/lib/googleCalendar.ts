@@ -6,6 +6,13 @@ const STORAGE_KEY = 'syncup-gcal'
 const TOKEN_EVENT = 'syncup-gcal'
 const TOKEN_LIFE_MS = 50 * 60 * 1000
 
+/**
+ * Temporary gate until Google approves Calendar OAuth verification.
+ * Set this to true to restore connect, disconnect, busy-time import, and
+ * save-to-Google-Calendar. Google account sign-in does not use this flag.
+ */
+export const GOOGLE_CALENDAR_ENABLED: boolean = false
+
 export const GOOGLE_CALENDAR_SCOPES = [
   'openid',
   'email',
@@ -25,6 +32,7 @@ interface StoredToken {
 }
 
 export function readGoogleToken(): string | null {
+  if (!GOOGLE_CALENDAR_ENABLED) return null
   const raw = sessionStorage.getItem(STORAGE_KEY)
   if (!raw) return null
   try {
@@ -41,6 +49,7 @@ export function readGoogleToken(): string | null {
 }
 
 export function rememberGoogleToken(token: string): void {
+  if (!GOOGLE_CALENDAR_ENABLED) return
   const stored: StoredToken = { token, expiresAt: Date.now() + TOKEN_LIFE_MS }
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stored))
   window.dispatchEvent(new Event(TOKEN_EVENT))
@@ -57,6 +66,7 @@ export function onGoogleToken(listener: () => void): () => void {
 }
 
 export function captureGoogleSession(session: Session | null): void {
+  if (!GOOGLE_CALENDAR_ENABLED) return
   const token = session?.provider_token
   if (token) rememberGoogleToken(token)
 }
@@ -87,6 +97,7 @@ async function googleFetch(token: string, url: string, body: unknown): Promise<R
 }
 
 export async function fetchBusy(token: string, timeMin: Date, timeMax: Date): Promise<BusyRange[]> {
+  if (!GOOGLE_CALENDAR_ENABLED) return []
   const response = await googleFetch(token, 'https://www.googleapis.com/calendar/v3/freeBusy', {
     timeMin: timeMin.toISOString(),
     timeMax: timeMax.toISOString(),
@@ -133,6 +144,7 @@ export async function createCalendarEvents(
   token: string,
   events: { summary: string; description: string; start: Date; end: Date }[],
 ): Promise<number> {
+  if (!GOOGLE_CALENDAR_ENABLED) return 0
   let saved = 0
   for (const event of events) {
     await googleFetch(token, 'https://www.googleapis.com/calendar/v3/calendars/primary/events', {
