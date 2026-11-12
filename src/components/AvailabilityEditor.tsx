@@ -14,7 +14,6 @@ import {
 } from '../lib/googleCalendar'
 import { uncoveredDays } from '../lib/schedule'
 import { cardClass, inputClass, primaryButton, textMuted, textPrimary } from '../lib/ui'
-import { MiniSteps } from './Guide'
 import type { AppConfig, BlockKind, Language, TimeBlock } from '../types'
 import { MonthBoards } from './MonthBoards'
 
@@ -119,7 +118,6 @@ export function AvailabilityEditor({
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-8">
       <div className={`lg:col-span-5 ${cardClass(isDarkMode)} h-fit rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6`}>
         <h3 className={`font-serif text-2xl font-semibold ${textPrimary(isDarkMode)}`}>{t(lang, 'your_submissions')}</h3>
-        <p className={`mt-3 text-sm leading-relaxed ${textMuted(isDarkMode)}`}>{t(lang, 'availability_hint')}</p>
         {missingDays.length > 0 && (
           <p className="mt-3 text-sm text-[#f19ba8]">{t(lang, 'mixed_incomplete', { days: missingLabel })}</p>
         )}
@@ -185,8 +183,6 @@ export function AvailabilityEditor({
       </div>
 
       <div className={`min-w-0 lg:col-span-7 ${cardClass(isDarkMode)} rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6 ${disabled ? 'opacity-70' : ''}`}>
-        <MiniSteps steps={[t(lang, 'avail_step_1'), t(lang, 'avail_step_2'), t(lang, 'avail_step_3')]} />
-        <p className={`mb-4 text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'legend_marks')}</p>
         <div className="glass-well mb-4 flex rounded-xl p-1">
           <button
             type="button"

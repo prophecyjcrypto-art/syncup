@@ -3,7 +3,7 @@ import { t } from '../i18n'
 import { formatHourOption, formatLongDate, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
 import { adminInviteUrl, organizerInviteUrl, participantInviteUrl } from '../lib/invites'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
-import { FieldLabel, GuideNote } from './Guide'
+import { FieldLabel } from './Guide'
 import type { AppConfig, Campaign, CampaignInput, Language } from '../types'
 import { MonthBoards } from './MonthBoards'
 
@@ -105,10 +105,7 @@ export function SetupPanel({
         <h2 className={`font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
           {readOnly ? initial?.name : initial ? t(lang, 'edit_event') : t(lang, 'new_campaign')}
         </h2>
-        <GuideNote className="mx-auto">
-          {t(lang, 'guide_setup')}
-          {readOnly ? ` · ${t(lang, 'view_only')}` : ''}
-        </GuideNote>
+        {readOnly ? <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'view_only')}</p> : null}
       </div>
       <div className={`${cardClass(isDarkMode)} space-y-6 rounded-[1.5rem] p-4 sm:space-y-8 sm:rounded-[2rem] sm:p-8`}>
         <label className="block space-y-2">
@@ -145,7 +142,7 @@ export function SetupPanel({
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <FieldLabel lang={lang} label={t(lang, 'daily_availability')} tip={t(lang, 'tip_daily')} className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`} />
+            <FieldLabel lang={lang} label={t(lang, 'daily_availability')} className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`} />
             <div className="flex gap-2">
               <select
                 disabled={readOnly}
@@ -173,7 +170,6 @@ export function SetupPanel({
             <FieldLabel
               lang={lang}
               label={durationOptional ? `${t(lang, 'rehearsal_length')} (${t(lang, 'optional')})` : t(lang, 'rehearsal_length')}
-              tip={t(lang, durationOptional ? 'tip_duration_optional' : 'tip_duration')}
               className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}
             />
             <select
@@ -204,7 +200,7 @@ export function SetupPanel({
             />
           </label>
           <label className="space-y-2">
-            <FieldLabel lang={lang} label={t(lang, 'tolerance_label')} tip={t(lang, 'tip_buffer')} className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`} />
+            <FieldLabel lang={lang} label={t(lang, 'tolerance_label')} className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`} />
             <select
               disabled={readOnly}
               value={config.attendanceTolerance}
@@ -233,11 +229,6 @@ export function SetupPanel({
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h3 className={`font-serif text-2xl ${textPrimary(isDarkMode)}`}>{t(lang, 'on_days')} / {t(lang, 'compulsory_days')}</h3>
-              <p className={`mt-1 text-sm ${textMuted(isDarkMode)}`}>
-                {markMode === 'show' ? t(lang, 'on_days_hint') : t(lang, 'compulsory_days_hint')}
-                {' '}
-                {t(lang, 'legend_marks')}
-              </p>
             </div>
             <div className={`glass-well flex rounded-xl p-1 ${lock}`}>
               <button type="button" onClick={() => setMarkMode('show')} className={`rounded-lg px-3 py-2 text-xs font-bold ${markMode === 'show' ? 'bg-[#f6cf7a] text-zinc-900' : textMuted(isDarkMode)}`}>
@@ -279,7 +270,6 @@ export function SetupPanel({
         {(!readOnly || initial?.organizerCode || initial?.participantCode) && (
           <div className="space-y-3">
             <h3 className={`font-serif text-2xl ${textPrimary(isDarkMode)}`}>{t(lang, 'organizer_link')}</h3>
-            <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_link_hint')}</p>
             {initial?.participantCode && (
               <div className="space-y-3">
                 <p className={`break-all rounded-xl px-4 py-3 text-sm ${inputClass(isDarkMode)}`}>{participantInviteUrl(initial.participantCode)}</p>

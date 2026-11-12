@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { t } from '../i18n'
+import { primaryButton } from '../lib/ui'
 import type { Language } from '../types'
 
 export type FlowStep = 'setup' | 'choreographers' | 'dancers' | 'results'
@@ -49,8 +50,131 @@ export function FieldLabel({
   )
 }
 
-export function GuideNote({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <p className={`guide-note mt-3 opacity-75 ${className}`}>{children}</p>
+export type GuideId = 'events' | 'setup' | 'organizers' | 'participants' | 'results' | 'portal'
+
+const GUIDE_POINTS: Record<GuideId, Parameters<typeof t>[1][]> = {
+  events: ['guide_events_1', 'guide_events_2', 'guide_events_3'],
+  setup: ['guide_setup_1', 'guide_setup_2', 'guide_setup_3'],
+  organizers: ['guide_choreo_1', 'guide_choreo_2', 'guide_choreo_3'],
+  participants: ['guide_dancers_1', 'guide_dancers_2', 'guide_dancers_3'],
+  results: ['guide_results_1', 'guide_results_2', 'guide_results_3'],
+  portal: ['guide_portal_1', 'guide_portal_2', 'guide_portal_3'],
+}
+
+function storageKey(id: GuideId): string {
+  return `syncup.guide.dismissed.${id}`
+}
+
+function readDismissed(id: GuideId): boolean {
+  try {
+    return localStorage.getItem(storageKey(id)) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function InstructionBox({ id, lang, className = '' }: { id: GuideId; lang: Language; className?: string }) {
+  const [gone, setGone] = useState(() => readDismissed(id))
+  const [checked, setChecked] = useState(false)
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const titleId = `guide-${id}-title`
+
+  useEffect(() => {
+    if (gone) return
+    const dialog = dialogRef.current
+    if (!dialog) return
+    const modal: HTMLDialogElement = dialog
+    modal.setAttribute('closedby', 'none')
+    if (!modal.open) modal.showModal()
+    const keepOpen = (event: Event) => {
+      event.preventDefault()
+    }
+    modal.addEventListener('cancel', keepOpen)
+    const focusFirst = () => {
+      const first = modal.querySelector<HTMLElement>('[data-guide-never], button:not(:disabled)')
+      ;(first ?? modal).focus({ preventScroll: true, focusVisible: true } as FocusOptions)
+    }
+    focusFirst()
+    const onFocusIn = (event: FocusEvent) => {
+      if (!modal.open) return
+      if (event.target instanceof Node && modal.contains(event.target)) return
+      focusFirst()
+    }
+    document.addEventListener('focusin', onFocusIn)
+    return () => {
+      modal.removeEventListener('cancel', keepOpen)
+      document.removeEventListener('focusin', onFocusIn)
+      try {
+        if (modal.open) modal.close()
+      } catch {
+        // The dialog can already be disconnected when the page changes.
+      }
+    }
+  }, [gone])
+
+  function confirm() {
+    if (!checked) return
+    try {
+      localStorage.setItem(storageKey(id), '1')
+    } catch {
+      // Storage can be blocked. The box still closes for this visit.
+    }
+    setGone(true)
+  }
+
+  if (gone) return null
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className={`guide-dialog guide-box ${className}`}
+      data-guide={id}
+      aria-modal="true"
+      aria-labelledby={titleId}
+      closedby="none"
+    >
+      <h3 id={titleId} className="guide-box-title">
+        {t(lang, 'guide_title')}
+      </h3>
+      <ul>
+        {GUIDE_POINTS[id].map((key) => (
+          <li key={key}>{t(lang, key)}</li>
+        ))}
+      </ul>
+      <div className="guide-actions">
+        <label className="guide-check">
+          <input
+            type="checkbox"
+            className="guide-check-input"
+            checked={checked}
+            data-guide-never=""
+            onChange={(event) => setChecked(event.target.checked)}
+          />
+          {t(lang, 'guide_never')}
+        </label>
+        <button
+          type="button"
+          className={primaryButton('guide-confirm min-h-11 w-full cursor-pointer px-5 py-2 text-sm sm:w-auto')}
+          disabled={!checked}
+          data-guide-confirm=""
+          onClick={confirm}
+        >
+          {t(lang, 'guide_got_it')}
+        </button>
+      </div>
+    </dialog>
+  )
+}
+
+export function HintList({ id, items, className = '' }: { id?: string; items: string[]; className?: string }) {
+  if (items.length === 0) return null
+  return (
+    <ul id={id} className={`hint-list ${className}`}>
+      {items.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
+  )
 }
 
 export function MiniSteps({ steps }: { steps: string[] }) {

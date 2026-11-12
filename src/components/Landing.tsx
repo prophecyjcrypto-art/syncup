@@ -3,13 +3,6 @@ import { t } from '../i18n'
 import { cardClass, inputClass, primaryButton, textMuted, textPrimary } from '../lib/ui'
 import type { Language } from '../types'
 
-const HOW = [
-  ['how_1_title', 'how_1_body'],
-  ['how_2_title', 'how_2_body'],
-  ['how_3_title', 'how_3_body'],
-  ['how_4_title', 'how_4_body'],
-] as const
-
 export function Landing({
   lang,
   isDarkMode,
@@ -59,20 +52,7 @@ export function Landing({
         </div>
       </section>
 
-      <section>
-        <h2 className={`mb-5 text-center font-serif text-3xl font-semibold ${textPrimary(isDarkMode)}`}>{t(lang, 'how_title')}</h2>
-        <ol className="grid gap-3 sm:grid-cols-2">
-          {HOW.map(([title, body], index) => (
-            <li key={title} className={`${cardClass(isDarkMode)} rounded-[1.5rem] p-4 sm:p-6`}>
-              <span className="text-[11px] font-medium tabular-nums opacity-40">{String(index + 1).padStart(2, '0')}</span>
-              <h3 className={`mt-3 text-lg font-medium ${textPrimary(isDarkMode)}`}>{t(lang, title)}</h3>
-              <p className={`mt-2 text-sm leading-relaxed ${textMuted(isDarkMode)}`}>{t(lang, body)}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <form id="account" onSubmit={onSubmit} className={`${cardClass(isDarkMode)} mx-auto mt-12 w-full max-w-md space-y-4 rounded-[1.75rem] p-5 sm:mt-16 sm:p-7`}>
+      <form id="account" onSubmit={onSubmit} className={`${cardClass(isDarkMode)} mx-auto mt-12 w-full max-w-md space-y-4 rounded-[1.75rem] p-5 sm:p-7`}>
         <h2 className={`font-serif text-3xl font-semibold ${textPrimary(isDarkMode)}`}>
           {mode === 'signin' ? t(lang, 'sign_in') : t(lang, 'sign_up')}
         </h2>

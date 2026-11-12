@@ -1,9 +1,12 @@
 import { StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AvailabilityEditor } from '../components/AvailabilityEditor'
-import { FlowSteps } from '../components/Guide'
+import { CampaignList } from '../components/CampaignList'
+import { DancerPortal } from '../components/DancerPortal'
+import { FlowSteps, type FlowStep } from '../components/Guide'
 import { Landing } from '../components/Landing'
 import { ResultsPanel } from '../components/ResultsPanel'
+import { RosterPanel } from '../components/RosterPanel'
 import { SetupPanel } from '../components/SetupPanel'
 import { CalendarProvider } from '../lib/calendarContext'
 import { parseISODate, setTime } from '../lib/dates'
@@ -102,7 +105,7 @@ const campaign: Campaign = {
   ],
 }
 
-function Shell({ children, flow }: { children: ReactNode; flow?: boolean }) {
+function Shell({ children, flow, step = 'results' }: { children: ReactNode; flow?: boolean; step?: FlowStep }) {
   return (
     <div className="theme-dark min-h-dvh" data-preview="">
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
@@ -134,7 +137,7 @@ function Shell({ children, flow }: { children: ReactNode; flow?: boolean }) {
             <div className="mx-auto max-w-6xl px-3 pb-1 sm:px-6">
               <FlowSteps
                 lang={lang}
-                current="results"
+                current={step}
                 enabled={{ setup: true, choreographers: true, dancers: true, results: true }}
                 onJump={() => undefined}
               />
@@ -186,10 +189,80 @@ function Preview({ name }: { name: string }) {
       </div>
     )
   }
+  if (name === 'events') {
+    return (
+      <Shell>
+        <CampaignList
+          lang={lang}
+          isDarkMode
+          campaigns={[]}
+          userId="owner"
+          email="owner@example.com"
+          onCreate={() => undefined}
+          onOpen={() => undefined}
+          onDelete={() => undefined}
+          onChoreographers={() => undefined}
+          onDancers={() => undefined}
+          onResults={() => undefined}
+          onPortal={() => undefined}
+          onCopy={() => undefined}
+          onJoinAdmin={() => undefined}
+        />
+      </Shell>
+    )
+  }
   if (name === 'setup') {
     return (
       <Shell>
         <SetupPanel lang={lang} isDarkMode readOnly={false} onCancel={() => undefined} onConfirm={() => undefined} />
+      </Shell>
+    )
+  }
+  if (name === 'organizers') {
+    return (
+      <Shell flow step="choreographers">
+        <RosterPanel
+          lang={lang}
+          isDarkMode
+          campaign={campaign}
+          variant="choreographer"
+          onBack={() => undefined}
+          onNext={() => undefined}
+          onSave={async () => true}
+          onDelete={async () => undefined}
+        />
+      </Shell>
+    )
+  }
+  if (name === 'participants') {
+    return (
+      <Shell flow step="dancers">
+        <RosterPanel
+          lang={lang}
+          isDarkMode
+          campaign={campaign}
+          variant="dancer"
+          onBack={() => undefined}
+          onNext={() => undefined}
+          onSave={async () => true}
+          onDelete={async () => undefined}
+        />
+      </Shell>
+    )
+  }
+  if (name === 'portal') {
+    return (
+      <Shell>
+        <DancerPortal
+          lang={lang}
+          isDarkMode
+          campaign={campaign}
+          userId="guest"
+          email="guest@example.com"
+          linkRole="dancer"
+          onBack={() => undefined}
+          onSave={async () => true}
+        />
       </Shell>
     )
   }

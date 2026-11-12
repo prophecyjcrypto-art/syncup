@@ -4,7 +4,6 @@ import { t } from '../i18n'
 import { formatLongDate, isPast, parseISODate } from '../lib/dates'
 import { incompleteCompulsoryDays, uncoveredDays } from '../lib/schedule'
 import { inputClass, textMuted, textPrimary } from '../lib/ui'
-import { GuideNote } from './Guide'
 import type { Campaign, Language, PersonRole, TimeBlock } from '../types'
 
 export function DancerPortal({
@@ -70,7 +69,6 @@ export function DancerPortal({
           <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>
             {role === 'choreographer' ? t(lang, 'choreographer') : t(lang, 'dancer')} · {email}
           </p>
-          <GuideNote>{t(lang, 'guide_portal')}</GuideNote>
         </div>
         <p className={`rounded-full px-4 py-2 text-xs font-bold uppercase ${locked ? 'bg-zinc-700 text-zinc-300' : 'bg-[#7c7bb9] text-white'}`}>
           {locked ? t(lang, 'expired') : `${t(lang, 'deadline')} ${formatLongDate(new Date(campaign.expiryDate), lang)}`}
@@ -83,14 +81,17 @@ export function DancerPortal({
         </div>
       )}
       {locked && <p className="rounded-xl bg-[#f19ba8]/15 px-4 py-3 text-sm font-bold text-[#f19ba8]">{t(lang, 'locked_msg')}</p>}
-      <label className="block max-w-md space-y-2">
+      <label className="block max-w-md space-y-2" data-name-field="">
         <span className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'member_name')}</span>
-        <input
-          value={name}
-          disabled={locked}
-          onChange={(event) => setName(event.target.value)}
-          className={`w-full rounded-2xl px-4 py-3 font-bold ${inputClass(isDarkMode)}`}
-        />
+        <span className="relative block">
+          {!locked && name.trim() === '' ? <PersonPlus /> : null}
+          <input
+            value={name}
+            disabled={locked}
+            onChange={(event) => setName(event.target.value)}
+            className={`w-full rounded-2xl py-3 font-bold ${!locked && name.trim() === '' ? 'pl-11 pr-4' : 'px-4'} ${inputClass(isDarkMode)}`}
+          />
+        </span>
       </label>
       <AvailabilityEditor
         lang={lang}
@@ -110,5 +111,17 @@ export function DancerPortal({
         </div>
       )}
     </div>
+  )
+}
+
+function PersonPlus() {
+  return (
+    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#f6cf7a]" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <circle cx="7" cy="6" r="2.2" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M3.1 14.4c.6-2.3 2.1-3.4 3.9-3.4s3.3 1.1 3.9 3.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        <path d="M13.1 7.1v4.2M11 9.2h4.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    </span>
   )
 }

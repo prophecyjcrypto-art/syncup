@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { t } from '../i18n'
 import { formatLongDate, formatTime, parseISODate, toISODateString } from '../lib/dates'
 import {
@@ -87,8 +87,18 @@ function sessionFromDrag(
   return { iso: drag.range.iso, ...resizeToCell('start', index, drag.range, windowStart, windowEnd) }
 }
 
+const BOOKED_ONCE = 'syncup.booked.once'
+
+function readBookedOnce(): boolean {
+  try {
+    return localStorage.getItem(BOOKED_ONCE) === '1'
+  } catch {
+    return false
+  }
+}
+
 export function sessionSummary(range: HourRange | null, lang: Language): string {
-  if (!range) return t(lang, 'range_empty')
+  if (!range) return t(lang, 'no_times')
   return `${formatClock(range.startHour)}–${formatClock(range.endHour)} · ${durationHours(range)} ${t(lang, 'hours_unit')}`
 }
 
@@ -156,11 +166,22 @@ export function HeatBook({
   onClearAll: () => void
   onToggleSaved: (keys: string[]) => void
 }) {
-  const helpId = useId()
   const scrollRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<HeatDrag | null>(null)
   const [preview, setPreview] = useState<{ block: SessionRange; fromIso: string } | null>(null)
+  const [learned, setLearned] = useState(readBookedOnce)
+  const invite = editable && sessions.length === 0 && preview == null && !learned
+
+  useEffect(() => {
+    if (sessions.length === 0 || learned) return
+    try {
+      localStorage.setItem(BOOKED_ONCE, '1')
+    } catch {
+      // The cue can rest for this visit even if storage is blocked.
+    }
+    setLearned(true)
+  }, [sessions.length, learned])
   const focused = sessions.find((item) => item.iso === focusIso) ?? sessions[0] ?? null
   const shown = preview?.block ?? focused
 
@@ -329,15 +350,12 @@ export function HeatBook({
 
   return (
     <div className="mt-4 space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h4 className={`font-bold ${textPrimary(isDarkMode)}`}>{t(lang, 'heat_title')}</h4>
-          <p className={`mt-1 text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'heat_hint')}</p>
-        </div>
-      </div>
+      <h4 className={`font-bold ${textPrimary(isDarkMode)}`}>{t(lang, 'heat_title')}</h4>
       {dancers.length === 0 ? (
-        <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>
-      ) : cols === 0 ? null : (
+        <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'list_empty')}</p>
+      ) : cols === 0 ? (
+        <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_times')}</p>
+      ) : (
         <>
           <div className="flex items-center justify-between gap-3">
             <p className={`text-sm font-semibold tabular-nums ${textPrimary(isDarkMode)}`} data-range-summary="" aria-live="polite">
@@ -363,12 +381,11 @@ export function HeatBook({
             role="grid"
             tabIndex={editable ? 0 : -1}
             aria-label={t(lang, 'heat_title')}
-            aria-describedby={helpId}
             onKeyDown={onKeyDown}
           >
             <div
               ref={gridRef}
-              className="heat-sheet"
+              className={`heat-sheet ${editable ? 'heat-live' : ''}`}
               style={{ gridTemplateColumns: `3.35rem repeat(${heat.length}, minmax(5.1rem, 1fr))`, gridTemplateRows: `auto repeat(${cols}, 2.25rem)` }}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
@@ -380,6 +397,7 @@ export function HeatBook({
                 const picked = sessions.some((item) => item.iso === day.iso) || preview?.block.iso === day.iso
                 const label = formatLongDate(parseISODate(day.iso), lang)
                 const place = { gridColumn: dayIndex + 2, gridRow: 1 }
+                const offerCopy = !picked && (sessions.length > 0 || preview != null)
                 return editable ? (
                   <button
                     key={day.iso}
@@ -390,9 +408,10 @@ export function HeatBook({
                     aria-pressed={picked}
                     disabled={sessions.length === 0 && !preview}
                     onClick={() => onToggleDay(day.iso)}
-                    className={`heat-day ${picked ? 'heat-day-on' : textPrimary(isDarkMode)}`}
+                    className={`heat-day ${picked ? 'heat-day-on' : ''} ${offerCopy ? 'heat-day-add' : ''} ${picked ? '' : textPrimary(isDarkMode)}`}
                     style={place}
                   >
+                    {offerCopy ? <span className="heat-day-plus" aria-hidden="true">+</span> : null}
                     {label}
                   </button>
                 ) : (
@@ -413,7 +432,7 @@ export function HeatBook({
                   ...(preview?.block.iso === day.iso ? [preview.block] : []),
                 ]
                 return (
-                  <div key={day.iso} className="heat-col" data-day={day.iso} style={{ gridColumn: dayIndex + 2, gridRow: `2 / span ${cols}` }}>
+                  <div key={day.iso} className={`heat-col ${invite && dayIndex === 0 ? 'heat-col-invite' : ''}`} data-day={day.iso} style={{ gridColumn: dayIndex + 2, gridRow: `2 / span ${cols}` }}>
                     {day.cells.map((cell, index) => {
                         const ratio = dancers.length === 0 ? 0 : (cell.freeIds.length / dancers.length) * 100
                         const pinned = slots.some((slot) => {
@@ -454,13 +473,13 @@ export function HeatBook({
                               height: `calc(${span} * 2.25rem + ${Math.max(span - 1, 0) * 2}px)`,
                             }}
                           >
-                            {isFocus ? <span data-edge="start" className="heat-edge heat-edge-start" aria-label={t(lang, 'drag_hint')} /> : null}
+                            {isFocus ? <span data-edge="start" className="heat-edge heat-edge-start" aria-label={t(lang, 'edge_resize')} /> : null}
                             <span className="heat-block-label">
                               {formatClock(block.startHour)}–{formatClock(block.endHour)}
                               <br />
                               {durationHours(block)} {t(lang, 'hours_unit')}
                             </span>
-                            {isFocus ? <span data-edge="end" className="heat-edge heat-edge-end" aria-label={t(lang, 'drag_hint')} /> : null}
+                            {isFocus ? <span data-edge="end" className="heat-edge heat-edge-end" aria-label={t(lang, 'edge_resize')} /> : null}
                           </div>
                         )
                       })}
@@ -469,11 +488,7 @@ export function HeatBook({
               })}
             </div>
           </div>
-          <p id={helpId} className={`text-xs leading-relaxed ${textMuted(isDarkMode)}`}>
-            {t(lang, 'drag_hint')}
-            {sessions.length > 0 ? ` ${t(lang, 'multi_day_hint')}` : ''}
-            {sessions.length > 1 ? ` ${t(lang, 'days_picked', { n: sessions.length })}` : ''}
-          </p>
+          {sessions.length > 1 ? <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'days_picked', { n: sessions.length })}</p> : null}
         </>
       )}
       {detail}
