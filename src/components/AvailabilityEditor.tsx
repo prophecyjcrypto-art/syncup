@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { t } from '../i18n'
 import { formatBlockLabel, makeBlock, withBlocks } from '../lib/blocks'
 import { useCalendar } from '../lib/calendarContext'
-import { formatLongDate, getDaysArray, parseISODate, toISODateString } from '../lib/dates'
-import type { HourRange } from '../lib/timeRange'
+import { formatHourOption, formatLongDate, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
 import {
   busyAsUnavailable,
   busyWindow,
@@ -14,11 +13,10 @@ import {
   type BusyRange,
 } from '../lib/googleCalendar'
 import { uncoveredDays } from '../lib/schedule'
-import { cardClass, primaryButton, textMuted, textPrimary } from '../lib/ui'
+import { cardClass, inputClass, primaryButton, textMuted, textPrimary } from '../lib/ui'
 import { MiniSteps } from './Guide'
 import type { AppConfig, BlockKind, Language, TimeBlock } from '../types'
 import { MonthBoards } from './MonthBoards'
-import { TimeSlotGrid } from './TimeSlotGrid'
 
 export function AvailabilityEditor({
   lang,
@@ -41,12 +39,14 @@ export function AvailabilityEditor({
 }) {
   const [mode, setMode] = useState<BlockKind>('unavailable')
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [range, setRange] = useState<HourRange | null>(null)
+  const [startHour, setStartHour] = useState(config.dayStartHour)
+  const [endHour, setEndHour] = useState(config.dayEndHour)
   const [note, setNote] = useState('')
   const days = useMemo(
     () => getDaysArray(parseISODate(config.startDate), parseISODate(config.endDate)),
     [config.startDate, config.endDate],
   )
+  const hours = rangeOptions(config.dayStartHour, config.dayEndHour)
   const positive = mode === 'available'
   const calendar = useCalendar()
   const [busy, setBusy] = useState<BusyRange[]>([])
@@ -97,19 +97,15 @@ export function AvailabilityEditor({
       setNote(t(lang, 'pick_days'))
       return
     }
-    if (!wholeDay && !range) {
-      setNote(t(lang, 'pick_time'))
-      return
-    }
-    if (!wholeDay && range && range.endHour <= range.startHour) {
+    if (!wholeDay && endHour <= startHour) {
       setNote(t(lang, 'end_after_start'))
       return
     }
     const extra = [...selected].map((iso) =>
       makeBlock(
         iso,
-        wholeDay ? config.dayStartHour : range!.startHour,
-        wholeDay ? config.dayEndHour : range!.endHour,
+        wholeDay ? config.dayStartHour : startHour,
+        wholeDay ? config.dayEndHour : endHour,
         kind,
         wholeDay,
       ),
@@ -260,20 +256,38 @@ export function AvailabilityEditor({
               </button>
             )}
           </div>
-          <TimeSlotGrid
-            lang={lang}
-            isDarkMode={isDarkMode}
-            label={t(lang, 'session_grid')}
-            windowStart={config.dayStartHour}
-            windowEnd={config.dayEndHour}
-            value={range}
-            disabled={disabled}
-            allowClear
-            onChange={(next) => {
-              setRange(next)
-              setNote('')
-            }}
-          />
+          <div className="grid grid-cols-2 gap-3">
+            <label className="space-y-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+              {t(lang, 'from')}
+              <select
+                value={startHour}
+                disabled={disabled}
+                onChange={(event) => setStartHour(Number(event.target.value))}
+                className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+              >
+                {hours.map((hour) => (
+                  <option key={hour} value={hour}>
+                    {formatHourOption(hour)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+              {t(lang, 'until')}
+              <select
+                value={endHour}
+                disabled={disabled}
+                onChange={(event) => setEndHour(Number(event.target.value))}
+                className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+              >
+                {hours.map((hour) => (
+                  <option key={`end-${hour}`} value={hour}>
+                    {formatHourOption(hour)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           {note && <p className="text-sm font-bold text-[#f19ba8]">{note}</p>}
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <button

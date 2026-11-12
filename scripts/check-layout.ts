@@ -92,32 +92,39 @@ async function shot(cdp: Cdp, file: string) {
   await writeFile(file, Buffer.from(result.data, 'base64'))
 }
 
-async function pair(cdp: Cdp, startHour: string, endHour: string) {
-  return cdp.eval<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(`(() => {
-    const root = document.querySelector('[data-slot-grid]')
-    root?.scrollIntoView({ block: 'center' })
-    function center(hour) {
-      const el = document.querySelector('[data-slot-grid] [data-hour="' + hour + '"]')
-      if (!el) return null
+async function dragHours(cdp: Cdp, fromHour: string, toHour: string, pointerType: 'mouse' | 'touch', release: boolean) {
+  return cdp.eval<string>(`(() => {
+    const startEl = document.querySelector('[data-slot-grid] [data-hour="${fromHour}"]')
+    const endEl = document.querySelector('[data-slot-grid] [data-hour="${toHour}"]')
+    if (!startEl || !endEl) return 'missing'
+    startEl.scrollIntoView({ block: 'center' })
+    function center(el) {
       const rect = el.getBoundingClientRect()
       return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
     }
-    const start = center(${JSON.stringify(startHour)})
-    const end = center(${JSON.stringify(endHour)})
-    if (!start || !end) return null
-    return { start, end }
+    function fire(type, point) {
+      const target = document.elementFromPoint(point.x, point.y) || startEl
+      target.dispatchEvent(new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX: point.x,
+        clientY: point.y,
+        pointerId: 1,
+        pointerType: '${pointerType}',
+        button: 0,
+        buttons: type === 'pointerup' ? 0 : 1,
+        isPrimary: true,
+      }))
+    }
+    const start = center(startEl)
+    const end = center(endEl)
+    fire('pointerdown', start)
+    fire('pointermove', end)
+    if (${release}) fire('pointerup', end)
+    return new Promise((resolve) => {
+      setTimeout(() => resolve(document.querySelector('[data-range-summary]')?.textContent ?? ''), 50)
+    })
   })()`)
-}
-
-async function mouse(cdp: Cdp, type: 'mousePressed' | 'mouseMoved' | 'mouseReleased', x: number, y: number) {
-  await cdp.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 })
-}
-
-async function touch(cdp: Cdp, type: 'touchStart' | 'touchMove' | 'touchEnd', x = 0, y = 0) {
-  await cdp.send('Input.dispatchTouchEvent', {
-    type,
-    touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }],
-  })
 }
 
 async function main() {
@@ -170,9 +177,13 @@ async function main() {
       assert(calendarText === '', `${item.name} shows Google Calendar: ${calendarText}`)
       if (item.path.includes('results') || item.path.includes('availability') || item.path.includes('setup')) {
         const height = await cdp.eval<number | null>(`document.querySelector('.cal-day')?.getBoundingClientRect().height ?? null`)
-        if (item.path.includes('setup') || item.path.includes('results')) {
+        if (item.path.includes('setup') || item.path.includes('results') || item.path.includes('availability')) {
           assert(height != null && height <= 44, `${item.name} calendar cells are ${height}px tall`)
         }
+      }
+      if (item.path.includes('availability') || item.path.includes('setup')) {
+        const grids = await cdp.eval<number>(`document.querySelectorAll('[data-slot-grid]').length`)
+        assert(grids === 0, `${item.name} still has a drag grid`)
       }
       if (item.shot) await shot(cdp, item.shot)
     }
@@ -186,28 +197,16 @@ async function main() {
     const afterScroll = await overflow(cdp)
     assert(afterScroll.scrollWidth <= afterScroll.clientWidth + 1, `results calendar overflows: ${afterScroll.scrollWidth}`)
 
-    await openPage(cdp, '/?preview=availability&lang=zh', 390, 844)
-    const drag = await pair(cdp, '19', '21')
-    assert(drag != null, 'availability grid is missing 19:00 or 21:00')
-    await mouse(cdp, 'mousePressed', drag.start.x, drag.start.y)
-    await mouse(cdp, 'mouseMoved', drag.end.x, drag.end.y)
-    await delay(100)
-    await shot(cdp, '/opt/cursor/artifacts/availability-drag-mobile.png')
-    const live = await cdp.eval<string>(`document.querySelector('[data-range-summary]')?.textContent ?? ''`)
+    await openPage(cdp, '/?preview=results&lang=zh', 390, 844)
+    const live = await dragHours(cdp, '19', '21', 'mouse', false)
     assert(live.includes('19:00') && live.includes('21:30') && live.includes('2.5'), `mid-drag summary was "${live}"`)
-    await mouse(cdp, 'mouseReleased', drag.end.x, drag.end.y)
-    await delay(50)
-    const committed = await cdp.eval<string>(`document.querySelector('[data-range-summary]')?.textContent ?? ''`)
+    const nudge = await cdp.eval<boolean>(`['提早', '延後', '縮短', '加長'].some((label) => document.body.innerText.includes(label))`)
+    assert(!nudge, 'results still shows nudge buttons')
+    await shot(cdp, '/opt/cursor/artifacts/results-drag-mobile.png')
+    const committed = await dragHours(cdp, '19', '21', 'mouse', true)
     assert(committed.includes('19:00') && committed.includes('21:30') && committed.includes('2.5'), `released summary was "${committed}"`)
-    await shot(cdp, '/opt/cursor/artifacts/availability-selected-mobile.png')
 
-    const finger = await pair(cdp, '18', '20')
-    assert(finger != null, 'touch drag targets missing')
-    await touch(cdp, 'touchStart', finger.start.x, finger.start.y)
-    await touch(cdp, 'touchMove', finger.end.x, finger.end.y)
-    await touch(cdp, 'touchEnd')
-    await delay(50)
-    const touched = await cdp.eval<string>(`document.querySelector('[data-range-summary]')?.textContent ?? ''`)
+    const touched = await dragHours(cdp, '18', '20', 'touch', true)
     assert(touched.includes('18:00') && touched.includes('20:30') && touched.includes('2.5'), `touch summary was "${touched}"`)
 
     await cdp.eval(`document.querySelector('[data-slot-grid]')?.focus()`)
@@ -218,7 +217,18 @@ async function main() {
     assert(keyed.includes('20:00') && keyed.includes('2 ') && !keyed.includes('2.5'), `keyboard shorten was "${keyed}"`)
 
     const phone = await overflow(cdp)
-    assert(phone.scrollWidth <= phone.clientWidth + 1, `availability still overflows after drag: ${phone.scrollWidth}`)
+    assert(phone.scrollWidth <= phone.clientWidth + 1, `results still overflows after drag: ${phone.scrollWidth}`)
+
+    await openPage(cdp, '/?preview=availability&lang=zh', 390, 844)
+    const hourSelects = await cdp.eval<number>(`document.querySelectorAll('select').length`)
+    assert(hourSelects >= 2, 'availability is missing the hour dropdowns')
+    await cdp.eval(`document.querySelector('select')?.scrollIntoView({ block: 'center' })`)
+    await delay(100)
+    const restored = await cdp.eval<boolean>(`document.body.innerText.includes('從') && document.body.innerText.includes('到') && !document.body.innerText.includes('提早')`)
+    assert(restored, 'availability time entry was not restored')
+    await shot(cdp, '/opt/cursor/artifacts/availability-mobile.png')
+    const availOverflow = await overflow(cdp)
+    assert(availOverflow.scrollWidth <= availOverflow.clientWidth + 1, `availability overflows: ${availOverflow.scrollWidth}`)
     cdp.close()
     console.log('layout checks passed')
   } finally {

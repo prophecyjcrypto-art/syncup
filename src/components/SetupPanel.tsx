@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react'
 import { t } from '../i18n'
-import { formatLongDate, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
+import { formatHourOption, formatLongDate, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
 import { adminInviteUrl, organizerInviteUrl, participantInviteUrl } from '../lib/invites'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { FieldLabel, GuideNote } from './Guide'
 import type { AppConfig, Campaign, CampaignInput, Language } from '../types'
 import { MonthBoards } from './MonthBoards'
-import { DurationGrid, TimeSlotGrid } from './TimeSlotGrid'
 
 export function SetupPanel({
   lang,
@@ -145,56 +144,53 @@ export function SetupPanel({
           </label>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          <div className={`min-w-0 space-y-2 ${lock}`}>
+          <div className="space-y-2">
             <FieldLabel lang={lang} label={t(lang, 'daily_availability')} tip={t(lang, 'tip_daily')} className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`} />
-            <TimeSlotGrid
-              lang={lang}
-              isDarkMode={isDarkMode}
-              label={t(lang, 'daily_availability')}
-              windowStart={6}
-              windowEnd={28}
-              disabled={readOnly}
-              value={{ startHour: config.dayStartHour, endHour: config.dayEndHour }}
-              onChange={(range) => {
-                if (!range) return
-                setConfig({ ...config, dayStartHour: range.startHour, dayEndHour: range.endHour })
-              }}
-            />
+            <div className="flex gap-2">
+              <select
+                disabled={readOnly}
+                value={config.dayStartHour}
+                onChange={(event) => setConfig({ ...config, dayStartHour: Number(event.target.value) })}
+                className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)} ${lock}`}
+              >
+                {rangeOptions(6, 23).map((hour) => (
+                  <option key={hour} value={hour}>{formatHourOption(hour)}</option>
+                ))}
+              </select>
+              <select
+                disabled={readOnly}
+                value={config.dayEndHour}
+                onChange={(event) => setConfig({ ...config, dayEndHour: Number(event.target.value) })}
+                className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)} ${lock}`}
+              >
+                {rangeOptions(9, 28).map((hour) => (
+                  <option key={hour} value={hour}>{formatHourOption(hour)}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div className={`min-w-0 space-y-2 ${lock}`}>
+          <label className="space-y-2">
             <FieldLabel
               lang={lang}
               label={durationOptional ? `${t(lang, 'rehearsal_length')} (${t(lang, 'optional')})` : t(lang, 'rehearsal_length')}
               tip={t(lang, durationOptional ? 'tip_duration_optional' : 'tip_duration')}
               className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}
             />
-            <DurationGrid
-              lang={lang}
-              isDarkMode={isDarkMode}
-              label={t(lang, 'rehearsal_length')}
-              value={config.durationHours}
+            <select
               disabled={readOnly}
-              allowClear={durationOptional}
-              onChange={(hours) => setConfig({ ...config, durationHours: hours })}
-            />
-            <details>
-              <summary className={`min-h-11 cursor-pointer py-2 text-xs font-bold ${textMuted(isDarkMode)}`}>{t(lang, 'precise_time')}</summary>
-              <select
-                disabled={readOnly}
-                value={config.durationHours ?? ''}
-                onChange={(event) => {
-                  const raw = event.target.value
-                  setConfig({ ...config, durationHours: raw === '' ? null : Number(raw) })
-                }}
-                className={`w-full rounded-xl px-3 py-3 font-bold ${inputClass(isDarkMode)}`}
-              >
-                {durationOptional ? <option value="">{t(lang, 'duration_unset')}</option> : null}
-                {rangeOptions(0.5, 24).map((hour) => (
-                  <option key={hour} value={hour}>{hour} {t(lang, 'hours')}</option>
-                ))}
-              </select>
-            </details>
-          </div>
+              value={config.durationHours ?? ''}
+              onChange={(event) => {
+                const raw = event.target.value
+                setConfig({ ...config, durationHours: raw === '' ? null : Number(raw) })
+              }}
+              className={`w-full rounded-xl px-3 py-3 font-bold ${inputClass(isDarkMode)} ${lock}`}
+            >
+              {durationOptional ? <option value="">{t(lang, 'duration_unset')}</option> : null}
+              {rangeOptions(0.5, 24).map((hour) => (
+                <option key={hour} value={hour}>{hour} {t(lang, 'hours')}</option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <label className="space-y-2">

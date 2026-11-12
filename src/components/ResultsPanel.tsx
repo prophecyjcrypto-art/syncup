@@ -417,7 +417,7 @@ export function ResultsPanel({
                 windowStart={campaign.config.dayStartHour}
                 windowEnd={campaign.config.dayEndHour}
                 value={sessionRange}
-                allowClear={campaign.config.durationHours == null}
+                allowClear
                 onChange={applySession}
               />
             ) : (
