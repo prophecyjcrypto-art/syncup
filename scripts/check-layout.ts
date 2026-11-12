@@ -379,13 +379,13 @@ async function main() {
           `${item.name} focus ring is ${guide.outline} ${guide.style} ${guide.ring} offset ${guide.offset}`,
         )
         assert(
-          guide.bullets.join('\n') === '拖曳訂時段，拉邊改長度\n點其他日期，加上同一時間\n數字是有空人數，顏色越深越多',
+          guide.bullets.join('\n') === '拖曳訂時段，拉上下兩邊調校長短\n點其他日期，即可加上同一時間\n數字代表有幾多人有空；顏色愈深，人愈多',
           `${item.name} results copy was ${guide.bullets.join(' | ')}`,
         )
         assert(guide.color === 'rgb(245, 245, 247)', `${item.name} guide text color is ${guide.color}`)
         await shotElements(
           cdp,
-          item.width < 800 ? '/opt/cursor/artifacts/results-phone-guide.png' : '/opt/cursor/artifacts/results-desktop-guide.png',
+          item.width < 800 ? '/opt/cursor/artifacts/results-phone-guide-hk.png' : '/opt/cursor/artifacts/results-desktop-guide-hk.png',
           ['dialog[data-guide="results"]'],
         )
       }
@@ -406,10 +406,10 @@ async function main() {
     })()`)) as { open: boolean; disabled: boolean | null; bullets: string[] }
     assert(organizers.open && organizers.disabled === true, 'organizers guide was not waiting for a tick')
     assert(
-      organizers.bullets.join('\n') === '輸入名稱來加入\n標上 Avail 或 NA\n已勾選的主辦人都有空，才會有結果',
+      organizers.bullets.join('\n') === '輸入名稱即可加入\n標成 Avail 或 NA\n要所有已勾選的主辦人都有空，先會見到結果',
       `organizers copy was ${organizers.bullets.join(' | ')}`,
     )
-    await shotElements(cdp, '/opt/cursor/artifacts/organizers-phone-guide.png', ['dialog[data-guide="organizers"]'])
+    await shotElements(cdp, '/opt/cursor/artifacts/organizers-phone-guide-hk.png', ['dialog[data-guide="organizers"]'])
 
     await openPage(cdp, '/?preview=results&lang=zh', 390, 844)
     await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
@@ -434,13 +434,13 @@ async function main() {
       color: getComputedStyle(document.querySelector('.hint-list')).color,
     })`)) as { list: string[]; length: string; color: string }
     assert(
-      hints.list.join('\n') === '數字是有空人數，顏色越深越多\n拖曳訂時段，拉邊改長度\n點其他日期，加上同一時間',
+      hints.list.join('\n') === '數字代表有幾多人有空；顏色愈深，人愈多\n拖曳訂時段，拉上下兩邊調校長短\n點其他日期，即可加上同一時間',
       `leftover hints were ${hints.list.join(' | ')}`,
     )
     assert(hints.length === '+ / − 每次改半小時', `length hint was "${hints.length}"`)
     assert(hints.color === 'rgb(228, 228, 231)', `hint color is ${hints.color}`)
     await centerSelectors(cdp, ['[data-hint-length]', '.chip-wrap', '.hint-list'])
-    await shotElements(cdp, '/opt/cursor/artifacts/results-phone-hints.png', ['[data-hint-length]', '.chip-wrap', '.hint-list'], true)
+    await shotElements(cdp, '/opt/cursor/artifacts/results-phone-hints-hk.png', ['[data-hint-length]', '.chip-wrap', '.hint-list'], true)
     await cdp.eval(`document.querySelector('.cal-day')?.scrollIntoView({ block: 'center' })`)
     await delay(100)
     const calendarHeight = await cdp.eval<number>(`document.querySelector('.cal-day')?.getBoundingClientRect().height ?? 0`)
@@ -576,7 +576,7 @@ async function main() {
     const organizersStill = await cdp.eval<string>(`localStorage.getItem('syncup.guide.dismissed.organizers') ?? ''`)
     assert(organizersStill === '', 'dismissing results also hid the organizers guide')
     await centerSelectors(cdp, ['[data-hint-length]', '.chip-wrap', '.hint-list'])
-    await shotElements(cdp, '/opt/cursor/artifacts/results-desktop-hints.png', ['[data-hint-length]', '.chip-wrap', '.hint-list'], true)
+    await shotElements(cdp, '/opt/cursor/artifacts/results-desktop-hints-hk.png', ['[data-hint-length]', '.chip-wrap', '.hint-list'], true)
     const desktopBooked = await dragHours(cdp, '19', '21', 'mouse', true)
     assert(desktopBooked.includes('19:00') && desktopBooked.includes('2.5'), `desktop block was "${desktopBooked}"`)
     await cdp.eval(`document.querySelector('[data-booked]')?.scrollIntoView({ block: 'center', inline: 'center' })`)
