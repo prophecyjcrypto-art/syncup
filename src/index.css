@@ -222,68 +222,48 @@
 }
 
 .heat-sheet {
+  display: grid;
   width: max-content;
   min-width: 100%;
+  column-gap: 2px;
+  row-gap: 2px;
   user-select: none;
   -webkit-user-select: none;
 }
 
-.heat-head,
-.heat-body {
-  display: flex;
-  align-items: stretch;
-  gap: 2px;
-}
-
-.heat-head {
-  position: sticky;
-  top: 0;
-  z-index: 5;
+.heat-gutter,
+.heat-time,
+.heat-day {
   background: rgba(16, 16, 20, 0.96);
-}
-
-.theme-light .heat-head {
-  background: rgba(245, 245, 247, 0.96);
 }
 
 .heat-gutter,
 .heat-time {
-  flex: none;
-  width: 3.35rem;
-  background: rgba(16, 16, 20, 0.96);
+  position: sticky;
+  left: 0;
+  z-index: 4;
+}
+
+.heat-gutter,
+.heat-day {
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 .heat-gutter {
-  position: sticky;
   left: 0;
   z-index: 6;
 }
 
-.heat-times {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  gap: 2px;
-}
-
 .heat-time {
-  position: sticky;
-  left: 0;
-  z-index: 4;
   display: flex;
   align-items: center;
-  height: 2.25rem;
   color: #a1a1aa;
   font-size: 0.62rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   touch-action: pan-x pan-y;
-}
-
-.heat-day,
-.heat-col {
-  flex: 1 0 5.1rem;
-  min-width: 5.1rem;
 }
 
 .heat-day {
@@ -292,11 +272,28 @@
   justify-content: center;
   min-height: 2.5rem;
   padding: 0.2rem 0.15rem;
+  border: 0;
   background: rgba(16, 16, 20, 0.96);
+  color: inherit;
+  font: inherit;
   font-size: 0.62rem;
   font-weight: 700;
   line-height: 1.15;
   text-align: center;
+}
+
+button.heat-day {
+  cursor: pointer;
+}
+
+button.heat-day:disabled {
+  cursor: default;
+}
+
+.heat-day-on,
+.theme-light .heat-day-on {
+  background: #f6cf7a;
+  color: #2a2416;
 }
 
 .theme-light .heat-gutter,
@@ -328,6 +325,14 @@
   outline-offset: -2px;
 }
 
+.heat-col {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .heat-block {
   position: absolute;
   z-index: 2;
@@ -336,12 +341,17 @@
   display: flex;
   align-items: center;
   overflow: hidden;
-  border: 2px solid #f6cf7a;
+  border: 2px solid rgba(246, 207, 122, 0.7);
   border-radius: 0.55rem;
   background: #4e4c86;
   color: white;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+  box-shadow: none;
   touch-action: none;
+}
+
+.heat-block-focus {
+  border-color: #f6cf7a;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
 }
 
 .heat-block-label {

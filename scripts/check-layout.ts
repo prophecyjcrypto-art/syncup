@@ -95,10 +95,10 @@ async function shot(cdp: Cdp, file: string) {
 async function dragEdge(cdp: Cdp, toHour: string) {
   return cdp.eval<string>(`(async () => {
     const handle = document.querySelector('[data-edge="end"]')
-    const row = document.querySelector('[data-booked]')?.closest('[data-day]')
-    const cell = row?.querySelector('[data-hour="${toHour}"]')
-    if (!(handle instanceof HTMLElement) || !(row instanceof HTMLElement) || !(cell instanceof HTMLElement)) return 'missing'
-    const scroller = row.closest('[data-slot-grid]')
+    const iso = handle?.closest('[data-booked]')?.getAttribute('data-booked-iso') ?? ''
+    const cell = document.querySelector('[data-slot-grid] [data-day="' + iso + '"][data-hour="${toHour}"]')
+    if (!(handle instanceof HTMLElement) || !(cell instanceof HTMLElement)) return 'missing'
+    const scroller = handle.closest('[data-slot-grid]')
     if (!(scroller instanceof HTMLElement)) return 'missing'
     scroller.scrollIntoView({ block: 'center' })
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -132,13 +132,13 @@ async function dragEdge(cdp: Cdp, toHour: string) {
   })()`)
 }
 
-async function dragHours(cdp: Cdp, fromHour: string, toHour: string, pointerType: 'mouse' | 'touch', release: boolean) {
+async function dragHours(cdp: Cdp, fromHour: string, toHour: string, pointerType: 'mouse' | 'touch', release: boolean, dayIso = '') {
   return cdp.eval<string>(`(async () => {
-    const row = document.querySelector('[data-slot-grid] [data-day]')
-    const startEl = row?.querySelector('[data-hour="${fromHour}"]')
-    const endEl = row?.querySelector('[data-hour="${toHour}"]')
-    if (!(row instanceof HTMLElement) || !(startEl instanceof HTMLElement) || !(endEl instanceof HTMLElement)) return 'missing'
-    const scroller = row.closest('[data-slot-grid]')
+    const day = ${dayIso ? `'${dayIso}'` : `document.querySelector('[data-slot-grid] [data-hour]')?.getAttribute('data-day') ?? ''`}
+    const startEl = document.querySelector('[data-slot-grid] [data-day="' + day + '"][data-hour="${fromHour}"]')
+    const endEl = document.querySelector('[data-slot-grid] [data-day="' + day + '"][data-hour="${toHour}"]')
+    if (!(startEl instanceof HTMLElement) || !(endEl instanceof HTMLElement)) return 'missing ' + day
+    const scroller = startEl.closest('[data-slot-grid]')
     if (!(scroller instanceof HTMLElement)) return 'missing'
     scroller.scrollIntoView({ block: 'center' })
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -304,8 +304,29 @@ async function main() {
       summaryAfterCard.includes(clock(placedStart)) && summaryAfterCard.includes(clock(placedEnd)),
       `card did not move the block ("${placed}" -> "${summaryAfterCard}")`,
     )
-    const blockDay = await cdp.eval<string>(`document.querySelector('[data-booked]')?.closest('[data-day]')?.getAttribute('data-day') ?? ''`)
+    const blockDay = await cdp.eval<string>(`document.querySelector('[data-focused]')?.getAttribute('data-day') ?? ''`)
     assert(blockDay === placedDay, `block day ${blockDay} card ${placed}`)
+    await cdp.eval(`document.querySelector('[data-duration-hours]')?.scrollIntoView({ block: 'start' })`)
+    await delay(60)
+    await shot(cdp, '/opt/cursor/artifacts/results_phone_one_session.png')
+    const extraDays = await cdp.eval<string>(`(() => {
+      const days = [...document.querySelectorAll('[data-day-toggle]')].map((node) => node.getAttribute('data-day-toggle'))
+      const index = days.indexOf('${placedDay}')
+      const extra = days.slice(index + 1, index + 3)
+      for (const iso of extra) document.querySelector('[data-day-toggle="' + iso + '"]')?.click()
+      return JSON.stringify(extra)
+    })()`)
+    await delay(80)
+    const multi = await cdp.eval<string>(`JSON.stringify({
+      extra: ${extraDays},
+      blocks: document.querySelectorAll('[data-booked]').length,
+      headers: document.querySelectorAll('[data-selected-day]').length,
+    })`)
+    const multiParsed = JSON.parse(multi) as { extra: string[]; blocks: number; headers: number }
+    assert(multiParsed.blocks === 3 && multiParsed.headers === 3, `day headers did not copy the session (${multi})`)
+    await cdp.eval(`document.querySelector('[data-duration-hours]')?.scrollIntoView({ block: 'start' })`)
+    await delay(60)
+    await shot(cdp, '/opt/cursor/artifacts/results_phone_multi_days.png')
     const filtered = await cdp.eval<string>(`(() => {
       document.querySelector('[data-dancer-id="dancer-ren"]')?.click()
       return 'ok'
@@ -313,8 +334,8 @@ async function main() {
     assert(filtered === 'ok', 'dancer filter missing')
     await delay(60)
     const counts = await cdp.eval<string>(`(() => {
-      const morning = document.querySelector('[data-day="2026-11-12"] [data-hour="9"]')?.textContent ?? ''
-      const evening = document.querySelector('[data-day="2026-11-12"] [data-hour="18"]')?.textContent ?? ''
+      const morning = document.querySelector('[data-day="2026-11-12"][data-hour="9"]')?.textContent ?? ''
+      const evening = document.querySelector('[data-day="2026-11-12"][data-hour="18"]')?.textContent ?? ''
       const starts = [...document.querySelectorAll('[data-slot-card]')].map((card) => Number(card.getAttribute('data-start')))
       return JSON.stringify({ morning, evening, starts: starts.slice(0, 8), count: starts.length, late: starts.some((hour) => hour > 11.5) })
     })()`)
@@ -331,10 +352,25 @@ async function main() {
     await shot(cdp, '/opt/cursor/artifacts/results_phone_filtered_cards.png')
     await cdp.eval(`document.querySelector('[data-dancer-id="all"]')?.click()`)
     await delay(40)
-    const restoredCount = await cdp.eval<string>(`document.querySelector('[data-day="2026-11-12"] [data-hour="18"]')?.textContent ?? ''`)
+    const restoredCount = await cdp.eval<string>(`document.querySelector('[data-day="2026-11-12"][data-hour="18"]')?.textContent ?? ''`)
     assert(restoredCount === '2', `clearing the dancer filter left the 18:00 count at "${restoredCount}"`)
     const edgeResize = await dragEdge(cdp, '14')
     assert(edgeResize.includes('14:30') && edgeResize.includes('11:30'), `pulling the end edge did not resize ("${edgeResize}")`)
+    const otherDay = await cdp.eval<string>(`document.querySelector('[data-booked]:not([data-focused])')?.getAttribute('data-booked-iso') ?? ''`)
+    if (otherDay) {
+      await dragHours(cdp, '16', '18', 'mouse', true, otherDay)
+      await delay(80)
+      await cdp.eval(`(() => {
+        const scroller = document.querySelector('[data-slot-grid]')
+        const blocks = [...document.querySelectorAll('[data-booked]')]
+        if (!(scroller instanceof HTMLElement) || blocks.length === 0) return
+        const top = Math.min(...blocks.map((el) => el.getBoundingClientRect().top))
+        scroller.scrollTop += top - scroller.getBoundingClientRect().top - 6
+      })()`)
+      await cdp.eval(`document.querySelector('[data-duration-hours]')?.scrollIntoView({ block: 'start' })`)
+      await delay(40)
+      await shot(cdp, '/opt/cursor/artifacts/results_phone_mixed_times.png')
+    }
 
     const phone = await overflow(cdp)
     assert(phone.scrollWidth <= phone.clientWidth + 1, `results still overflows after drag: ${phone.scrollWidth}`)
@@ -349,6 +385,35 @@ async function main() {
     await delay(40)
     await cdp.eval(`document.querySelector('[data-slot-card]')?.click()`)
     await delay(40)
+    await cdp.eval(`document.querySelector('[data-duration-hours]')?.scrollIntoView({ block: 'start' })`)
+    await delay(40)
+    await shot(cdp, '/opt/cursor/artifacts/results_desktop_one_session.png')
+    await cdp.eval<string>(`(() => {
+      const focus = document.querySelector('[data-focused]')?.getAttribute('data-booked-iso')
+      const days = [...document.querySelectorAll('[data-day-toggle]')].map((node) => node.getAttribute('data-day-toggle'))
+      const index = days.indexOf(focus)
+      for (const iso of days.slice(index + 1, index + 3)) document.querySelector('[data-day-toggle="' + iso + '"]')?.click()
+      return 'clicked'
+    })()`)
+    await delay(80)
+    const desktopMulti = await cdp.eval<string>(`String(document.querySelectorAll('[data-booked]').length)`)
+    assert(desktopMulti === '3', `desktop day copy left ${desktopMulti} blocks`)
+    await cdp.eval(`document.querySelector('[data-duration-hours]')?.scrollIntoView({ block: 'start' })`)
+    await delay(40)
+    await shot(cdp, '/opt/cursor/artifacts/results_desktop_multi_days.png')
+    const desktopOther = await cdp.eval<string>(`document.querySelector('[data-booked]:not([data-focused])')?.getAttribute('data-booked-iso') ?? ''`)
+    if (desktopOther) await dragHours(cdp, '16', '18', 'mouse', true, desktopOther)
+    await delay(60)
+    await cdp.eval(`(() => {
+      const scroller = document.querySelector('[data-slot-grid]')
+      const blocks = [...document.querySelectorAll('[data-booked]')]
+      if (!(scroller instanceof HTMLElement) || blocks.length === 0) return
+      const top = Math.min(...blocks.map((el) => el.getBoundingClientRect().top))
+      scroller.scrollTop += top - scroller.getBoundingClientRect().top - 6
+    })()`)
+    await cdp.eval(`document.querySelector('[data-duration-hours]')?.scrollIntoView({ block: 'start' })`)
+    await delay(40)
+    await shot(cdp, '/opt/cursor/artifacts/results_desktop_mixed_times.png')
     await cdp.eval(`document.querySelector('[data-dancer-id="dancer-ren"]')?.click()`)
     await delay(40)
     await cdp.eval(`document.querySelector('[data-booked]')?.scrollIntoView({ block: 'center', inline: 'center' })`)

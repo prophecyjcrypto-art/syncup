@@ -56,7 +56,8 @@ export function ResultsPanel({
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [notice, setNotice] = useState('')
   const [draftHours, setDraftHours] = useState<number | null>(campaign.config.durationHours)
-  const [session, setSession] = useState<SessionRange | null>(null)
+  const [sessions, setSessions] = useState<SessionRange[]>([])
+  const [focusIso, setFocusIso] = useState<string | null>(null)
   const calendar = useCalendar()
 
   useEffect(() => {
@@ -144,18 +145,67 @@ export function ResultsPanel({
 
   const maxHours = roundHour(Math.max(SLOT_STEP, campaign.config.dayEndHour - campaign.config.dayStartHour))
 
+  function syncDuration(block: SessionRange) {
+    if (!canSetDuration) return
+    const hours = durationHours(block)
+    setDraftHours(hours)
+    if (hours !== campaign.config.durationHours) onSaveDuration?.(hours)
+  }
+
+  function commitSession(block: SessionRange, fromIso: string) {
+    const taken = block.iso !== fromIso && sessions.some((item) => item.iso === block.iso)
+    const placed = taken ? { ...block, iso: fromIso } : block
+    setSessions((current) => [...current.filter((item) => item.iso !== fromIso && item.iso !== placed.iso), placed])
+    setFocusIso(placed.iso)
+    syncDuration(placed)
+  }
+
+  function focusSession(iso: string) {
+    const block = sessions.find((item) => item.iso === iso)
+    if (!block) return
+    setFocusIso(iso)
+    syncDuration(block)
+  }
+
+  function toggleDay(iso: string) {
+    const existing = sessions.find((item) => item.iso === iso)
+    if (existing) {
+      const next = sessions.filter((item) => item.iso !== iso)
+      setSessions(next)
+      if (focusIso === iso) {
+        setFocusIso(next[0]?.iso ?? null)
+        if (next[0]) syncDuration(next[0])
+      }
+      return
+    }
+    const source = sessions.find((item) => item.iso === focusIso) ?? sessions[0]
+    if (!source) return
+    setSessions((current) => [...current.filter((item) => item.iso !== iso), { ...source, iso }])
+  }
+
+  function removeSession(iso: string) {
+    const next = sessions.filter((item) => item.iso !== iso)
+    setSessions(next)
+    if (focusIso === iso) setFocusIso(next[0]?.iso ?? null)
+  }
+
   function setLength(hours: number | null) {
     if (!canSetDuration) return
     if (hours == null || !Number.isFinite(hours) || hours <= 0) {
       setDraftHours(null)
-      setSession(null)
+      setSessions([])
+      setFocusIso(null)
       return
     }
     const fitted = Math.min(Math.max(roundHour(hours), SLOT_STEP), maxHours)
     setDraftHours(fitted)
-    setSession((current) =>
-      current ? { ...current, ...fitDuration(current, fitted, campaign.config.dayStartHour, campaign.config.dayEndHour) } : current,
-    )
+    if (focusIso) {
+      setSessions((current) =>
+        current.map((item) =>
+          item.iso === focusIso ? { ...item, ...fitDuration(item, fitted, campaign.config.dayStartHour, campaign.config.dayEndHour) } : item,
+        ),
+      )
+    }
     if (fitted !== campaign.config.durationHours) onSaveDuration?.(fitted)
   }
 
@@ -168,12 +218,13 @@ export function ResultsPanel({
     setLength(roundHour(draftHours + delta * SLOT_STEP))
   }
 
-  function applySession(next: SessionRange | null) {
-    setSession(next)
-    if (!next || !canSetDuration) return
-    const hours = durationHours(next)
-    setDraftHours(hours)
-    if (hours !== campaign.config.durationHours) onSaveDuration?.(hours)
+  function toggleSavedMany(keys: string[]) {
+    if (!canPin || keys.length === 0) return
+    const allSaved = keys.every((key) => campaign.savedSlots.includes(key))
+    const next = allSaved
+      ? campaign.savedSlots.filter((key) => !keys.includes(key))
+      : [...new Set([...campaign.savedSlots, ...keys])]
+    onSaveSlots(next)
   }
 
   function toggleDancer(id: string) {
@@ -185,7 +236,8 @@ export function ResultsPanel({
 
   function selectSlot(slot: TimeSlot) {
     const hours = windowHours(slot)
-    setSession(hours)
+    const iso = focusIso ?? hours.iso
+    commitSession({ iso, startHour: hours.startHour, endHour: hours.endHour }, focusIso ?? iso)
   }
 
   function targets(): TimeSlot[] {
@@ -247,7 +299,7 @@ export function ResultsPanel({
     const key = slotKey(slot)
     const iso = toISODateString(slot.start)
     const hours = windowHours(slot)
-    const onCalendar = session != null && slotMatchesSession(slot, session)
+    const onCalendar = sessions.some((item) => slotMatchesSession(slot, item))
     const names = slot.availableMembers.map(nameOf)
     return (
       <article
@@ -497,15 +549,23 @@ export function ResultsPanel({
             heat={heat}
             slots={slots}
             savedSlots={campaign.savedSlots}
-            session={session}
+            sessions={sessions}
+            focusIso={focusIso}
             durationHours={draftHours}
             editable={canSetDuration}
             canPin={canPin}
             windowStart={campaign.config.dayStartHour}
             windowEnd={campaign.config.dayEndHour}
             nameOf={nameOf}
-            onSession={applySession}
-            onToggleSaved={toggleSaved}
+            onCommit={commitSession}
+            onFocus={focusSession}
+            onToggleDay={toggleDay}
+            onRemove={removeSession}
+            onClearAll={() => {
+              setSessions([])
+              setFocusIso(null)
+            }}
+            onToggleSaved={toggleSavedMany}
           />
           <div className="mt-4 max-h-48 space-y-2 overflow-y-auto custom-scrollbar">
             <p className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'choreographer_overlap')}</p>
