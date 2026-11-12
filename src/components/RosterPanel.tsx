@@ -5,7 +5,7 @@ import { formatBlockLabel } from '../lib/blocks'
 import { formatDate, formatLongDate, parseISODate } from '../lib/dates'
 import { uncoveredDays } from '../lib/schedule'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
-import { GuideNote } from './Guide'
+import { InstructionBox } from './Guide'
 import type { Campaign, Language, PersonRole, TimeBlock } from '../types'
 
 export function RosterPanel({
@@ -64,12 +64,12 @@ export function RosterPanel({
           <h2 className={`font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
             {variant === 'choreographer' ? t(lang, 'roster_header_leadership') : t(lang, 'roster_header_members')}
           </h2>
-          <GuideNote>{variant === 'choreographer' ? t(lang, 'guide_choreo') : t(lang, 'guide_dancers')}</GuideNote>
         </div>
         <button type="button" onClick={onNext} className={`min-h-11 w-full rounded-full px-6 py-3 text-sm font-bold sm:w-auto ${accent}`}>
           {variant === 'choreographer' ? t(lang, 'next_dancers') : t(lang, 'view_results')}
         </button>
       </div>
+      <InstructionBox key={variant} id={variant === 'choreographer' ? 'organizers' : 'participants'} lang={lang} />
       {editingId && (
         <p className="text-sm font-bold text-[#f6cf7a]">
           {t(lang, 'editing', { name })}

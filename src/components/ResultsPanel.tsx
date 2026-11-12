@@ -7,7 +7,7 @@ import { formatLongDate, formatTime, getDaysArray, parseISODate, toISODateString
 import { durationHours, fitDuration, roundHour, SLOT_STEP } from '../lib/timeRange'
 import { availabilityHeatmap, calculateBestSlots, compulsoryReport, sharedFreeByDay } from '../lib/schedule'
 import { cardClass, textMuted, textPrimary } from '../lib/ui'
-import { GuideNote, InfoTip } from './Guide'
+import { InfoTip, InstructionBox } from './Guide'
 import type { Campaign, Language, TimeSlot } from '../types'
 import { MonthBoards } from './MonthBoards'
 import { HeatBook, slotMatchesSession, type SessionRange } from './HeatBook'
@@ -388,7 +388,7 @@ export function ResultsPanel({
           )}
         </div>
       </div>
-      <GuideNote>{t(lang, 'guide_results')}</GuideNote>
+      <InstructionBox id="results" lang={lang} />
       {notice && <p className="text-sm font-medium text-[#93ba8c]">{notice}</p>}
       <div className="grid gap-4 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] md:items-start">
         <div className="order-2 min-w-0 space-y-3 md:order-1">
@@ -512,6 +512,7 @@ export function ResultsPanel({
               </button>
             </div>
           </div>
+          <p className={`mt-1 text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'hint_length')}</p>
           <div className="mt-4 space-y-2">
             <p className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'filter_dancers')}</p>
             <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, dancerFilter.length === 0 ? 'filter_hint' : 'filter_active')}</p>

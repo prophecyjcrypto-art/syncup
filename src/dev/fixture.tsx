@@ -1,9 +1,10 @@
 import { StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AvailabilityEditor } from '../components/AvailabilityEditor'
-import { FlowSteps } from '../components/Guide'
+import { FlowSteps, type FlowStep } from '../components/Guide'
 import { Landing } from '../components/Landing'
 import { ResultsPanel } from '../components/ResultsPanel'
+import { RosterPanel } from '../components/RosterPanel'
 import { SetupPanel } from '../components/SetupPanel'
 import { CalendarProvider } from '../lib/calendarContext'
 import { parseISODate, setTime } from '../lib/dates'
@@ -102,7 +103,7 @@ const campaign: Campaign = {
   ],
 }
 
-function Shell({ children, flow }: { children: ReactNode; flow?: boolean }) {
+function Shell({ children, flow, step = 'results' }: { children: ReactNode; flow?: boolean; step?: FlowStep }) {
   return (
     <div className="theme-dark min-h-dvh" data-preview="">
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
@@ -134,7 +135,7 @@ function Shell({ children, flow }: { children: ReactNode; flow?: boolean }) {
             <div className="mx-auto max-w-6xl px-3 pb-1 sm:px-6">
               <FlowSteps
                 lang={lang}
-                current="results"
+                current={step}
                 enabled={{ setup: true, choreographers: true, dancers: true, results: true }}
                 onJump={() => undefined}
               />
@@ -190,6 +191,22 @@ function Preview({ name }: { name: string }) {
     return (
       <Shell>
         <SetupPanel lang={lang} isDarkMode readOnly={false} onCancel={() => undefined} onConfirm={() => undefined} />
+      </Shell>
+    )
+  }
+  if (name === 'organizers') {
+    return (
+      <Shell flow step="choreographers">
+        <RosterPanel
+          lang={lang}
+          isDarkMode
+          campaign={campaign}
+          variant="choreographer"
+          onBack={() => undefined}
+          onNext={() => undefined}
+          onSave={async () => true}
+          onDelete={async () => undefined}
+        />
       </Shell>
     )
   }

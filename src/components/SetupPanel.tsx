@@ -3,7 +3,7 @@ import { t } from '../i18n'
 import { formatHourOption, formatLongDate, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
 import { adminInviteUrl, organizerInviteUrl, participantInviteUrl } from '../lib/invites'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
-import { FieldLabel, GuideNote } from './Guide'
+import { FieldLabel, InstructionBox } from './Guide'
 import type { AppConfig, Campaign, CampaignInput, Language } from '../types'
 import { MonthBoards } from './MonthBoards'
 
@@ -105,10 +105,8 @@ export function SetupPanel({
         <h2 className={`font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
           {readOnly ? initial?.name : initial ? t(lang, 'edit_event') : t(lang, 'new_campaign')}
         </h2>
-        <GuideNote className="mx-auto">
-          {t(lang, 'guide_setup')}
-          {readOnly ? ` · ${t(lang, 'view_only')}` : ''}
-        </GuideNote>
+        {readOnly ? <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'view_only')}</p> : null}
+        <InstructionBox id="setup" lang={lang} className="mt-4" />
       </div>
       <div className={`${cardClass(isDarkMode)} space-y-6 rounded-[1.5rem] p-4 sm:space-y-8 sm:rounded-[2rem] sm:p-8`}>
         <label className="block space-y-2">
@@ -278,8 +276,10 @@ export function SetupPanel({
 
         {(!readOnly || initial?.organizerCode || initial?.participantCode) && (
           <div className="space-y-3">
-            <h3 className={`font-serif text-2xl ${textPrimary(isDarkMode)}`}>{t(lang, 'organizer_link')}</h3>
-            <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_link_hint')}</p>
+            <h3 className={`font-serif text-2xl ${textPrimary(isDarkMode)}`}>
+              <FieldLabel lang={lang} label={t(lang, 'organizer_link')} tip={t(lang, 'organizer_link_hint')} />
+            </h3>
+            <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'tip_links')}</p>
             {initial?.participantCode && (
               <div className="space-y-3">
                 <p className={`break-all rounded-xl px-4 py-3 text-sm ${inputClass(isDarkMode)}`}>{participantInviteUrl(initial.participantCode)}</p>
