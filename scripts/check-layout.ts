@@ -102,9 +102,8 @@ async function dragHours(cdp: Cdp, fromHour: string, toHour: string, pointerType
       const rect = el.getBoundingClientRect()
       return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
     }
-    function fire(type, point) {
-      const target = document.elementFromPoint(point.x, point.y) || startEl
-      target.dispatchEvent(new PointerEvent(type, {
+    function fire(type, point, el) {
+      el.dispatchEvent(new PointerEvent(type, {
         bubbles: true,
         cancelable: true,
         clientX: point.x,
@@ -118,9 +117,9 @@ async function dragHours(cdp: Cdp, fromHour: string, toHour: string, pointerType
     }
     const start = center(startEl)
     const end = center(endEl)
-    fire('pointerdown', start)
-    fire('pointermove', end)
-    if (${release}) fire('pointerup', end)
+    fire('pointerdown', start, startEl)
+    fire('pointermove', end, endEl)
+    if (${release}) fire('pointerup', end, endEl)
     return new Promise((resolve) => {
       setTimeout(() => resolve(document.querySelector('[data-range-summary]')?.textContent ?? ''), 50)
     })
@@ -205,6 +204,11 @@ async function main() {
     await shot(cdp, '/opt/cursor/artifacts/results-drag-mobile.png')
     const committed = await dragHours(cdp, '19', '21', 'mouse', true)
     assert(committed.includes('19:00') && committed.includes('21:30') && committed.includes('2.5'), `released summary was "${committed}"`)
+    const handles = await cdp.eval<number>(`document.querySelectorAll('[data-edge="start"], [data-edge="end"]').length`)
+    assert(handles === 2, `booked block is missing resize handles (${handles})`)
+    await cdp.eval(`document.querySelector('[data-booked]')?.scrollIntoView({ block: 'center' })`)
+    await delay(80)
+    await shot(cdp, '/opt/cursor/artifacts/results-block-mobile.png')
 
     const touched = await dragHours(cdp, '18', '20', 'touch', true)
     assert(touched.includes('18:00') && touched.includes('20:30') && touched.includes('2.5'), `touch summary was "${touched}"`)
@@ -218,6 +222,15 @@ async function main() {
 
     const phone = await overflow(cdp)
     assert(phone.scrollWidth <= phone.clientWidth + 1, `results still overflows after drag: ${phone.scrollWidth}`)
+
+    await openPage(cdp, '/?preview=results&lang=zh', 1280, 800)
+    const desktopBooked = await dragHours(cdp, '19', '21', 'mouse', true)
+    assert(desktopBooked.includes('19:00') && desktopBooked.includes('2.5'), `desktop block was "${desktopBooked}"`)
+    await cdp.eval(`document.querySelector('[data-booked]')?.scrollIntoView({ block: 'center' })`)
+    await delay(80)
+    await shot(cdp, '/opt/cursor/artifacts/results-block-desktop.png')
+    const desktopOverflow = await overflow(cdp)
+    assert(desktopOverflow.scrollWidth <= desktopOverflow.clientWidth + 1, `desktop block overflows: ${desktopOverflow.scrollWidth}`)
 
     await openPage(cdp, '/?preview=availability&lang=zh', 390, 844)
     const hourSelects = await cdp.eval<number>(`document.querySelectorAll('select').length`)

@@ -227,7 +227,7 @@ const en = {
   hours_unit: 'hours',
   range_empty: 'Drag across the slots',
   clear_range: 'Clear',
-  drag_hint: 'Drag across the slots. Drag again to change the range.',
+  drag_hint: 'Drag across the times to book a session. Drag the block to move it, or pull the top or bottom edge to change the start or end.',
   session_grid: 'Session time',
 } as const
 
@@ -458,7 +458,7 @@ const zh: { [K in keyof typeof en]: string } = {
   hours_unit: '小時',
   range_empty: '在格子上拖曳選取',
   clear_range: '清除',
-  drag_hint: '在格子上拖曳選取。再拖一次可改選範圍。',
+  drag_hint: '在時間上拖曳訂下時段。拖曳色塊可移動，拉上緣或下緣可調整開始或結束。',
   session_grid: '練習時段',
 }
 
