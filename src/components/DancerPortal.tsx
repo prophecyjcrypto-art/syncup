@@ -4,7 +4,7 @@ import { t } from '../i18n'
 import { formatLongDate, isPast, parseISODate } from '../lib/dates'
 import { incompleteCompulsoryDays, uncoveredDays } from '../lib/schedule'
 import { inputClass, textMuted, textPrimary } from '../lib/ui'
-import { GuideNote } from './Guide'
+import { InstructionBox } from './Guide'
 import type { Campaign, Language, PersonRole, TimeBlock } from '../types'
 
 export function DancerPortal({
@@ -70,12 +70,12 @@ export function DancerPortal({
           <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>
             {role === 'choreographer' ? t(lang, 'choreographer') : t(lang, 'dancer')} · {email}
           </p>
-          <GuideNote>{t(lang, 'guide_portal')}</GuideNote>
         </div>
         <p className={`rounded-full px-4 py-2 text-xs font-bold uppercase ${locked ? 'bg-zinc-700 text-zinc-300' : 'bg-[#7c7bb9] text-white'}`}>
           {locked ? t(lang, 'expired') : `${t(lang, 'deadline')} ${formatLongDate(new Date(campaign.expiryDate), lang)}`}
         </p>
       </div>
+      <InstructionBox id="portal" lang={lang} />
       {campaign.remarks && (
         <div className={`rounded-2xl border p-4 ${isDarkMode ? 'border-yellow-700/40 bg-yellow-900/20' : 'border-yellow-200 bg-yellow-50'}`}>
           <p className="text-xs font-bold uppercase tracking-widest text-yellow-600">{t(lang, 'remarks_label')}</p>

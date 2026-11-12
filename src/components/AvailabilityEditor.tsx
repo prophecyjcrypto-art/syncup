@@ -14,7 +14,7 @@ import {
 } from '../lib/googleCalendar'
 import { uncoveredDays } from '../lib/schedule'
 import { cardClass, inputClass, primaryButton, textMuted, textPrimary } from '../lib/ui'
-import { MiniSteps } from './Guide'
+import { HintList, MiniSteps } from './Guide'
 import type { AppConfig, BlockKind, Language, TimeBlock } from '../types'
 import { MonthBoards } from './MonthBoards'
 
@@ -119,7 +119,10 @@ export function AvailabilityEditor({
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-8">
       <div className={`lg:col-span-5 ${cardClass(isDarkMode)} h-fit rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6`}>
         <h3 className={`font-serif text-2xl font-semibold ${textPrimary(isDarkMode)}`}>{t(lang, 'your_submissions')}</h3>
-        <p className={`mt-3 text-sm leading-relaxed ${textMuted(isDarkMode)}`}>{t(lang, 'availability_hint')}</p>
+        <HintList
+          className={`mt-3 ${textMuted(isDarkMode)}`}
+          items={[t(lang, 'avail_rule_na'), t(lang, 'avail_rule_avail'), t(lang, 'avail_rule_both')]}
+        />
         {missingDays.length > 0 && (
           <p className="mt-3 text-sm text-[#f19ba8]">{t(lang, 'mixed_incomplete', { days: missingLabel })}</p>
         )}

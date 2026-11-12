@@ -15,6 +15,7 @@ import {
   type HourRange,
 } from '../lib/timeRange'
 import { textMuted, textPrimary } from '../lib/ui'
+import { HintList } from './Guide'
 import type { Language, TimeSlot } from '../types'
 import type { OverlapCell } from '../lib/schedule'
 
@@ -329,16 +330,16 @@ export function HeatBook({
 
   return (
     <div className="mt-4 space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h4 className={`font-bold ${textPrimary(isDarkMode)}`}>{t(lang, 'heat_title')}</h4>
-          <p className={`mt-1 text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'heat_hint')}</p>
-        </div>
-      </div>
+      <h4 className={`font-bold ${textPrimary(isDarkMode)}`}>{t(lang, 'heat_title')}</h4>
       {dancers.length === 0 ? (
         <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>
       ) : cols === 0 ? null : (
         <>
+          <HintList
+            id={helpId}
+            className={textMuted(isDarkMode)}
+            items={[t(lang, 'hint_heat'), t(lang, 'hint_drag'), t(lang, 'hint_days')]}
+          />
           <div className="flex items-center justify-between gap-3">
             <p className={`text-sm font-semibold tabular-nums ${textPrimary(isDarkMode)}`} data-range-summary="" aria-live="polite">
               {summary}
@@ -454,13 +455,13 @@ export function HeatBook({
                               height: `calc(${span} * 2.25rem + ${Math.max(span - 1, 0) * 2}px)`,
                             }}
                           >
-                            {isFocus ? <span data-edge="start" className="heat-edge heat-edge-start" aria-label={t(lang, 'drag_hint')} /> : null}
+                            {isFocus ? <span data-edge="start" className="heat-edge heat-edge-start" aria-label={t(lang, 'edge_resize')} /> : null}
                             <span className="heat-block-label">
                               {formatClock(block.startHour)}–{formatClock(block.endHour)}
                               <br />
                               {durationHours(block)} {t(lang, 'hours_unit')}
                             </span>
-                            {isFocus ? <span data-edge="end" className="heat-edge heat-edge-end" aria-label={t(lang, 'drag_hint')} /> : null}
+                            {isFocus ? <span data-edge="end" className="heat-edge heat-edge-end" aria-label={t(lang, 'edge_resize')} /> : null}
                           </div>
                         )
                       })}
@@ -469,11 +470,7 @@ export function HeatBook({
               })}
             </div>
           </div>
-          <p id={helpId} className={`text-xs leading-relaxed ${textMuted(isDarkMode)}`}>
-            {t(lang, 'drag_hint')}
-            {sessions.length > 0 ? ` ${t(lang, 'multi_day_hint')}` : ''}
-            {sessions.length > 1 ? ` ${t(lang, 'days_picked', { n: sessions.length })}` : ''}
-          </p>
+          {sessions.length > 1 ? <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'days_picked', { n: sessions.length })}</p> : null}
         </>
       )}
       {detail}

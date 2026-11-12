@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { t } from '../i18n'
+import { primaryButton } from '../lib/ui'
 import type { Language } from '../types'
 
 export type FlowStep = 'setup' | 'choreographers' | 'dancers' | 'results'
@@ -49,8 +50,89 @@ export function FieldLabel({
   )
 }
 
-export function GuideNote({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <p className={`guide-note mt-3 opacity-75 ${className}`}>{children}</p>
+export type GuideId = 'events' | 'setup' | 'organizers' | 'participants' | 'results' | 'portal'
+
+const GUIDE_POINTS: Record<GuideId, Parameters<typeof t>[1][]> = {
+  events: ['guide_events_1', 'guide_events_2', 'guide_events_3'],
+  setup: ['guide_setup_1', 'guide_setup_2', 'guide_setup_3', 'guide_setup_4'],
+  organizers: ['guide_choreo_1', 'guide_choreo_2', 'guide_choreo_3', 'guide_choreo_4'],
+  participants: ['guide_dancers_1', 'guide_dancers_2', 'guide_dancers_3'],
+  results: ['guide_results_1', 'guide_results_2', 'guide_results_3', 'guide_results_4', 'guide_results_5', 'guide_results_6'],
+  portal: ['guide_portal_1', 'guide_portal_2', 'guide_portal_3', 'guide_portal_4'],
+}
+
+function storageKey(id: GuideId): string {
+  return `syncup.guide.dismissed.${id}`
+}
+
+function readDismissed(id: GuideId): boolean {
+  try {
+    return localStorage.getItem(storageKey(id)) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function InstructionBox({ id, lang, className = '' }: { id: GuideId; lang: Language; className?: string }) {
+  const [gone, setGone] = useState(() => readDismissed(id))
+  const [checked, setChecked] = useState(false)
+  if (gone) return null
+  const titleId = `guide-${id}-title`
+
+  function confirm() {
+    if (!checked) return
+    try {
+      localStorage.setItem(storageKey(id), '1')
+    } catch {
+      // Storage can be blocked. The box still closes for this visit.
+    }
+    setGone(true)
+  }
+
+  return (
+    <aside className={`guide-box ${className}`} data-guide={id} role="region" aria-labelledby={titleId}>
+      <h3 id={titleId} className="guide-box-title">
+        {t(lang, 'guide_title')}
+      </h3>
+      <ul>
+        {GUIDE_POINTS[id].map((key) => (
+          <li key={key}>{t(lang, key)}</li>
+        ))}
+      </ul>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <label className="flex min-h-11 cursor-pointer items-center gap-2.5 text-sm font-medium">
+          <input
+            type="checkbox"
+            className="h-4 w-4 shrink-0 accent-[#7c7bb9]"
+            checked={checked}
+            data-guide-never=""
+            onChange={(event) => setChecked(event.target.checked)}
+          />
+          {t(lang, 'guide_never')}
+        </label>
+        <button
+          type="button"
+          className={primaryButton('min-h-11 w-full px-5 py-2 text-sm sm:w-auto')}
+          disabled={!checked}
+          data-guide-confirm=""
+          onClick={confirm}
+        >
+          {t(lang, 'guide_got_it')}
+        </button>
+      </div>
+    </aside>
+  )
+}
+
+export function HintList({ id, items, className = '' }: { id?: string; items: string[]; className?: string }) {
+  if (items.length === 0) return null
+  return (
+    <ul id={id} className={`hint-list ${className}`}>
+      {items.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
+  )
 }
 
 export function MiniSteps({ steps }: { steps: string[] }) {
