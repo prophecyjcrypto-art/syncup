@@ -233,6 +233,8 @@ const en = {
   filter_all: 'All',
   filter_hint: 'All dancers, best times first. Pick people to show only the slots they can all attend.',
   filter_active: 'Showing times these dancers can all attend.',
+  duration_decrease: 'Half an hour shorter',
+  duration_increase: 'Half an hour longer',
 } as const
 
 const zh: { [K in keyof typeof en]: string } = {
@@ -468,6 +470,8 @@ const zh: { [K in keyof typeof en]: string } = {
   filter_all: '全部',
   filter_hint: '預設是全部參加者，可出席人數多的時段排前面。點選參加者後，只顯示這些人都能出席的時段。',
   filter_active: '只顯示這些人都能出席的時段。',
+  duration_decrease: '減少 0.5 小時',
+  duration_increase: '增加 0.5 小時',
 }
 
 export const LANGUAGES: { code: Language; label: string }[] = [

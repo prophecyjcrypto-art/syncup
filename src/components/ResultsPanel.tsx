@@ -3,23 +3,17 @@ import { t } from '../i18n'
 import { useCalendar } from '../lib/calendarContext'
 import { buildIcs, formatSlotText } from '../lib/export'
 import { clearGoogleToken, createCalendarEvents, GOOGLE_CALENDAR_ENABLED, GoogleCalendarError } from '../lib/googleCalendar'
-import { formatLongDate, formatTime, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
+import { formatLongDate, formatTime, getDaysArray, parseISODate, toISODateString } from '../lib/dates'
 import { durationHours, fitDuration, roundHour, SLOT_STEP } from '../lib/timeRange'
 import { availabilityHeatmap, calculateBestSlots, compulsoryReport, sharedFreeByDay } from '../lib/schedule'
-import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
+import { cardClass, textMuted, textPrimary } from '../lib/ui'
 import { GuideNote, InfoTip } from './Guide'
 import type { Campaign, Language, TimeSlot } from '../types'
 import { MonthBoards } from './MonthBoards'
 import { HeatBook, slotMatchesSession, type SessionRange } from './HeatBook'
 
-const LENGTH_PRESETS = [1, 1.5, 2, 2.5, 3]
-
 function slotKey(slot: TimeSlot): string {
   return slot.start.toISOString()
-}
-
-function lengthLabel(hours: number, lang: Language): string {
-  return lang === 'zh' ? `${hours}小時` : `${hours}h`
 }
 
 function windowHours(slot: TimeSlot): { iso: string; startHour: number; endHour: number } {
@@ -148,6 +142,8 @@ export function ResultsPanel({
     onSaveSlots(next)
   }
 
+  const maxHours = roundHour(Math.max(SLOT_STEP, campaign.config.dayEndHour - campaign.config.dayStartHour))
+
   function setLength(hours: number | null) {
     if (!canSetDuration) return
     if (hours == null || !Number.isFinite(hours) || hours <= 0) {
@@ -155,13 +151,21 @@ export function ResultsPanel({
       setSession(null)
       return
     }
-    const span = Math.max(SLOT_STEP, campaign.config.dayEndHour - campaign.config.dayStartHour)
-    const fitted = Math.min(roundHour(hours), span)
+    const fitted = Math.min(Math.max(roundHour(hours), SLOT_STEP), maxHours)
     setDraftHours(fitted)
     setSession((current) =>
       current ? { ...current, ...fitDuration(current, fitted, campaign.config.dayStartHour, campaign.config.dayEndHour) } : current,
     )
     if (fitted !== campaign.config.durationHours) onSaveDuration?.(fitted)
+  }
+
+  function stepLength(delta: number) {
+    if (!canSetDuration) return
+    if (draftHours == null) {
+      if (delta > 0) setLength(SLOT_STEP)
+      return
+    }
+    setLength(roundHour(draftHours + delta * SLOT_STEP))
   }
 
   function applySession(next: SessionRange | null) {
@@ -428,36 +432,33 @@ export function ResultsPanel({
             {selectedDates.size > 0 ? t(lang, 'dates_selected', { n: selectedDates.size }) : t(lang, 'rehearsal_recommendations')}
           </h3>
           {durationUnset ? null : <p className={`mt-1 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'found_slots', { n: listed.length })}</p>}
-          <div className="mt-4 space-y-2">
+          <div data-duration-hours="" className="mt-4 flex scroll-mt-24 items-center gap-3">
             <p className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'rehearsal_length')}</p>
-            <div className="flex flex-wrap gap-2">
-              {LENGTH_PRESETS.map((hour) => (
-                <button
-                  key={hour}
-                  type="button"
-                  data-duration={hour}
-                  disabled={!canSetDuration}
-                  aria-pressed={draftHours === hour}
-                  onClick={() => setLength(hour)}
-                  className={`min-h-11 rounded-full px-3 text-xs font-bold disabled:cursor-default disabled:opacity-50 ${
-                    draftHours === hour ? 'bg-[#7c7bb9] text-white' : 'glass-well'
-                  }`}
-                >
-                  {lengthLabel(hour, lang)}
-                </button>
-              ))}
+            <div className="inline-flex items-center gap-1">
+              <button
+                type="button"
+                data-duration-step="down"
+                aria-label={t(lang, 'duration_decrease')}
+                disabled={!canSetDuration || draftHours == null || draftHours <= SLOT_STEP + 1e-6}
+                onClick={() => stepLength(-1)}
+                className="glass-well flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold leading-none disabled:cursor-default disabled:opacity-40"
+              >
+                −
+              </button>
+              <p data-duration-value="" className={`min-w-[6.25rem] text-center text-sm font-bold tabular-nums ${textPrimary(isDarkMode)}`}>
+                {draftHours == null ? '—' : `${draftHours} ${t(lang, 'hours_unit')}`}
+              </p>
+              <button
+                type="button"
+                data-duration-step="up"
+                aria-label={t(lang, 'duration_increase')}
+                disabled={!canSetDuration || (draftHours != null && draftHours >= maxHours - 1e-6)}
+                onClick={() => stepLength(1)}
+                className="glass-well flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold leading-none disabled:cursor-default disabled:opacity-40"
+              >
+                +
+              </button>
             </div>
-            <select
-              disabled={!canSetDuration}
-              value={draftHours ?? ''}
-              onChange={(event) => setLength(event.target.value === '' ? null : Number(event.target.value))}
-              className={`w-full max-w-xs rounded-xl px-3 py-3 font-bold ${inputClass(isDarkMode)} disabled:cursor-default disabled:opacity-70`}
-            >
-              {campaign.config.durationHours == null ? <option value="">{t(lang, 'choose_length_blank')}</option> : null}
-              {rangeOptions(0.5, 24).map((hour) => (
-                <option key={hour} value={hour}>{hour} {t(lang, 'hours')}</option>
-              ))}
-            </select>
           </div>
           <div className="mt-4 space-y-2">
             <p className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'filter_dancers')}</p>

@@ -145,11 +145,13 @@ const results = renderToStaticMarkup(
   ),
 )
 assert(results.includes('Dancer overlap'), 'results show the half-hour overlap heatmap')
-assert(results.includes('Choose a length'), 'the organizer can choose a length from results')
 assert(results.includes('1 of 1 free'), 'heatmap cells count free dancers')
-const ownerLength = results.match(/<select\b[^>]*>[\s\S]*?Choose a length[\s\S]*?<\/select>/)
-assert(Boolean(ownerLength), 'results include the session length control')
-assert(ownerLength != null && !/^<select\b[^>]*\sdisabled=/.test(ownerLength[0]), 'owners can change the session length')
+assert(!/<select\b/.test(results), 'results length is a stepper, not a dropdown')
+const ownerUp = results.match(/<button\b[^>]*data-duration-step="up"[^>]*>/)
+const ownerDown = results.match(/<button\b[^>]*data-duration-step="down"[^>]*>/)
+assert(ownerUp != null && ownerDown != null, 'results include the hours stepper')
+assert(!/\sdisabled=/.test(ownerUp[0]), 'owners can lengthen the session')
+assert(/\sdisabled=/.test(ownerDown[0]), 'the stepper cannot go below the minimum before a length is chosen')
 assert(!results.includes('Connect Google Calendar'), 'results hide Google Calendar while the flag is off')
 assert(!results.includes('Save to Google Calendar'), 'results hide save-to-calendar while the flag is off')
 assert(results.includes('Export calendar'), 'ICS export stays available')
@@ -169,8 +171,9 @@ const memberResults = renderToStaticMarkup(
   ),
 )
 assert(memberResults.includes('參加者重疊'), 'members still see the overlap heatmap')
-const memberLength = memberResults.match(/<select\b[^>]*>[\s\S]*?選擇時長[\s\S]*?<\/select>/)
-assert(memberLength != null && /^<select\b[^>]*\sdisabled=""/.test(memberLength[0]), 'members cannot change the shared duration')
+assert(!/<select\b/.test(memberResults), 'members do not get a length dropdown')
+const memberSteps = memberResults.match(/<button\b[^>]*data-duration-step="(?:up|down)"[^>]*>/g) ?? []
+assert(memberSteps.length === 2 && memberSteps.every((button) => /\sdisabled=/.test(button)), 'members cannot change the shared duration')
 assert(memberResults.includes('disabled=""'), 'members cannot pin the shortlist')
 assert(!memberResults.includes('用這個時段'), 'members do not get the shortlist button')
 
