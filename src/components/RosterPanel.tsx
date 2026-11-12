@@ -76,9 +76,12 @@ export function RosterPanel({
           </button>
         </p>
       )}
-      <label className="block max-w-md space-y-2">
+      <label className="block max-w-md space-y-2" data-name-field="">
         <span className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'member_name')}</span>
-        <input value={name} onChange={(event) => setName(event.target.value)} className={`w-full rounded-2xl px-4 py-3 font-bold ${inputClass(isDarkMode)}`} />
+        <span className="relative block">
+          {name.trim() === '' ? <PersonPlus /> : null}
+          <input value={name} onChange={(event) => setName(event.target.value)} className={`w-full rounded-2xl py-3 font-bold ${name.trim() === '' ? 'pl-11 pr-4' : 'px-4'} ${inputClass(isDarkMode)}`} />
+        </span>
       </label>
       <AvailabilityEditor
         lang={lang}
@@ -152,5 +155,17 @@ export function RosterPanel({
         )}
       </div>
     </div>
+  )
+}
+
+function PersonPlus() {
+  return (
+    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#f6cf7a]" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <circle cx="7" cy="6" r="2.2" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M3.1 14.4c.6-2.3 2.1-3.4 3.9-3.4s3.3 1.1 3.9 3.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        <path d="M13.1 7.1v4.2M11 9.2h4.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    </span>
   )
 }

@@ -498,14 +498,20 @@ export function ResultsPanel({
                 aria-label={t(lang, 'duration_increase')}
                 disabled={!canSetDuration || (draftHours != null && draftHours >= maxHours - 1e-6)}
                 onClick={() => stepLength(1)}
-                className="glass-well flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold leading-none disabled:cursor-default disabled:opacity-40"
+                className={`glass-well flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold leading-none disabled:cursor-default disabled:opacity-40 ${draftHours == null ? 'duration-cue' : ''}`}
               >
                 +
               </button>
             </div>
           </div>
           <div className="mt-4 space-y-2">
-            <p className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'filter_dancers')}</p>
+            <p className={`inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" className="text-[#f6cf7a]">
+                <circle cx="7" cy="4.2" r="2" stroke="currentColor" strokeWidth="1.3" />
+                <path d="M2.6 12.2c.5-2.2 2.2-3.3 4.4-3.3s3.9 1.1 4.4 3.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+              {t(lang, 'filter_dancers')}
+            </p>
             {dancerFilter.length > 0 ? <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'filter_active')}</p> : null}
             <div className="chip-row chip-wrap py-1">
               <button

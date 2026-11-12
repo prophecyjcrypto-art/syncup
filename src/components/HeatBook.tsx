@@ -87,6 +87,16 @@ function sessionFromDrag(
   return { iso: drag.range.iso, ...resizeToCell('start', index, drag.range, windowStart, windowEnd) }
 }
 
+const BOOKED_ONCE = 'syncup.booked.once'
+
+function readBookedOnce(): boolean {
+  try {
+    return localStorage.getItem(BOOKED_ONCE) === '1'
+  } catch {
+    return false
+  }
+}
+
 export function sessionSummary(range: HourRange | null, lang: Language): string {
   if (!range) return t(lang, 'no_times')
   return `${formatClock(range.startHour)}–${formatClock(range.endHour)} · ${durationHours(range)} ${t(lang, 'hours_unit')}`
@@ -160,6 +170,18 @@ export function HeatBook({
   const gridRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<HeatDrag | null>(null)
   const [preview, setPreview] = useState<{ block: SessionRange; fromIso: string } | null>(null)
+  const [learned, setLearned] = useState(readBookedOnce)
+  const invite = editable && sessions.length === 0 && preview == null && !learned
+
+  useEffect(() => {
+    if (sessions.length === 0 || learned) return
+    try {
+      localStorage.setItem(BOOKED_ONCE, '1')
+    } catch {
+      // The cue can rest for this visit even if storage is blocked.
+    }
+    setLearned(true)
+  }, [sessions.length, learned])
   const focused = sessions.find((item) => item.iso === focusIso) ?? sessions[0] ?? null
   const shown = preview?.block ?? focused
 
@@ -363,7 +385,7 @@ export function HeatBook({
           >
             <div
               ref={gridRef}
-              className="heat-sheet"
+              className={`heat-sheet ${editable ? 'heat-live' : ''}`}
               style={{ gridTemplateColumns: `3.35rem repeat(${heat.length}, minmax(5.1rem, 1fr))`, gridTemplateRows: `auto repeat(${cols}, 2.25rem)` }}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
@@ -375,6 +397,7 @@ export function HeatBook({
                 const picked = sessions.some((item) => item.iso === day.iso) || preview?.block.iso === day.iso
                 const label = formatLongDate(parseISODate(day.iso), lang)
                 const place = { gridColumn: dayIndex + 2, gridRow: 1 }
+                const offerCopy = !picked && (sessions.length > 0 || preview != null)
                 return editable ? (
                   <button
                     key={day.iso}
@@ -385,9 +408,10 @@ export function HeatBook({
                     aria-pressed={picked}
                     disabled={sessions.length === 0 && !preview}
                     onClick={() => onToggleDay(day.iso)}
-                    className={`heat-day ${picked ? 'heat-day-on' : textPrimary(isDarkMode)}`}
+                    className={`heat-day ${picked ? 'heat-day-on' : ''} ${offerCopy ? 'heat-day-add' : ''} ${picked ? '' : textPrimary(isDarkMode)}`}
                     style={place}
                   >
+                    {offerCopy ? <span className="heat-day-plus" aria-hidden="true">+</span> : null}
                     {label}
                   </button>
                 ) : (
@@ -408,7 +432,7 @@ export function HeatBook({
                   ...(preview?.block.iso === day.iso ? [preview.block] : []),
                 ]
                 return (
-                  <div key={day.iso} className="heat-col" data-day={day.iso} style={{ gridColumn: dayIndex + 2, gridRow: `2 / span ${cols}` }}>
+                  <div key={day.iso} className={`heat-col ${invite && dayIndex === 0 ? 'heat-col-invite' : ''}`} data-day={day.iso} style={{ gridColumn: dayIndex + 2, gridRow: `2 / span ${cols}` }}>
                     {day.cells.map((cell, index) => {
                         const ratio = dancers.length === 0 ? 0 : (cell.freeIds.length / dancers.length) * 100
                         const pinned = slots.some((slot) => {

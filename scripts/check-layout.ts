@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdir, writeFile } from 'node:fs/promises'
+import { deflateSync, inflateSync } from 'node:zlib'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 
@@ -190,6 +191,134 @@ async function assertLean(cdp: Cdp, name: string) {
   assert(parsed.guides === 0 && parsed.hit.length === 0, `${name} still explains itself: ${report}`)
 }
 
+function cropPng(png: Buffer, cropX: number, cropY: number, cropWidth: number, cropHeight: number): Buffer {
+  const width = png.readUInt32BE(16)
+  const height = png.readUInt32BE(17 + 3)
+  const color = png[25]
+  const channels = color === 6 ? 4 : color === 2 ? 3 : 0
+  if (!channels || png[24] !== 8) throw new Error('unsupported screenshot png')
+  const idat: Buffer[] = []
+  let offset = 8
+  while (offset < png.length) {
+    const length = png.readUInt32BE(offset)
+    const type = png.toString('ascii', offset + 4, offset + 8)
+    const data = png.subarray(offset + 8, offset + 8 + length)
+    if (type === 'IDAT') idat.push(data)
+    if (type === 'IEND') break
+    offset += 12 + length
+  }
+  const raw = inflateSync(Buffer.concat(idat))
+  const stride = width * channels
+  const rows: Buffer[] = []
+  let pos = 0
+  let prev = Buffer.alloc(stride)
+  for (let y = 0; y < height; y += 1) {
+    const filter = raw[pos]
+    pos += 1
+    const row = Buffer.from(raw.subarray(pos, pos + stride))
+    pos += stride
+    if (filter === 1 || filter === 3 || filter === 4) {
+      for (let i = 0; i < stride; i += 1) {
+        const left = i >= channels ? row[i - channels] : 0
+        const up = prev[i]
+        const upLeft = i >= channels ? prev[i - channels] : 0
+        if (filter === 1) row[i] = (row[i] + left) & 255
+        else if (filter === 3) row[i] = (row[i] + Math.floor((left + up) / 2)) & 255
+        else {
+          const p = left + up - upLeft
+          const pa = Math.abs(p - left)
+          const pb = Math.abs(p - up)
+          const pc = Math.abs(p - upLeft)
+          const base = pa <= pb && pa <= pc ? left : pb <= pc ? up : upLeft
+          row[i] = (row[i] + base) & 255
+        }
+      }
+    } else if (filter === 2) {
+      for (let i = 0; i < stride; i += 1) row[i] = (row[i] + prev[i]) & 255
+    }
+    prev = row
+    rows.push(row)
+  }
+  const x0 = Math.max(0, Math.min(width - 1, cropX))
+  const y0 = Math.max(0, Math.min(height - 1, cropY))
+  const w = Math.max(1, Math.min(width - x0, cropWidth))
+  const h = Math.max(1, Math.min(height - y0, cropHeight))
+  const out = Buffer.alloc(h * (1 + w * channels))
+  for (let y = 0; y < h; y += 1) {
+    const dest = (1 + w * channels) * y
+    out[dest] = 0
+    rows[y0 + y].copy(out, dest + 1, x0 * channels, (x0 + w) * channels)
+  }
+  const compressed = deflateSync(out)
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(w, 0)
+  ihdr.writeUInt32BE(h, 4)
+  ihdr[8] = 8
+  ihdr[9] = color
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type), data])
+    const wrap = Buffer.alloc(12 + data.length)
+    wrap.writeUInt32BE(data.length, 0)
+    body.copy(wrap, 4)
+    wrap.writeUInt32BE(crc32(body), 8 + data.length)
+    return wrap
+  }
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', compressed), chunk('IEND', Buffer.alloc(0))])
+}
+
+function crc32(data: Buffer): number {
+  let crc = ~0
+  for (const byte of data) {
+    crc ^= byte
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1))
+  }
+  return ~crc >>> 0
+}
+
+async function shotVisible(cdp: Cdp, file: string, selector: string, maxHeight = 380) {
+  await cdp.eval(`document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({ block: 'center', inline: 'center' })`)
+  await delay(100)
+  const box = await cdp.eval<{ x: number; y: number; width: number; height: number } | null>(`(() => {
+    const el = document.querySelector(${JSON.stringify(selector)})
+    if (!(el instanceof Element)) return null
+    const rect = el.getBoundingClientRect()
+    const pad = 10
+    const left = Math.max(0, Math.floor(rect.left - pad))
+    const top = Math.max(0, Math.floor(rect.top - pad))
+    const right = Math.min(window.innerWidth, Math.ceil(rect.right + pad))
+    const bottom = Math.min(window.innerHeight, Math.ceil(rect.bottom + pad))
+    const width = right - left
+    const height = Math.min(${maxHeight}, bottom - top)
+    if (width < 8 || height < 8) return null
+    return { x: left, y: top, width, height }
+  })()`)
+  if (!box) throw new Error(`missing visible crop ${selector}`)
+  const result = (await cdp.send('Page.captureScreenshot', { format: 'png' })) as { data: string }
+  await writeFile(file, cropPng(Buffer.from(result.data, 'base64'), box.x, box.y, box.width, box.height))
+}
+
+async function shotAll(cdp: Cdp, file: string, selector: string) {
+  await cdp.eval(`document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({ block: 'center', inline: 'nearest' })`)
+  await delay(80)
+  const box = await cdp.eval<{ x: number; y: number; width: number; height: number } | null>(`(() => {
+    const rects = [...document.querySelectorAll(${JSON.stringify(selector)})]
+      .map((node) => node.getBoundingClientRect())
+      .filter((rect) => rect.width > 0 && rect.bottom > 0 && rect.top < window.innerHeight)
+    if (rects.length === 0) return null
+    const left = Math.max(0, Math.min(...rects.map((rect) => rect.left)) - 8)
+    const top = Math.max(0, Math.min(...rects.map((rect) => rect.top)) - 8)
+    const right = Math.min(window.innerWidth, Math.max(...rects.map((rect) => rect.right)) + 8)
+    const bottom = Math.min(window.innerHeight, Math.max(...rects.map((rect) => rect.bottom)) + 8)
+    const width = Math.floor(right - left)
+    const height = Math.floor(bottom - top)
+    if (width < 8 || height < 8) return null
+    return { x: Math.floor(left), y: Math.floor(top), width, height }
+  })()`)
+  if (!box) throw new Error(`missing group crop ${selector}`)
+  const result = (await cdp.send('Page.captureScreenshot', { format: 'png' })) as { data: string }
+  await writeFile(file, cropPng(Buffer.from(result.data, 'base64'), box.x, box.y, box.width, box.height))
+}
+
 async function shotTop(cdp: Cdp, file: string, height: number) {
   const box = await cdp.eval<{ x: number; y: number; width: number; height: number } | null>(`(() => {
     const main = document.querySelector('main') ?? document.body
@@ -362,6 +491,12 @@ async function main() {
         assert(grids === 0, `${item.name} still has a drag grid`)
       }
       await assertLean(cdp, item.name)
+      if (item.path.includes('results')) {
+        const invites = await cdp.eval<number>(`document.querySelectorAll('.heat-col-invite').length`)
+        assert(invites === 1, `${item.name} is missing the empty-grid cue (${invites})`)
+        if (item.width < 800) await shotVisible(cdp, '/opt/cursor/artifacts/afford-results-phone-empty.png', '.heat-col-invite', 420)
+      }
+      if (item.path.includes('organizers')) await shotVisible(cdp, '/opt/cursor/artifacts/afford-organizers-phone.png', '[data-name-field]', 180)
       if (item.clean) await shotTop(cdp, item.clean, item.width < 800 ? 640 : 520)
       if (item.shot) await shot(cdp, item.shot)
     }
@@ -396,6 +531,17 @@ async function main() {
     assert(committed.includes('19:00') && committed.includes('21:30') && committed.includes('2.5'), `released summary was "${committed}"`)
     const handles = await cdp.eval<number>(`document.querySelectorAll('[data-edge="start"], [data-edge="end"]').length`)
     assert(handles === 2, `booked block is missing resize handles (${handles})`)
+    const afford = await cdp.eval<string>(`JSON.stringify({
+      invite: document.querySelectorAll('.heat-col-invite').length,
+      plus: document.querySelectorAll('.heat-day-plus').length,
+      learned: localStorage.getItem('syncup.booked.once') ?? '',
+    })`)
+    const affordParsed = JSON.parse(afford) as { invite: number; plus: number; learned: string }
+    assert(affordParsed.invite === 0 && affordParsed.plus > 0 && affordParsed.learned === '1', `booking cues were ${afford}`)
+    await shotAll(cdp, '/opt/cursor/artifacts/afford-results-phone-days.png', '[data-day-toggle]')
+    await cdp.eval(`document.querySelector('[data-focused]')?.scrollIntoView({ block: 'center', inline: 'center' })`)
+    await delay(80)
+    await shotVisible(cdp, '/opt/cursor/artifacts/afford-results-phone-block.png', '[data-focused]', 280)
     await cdp.eval(`document.querySelector('[data-booked]')?.scrollIntoView({ block: 'center' })`)
     await delay(80)
     await shot(cdp, '/opt/cursor/artifacts/results-block-mobile.png')
@@ -511,6 +657,9 @@ async function main() {
     await assertLean(cdp, 'results desktop before booking')
     const desktopBooked = await dragHours(cdp, '19', '21', 'mouse', true)
     assert(desktopBooked.includes('19:00') && desktopBooked.includes('2.5'), `desktop block was "${desktopBooked}"`)
+    await cdp.eval(`document.querySelector('[data-focused]')?.scrollIntoView({ block: 'center', inline: 'center' })`)
+    await delay(80)
+    await shotVisible(cdp, '/opt/cursor/artifacts/afford-results-desktop-block.png', '[data-focused]', 280)
     await cdp.eval(`document.querySelector('[data-booked]')?.scrollIntoView({ block: 'center', inline: 'center' })`)
     await delay(80)
     await shot(cdp, '/opt/cursor/artifacts/results-block-desktop.png')

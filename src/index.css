@@ -420,6 +420,19 @@
 
 button.heat-day {
   cursor: pointer;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.heat-day-plus {
+  color: #f6cf7a;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.heat-day-add:not(:disabled) {
+  box-shadow: inset 0 0 0 1px rgba(246, 207, 122, 0.55), 0 0 10px rgba(246, 207, 122, 0.18);
 }
 
 button.heat-day:disabled {
@@ -456,6 +469,15 @@ button.heat-day:disabled {
   touch-action: none;
 }
 
+.heat-live .heat-cell {
+  cursor: grab;
+}
+
+.heat-live .heat-cell:active,
+.heat-block-label:active {
+  cursor: grabbing;
+}
+
 .heat-cell-pinned {
   outline: 2px solid #f6cf7a;
   outline-offset: -2px;
@@ -487,7 +509,26 @@ button.heat-day:disabled {
 
 .heat-block-focus {
   border-color: #f6cf7a;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+  animation: heat-breathe 2.8s ease-in-out infinite;
+}
+
+.heat-col-invite {
+  border-radius: 0.7rem;
+  outline: 1.5px solid rgba(246, 207, 122, 0.7);
+  outline-offset: 2px;
+  animation: heat-breathe 2.8s ease-in-out infinite;
+}
+
+@keyframes heat-breathe {
+  0%,
+  100% {
+    outline-color: rgba(246, 207, 122, 0.4);
+    box-shadow: 0 0 0 1px rgba(246, 207, 122, 0.18);
+  }
+  50% {
+    outline-color: #f6cf7a;
+    box-shadow: 0 0 16px rgba(246, 207, 122, 0.38);
+  }
 }
 
 .heat-block-label {
@@ -507,7 +548,7 @@ button.heat-day:disabled {
   right: 0;
   left: 0;
   z-index: 3;
-  height: 0.7rem;
+  height: 2.75rem;
   cursor: ns-resize;
   touch-action: none;
 }
@@ -516,11 +557,9 @@ button.heat-day:disabled {
   content: '';
   position: absolute;
   left: 50%;
-  width: 1.35rem;
-  height: 0.28rem;
-  border-radius: 999px;
+  width: 0.85rem;
+  height: 0.5rem;
   background: #f6cf7a;
-  box-shadow: 0 0 0 3px rgba(78, 76, 134, 0.45);
   transform: translateX(-50%);
 }
 
@@ -529,7 +568,8 @@ button.heat-day:disabled {
 }
 
 .heat-edge-start::after {
-  top: 0.12rem;
+  top: 0.35rem;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
 }
 
 .heat-edge-end {
@@ -537,7 +577,13 @@ button.heat-day:disabled {
 }
 
 .heat-edge-end::after {
-  bottom: 0.12rem;
+  bottom: 0.35rem;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+.duration-cue {
+  color: #f6cf7a;
+  box-shadow: 0 0 0 1.5px rgba(246, 207, 122, 0.85), 0 0 12px rgba(246, 207, 122, 0.28);
 }
 
 .dock {
