@@ -213,109 +213,195 @@
   display: none;
 }
 
-.cal-book-scroll {
-  max-height: min(32rem, 62vh);
+.heat-scroll {
+  max-width: 100%;
+  max-height: min(32rem, 64vh);
   overflow: auto;
   border-radius: 1rem;
   outline: none;
 }
 
-.cal-book-track {
-  position: relative;
+.heat-sheet {
+  display: grid;
+  width: max-content;
+  min-width: 100%;
+  column-gap: 2px;
+  row-gap: 2px;
   user-select: none;
   -webkit-user-select: none;
 }
 
-.cal-book-row {
-  display: flex;
-  height: 2.25rem;
-  align-items: stretch;
+.heat-gutter,
+.heat-time,
+.heat-day {
+  background: rgba(16, 16, 20, 0.96);
 }
 
-.cal-book-time {
+.heat-gutter,
+.heat-time {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+}
+
+.heat-gutter,
+.heat-day {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.heat-gutter {
+  left: 0;
+  z-index: 6;
+}
+
+.heat-time {
   display: flex;
-  width: 3.5rem;
-  flex: none;
   align-items: center;
-  padding-right: 0.35rem;
   color: #a1a1aa;
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  touch-action: pan-y;
+  touch-action: pan-x pan-y;
 }
 
-.cal-book-cell {
-  flex: 1;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  touch-action: none;
-}
-
-.theme-light .cal-book-cell {
-  border-top-color: rgba(0, 0, 0, 0.06);
-}
-
-.cal-book-block {
-  position: absolute;
-  right: 0.35rem;
-  left: 3.5rem;
-  z-index: 2;
-  overflow: visible;
-  border-radius: 0.75rem;
-  background: #7c7bb9;
-  color: white;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
-  touch-action: none;
-}
-
-.cal-book-label {
+.heat-day {
   display: flex;
-  height: 100%;
   align-items: center;
-  padding: 0.35rem 0.7rem;
-  font-size: 0.8rem;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.2rem 0.15rem;
+  border: 0;
+  background: rgba(16, 16, 20, 0.96);
+  color: inherit;
+  font: inherit;
+  font-size: 0.62rem;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.15;
+  text-align: center;
+}
+
+button.heat-day {
+  cursor: pointer;
+}
+
+button.heat-day:disabled {
+  cursor: default;
+}
+
+.heat-day-on,
+.theme-light .heat-day-on {
+  background: #f6cf7a;
+  color: #2a2416;
+}
+
+.theme-light .heat-gutter,
+.theme-light .heat-time,
+.theme-light .heat-day {
+  background: rgba(245, 245, 247, 0.96);
+}
+
+.heat-col {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.heat-cell {
+  display: flex;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.45rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  touch-action: none;
+}
+
+.heat-cell-pinned {
+  outline: 2px solid #f6cf7a;
+  outline-offset: -2px;
+}
+
+.heat-col {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.heat-block {
+  position: absolute;
+  z-index: 2;
+  right: 1px;
+  left: 1px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 2px solid rgba(246, 207, 122, 0.7);
+  border-radius: 0.55rem;
+  background: #4e4c86;
+  color: white;
+  box-shadow: none;
+  touch-action: none;
+}
+
+.heat-block-focus {
+  border-color: #f6cf7a;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+}
+
+.heat-block-label {
+  width: 100%;
+  padding: 0 0.3rem;
+  overflow: hidden;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.05;
+  text-align: center;
   cursor: grab;
   touch-action: none;
 }
 
-.cal-book-handle {
+.heat-edge {
   position: absolute;
   right: 0;
   left: 0;
   z-index: 3;
-  height: 1.35rem;
+  height: 0.7rem;
   cursor: ns-resize;
   touch-action: none;
 }
 
-.cal-book-handle::after {
+.heat-edge::after {
   content: '';
   position: absolute;
   left: 50%;
-  width: 2.25rem;
-  height: 0.3rem;
+  width: 1.35rem;
+  height: 0.28rem;
   border-radius: 999px;
   background: #f6cf7a;
-  box-shadow: 0 0 0 3px rgba(124, 123, 185, 0.35);
+  box-shadow: 0 0 0 3px rgba(78, 76, 134, 0.45);
   transform: translateX(-50%);
 }
 
-.cal-book-handle-start {
-  top: -0.7rem;
+.heat-edge-start {
+  top: 0;
 }
 
-.cal-book-handle-start::after {
-  top: 0.45rem;
+.heat-edge-start::after {
+  top: 0.12rem;
 }
 
-.cal-book-handle-end {
-  bottom: -0.7rem;
+.heat-edge-end {
+  bottom: 0;
 }
 
-.cal-book-handle-end::after {
-  bottom: 0.45rem;
+.heat-edge-end::after {
+  bottom: 0.12rem;
 }
 
 .dock {

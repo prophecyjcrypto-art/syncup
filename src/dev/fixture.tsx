@@ -6,10 +6,28 @@ import { Landing } from '../components/Landing'
 import { ResultsPanel } from '../components/ResultsPanel'
 import { SetupPanel } from '../components/SetupPanel'
 import { CalendarProvider } from '../lib/calendarContext'
+import { parseISODate, setTime } from '../lib/dates'
 import { textMuted, textPrimary } from '../lib/ui'
-import type { Campaign, Language } from '../types'
+import type { BlockKind, Campaign, Language, TimeBlock } from '../types'
 
 const lang: Language = new URLSearchParams(window.location.search).get('lang') === 'en' ? 'en' : 'zh'
+
+const previewDays = ['2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15', '2026-11-16', '2026-11-17', '2026-11-18']
+
+function span(iso: string, start: number, end: number, kind: BlockKind): TimeBlock {
+  const day = parseISODate(iso)
+  return {
+    id: `${iso}-${kind}-${start}-${end}`,
+    kind,
+    start: setTime(day, start),
+    end: setTime(day, end),
+    wholeDay: false,
+  }
+}
+
+function eachDay(start: number, end: number, kind: BlockKind): TimeBlock[] {
+  return previewDays.map((iso) => span(iso, start, end, kind))
+}
 
 const campaign: Campaign = {
   id: 'demo',
@@ -17,18 +35,18 @@ const campaign: Campaign = {
   name: 'Demo',
   remarks: '',
   config: {
-    startDate: '2026-11-01',
-    endDate: '2026-12-20',
+    startDate: '2026-11-12',
+    endDate: '2026-11-18',
     durationHours: null,
     dayStartHour: 9,
     dayEndHour: 22,
     attendanceTolerance: 0,
   },
   expiryDate: '2026-12-31T23:59:59.000Z',
-  onDays: ['2026-11-16', '2026-12-16'],
-  compulsoryDays: ['2026-12-16', '2026-12-17'],
+  onDays: [],
+  compulsoryDays: [],
   savedSlots: [],
-  createdAt: '2026-11-01T00:00:00.000Z',
+  createdAt: '2026-11-12T00:00:00.000Z',
   adminCode: 'ADMIN',
   organizerCode: 'ORG',
   participantCode: 'PART',
@@ -46,10 +64,37 @@ const campaign: Campaign = {
   ],
   dancers: [
     {
-      id: 'dancer-1',
+      id: 'dancer-jie',
       userId: null,
-      name: '參加者',
-      email: 'guest@example.com',
+      name: '小杰',
+      email: 'jie@example.com',
+      role: 'dancer',
+      blocks: eachDay(18, 22, 'unavailable'),
+      lastUpdated: null,
+    },
+    {
+      id: 'dancer-min',
+      userId: null,
+      name: '阿敏',
+      email: 'min@example.com',
+      role: 'dancer',
+      blocks: eachDay(9, 12, 'unavailable'),
+      lastUpdated: null,
+    },
+    {
+      id: 'dancer-ren',
+      userId: null,
+      name: '阿仁',
+      email: 'ren@example.com',
+      role: 'dancer',
+      blocks: eachDay(9, 13, 'available'),
+      lastUpdated: null,
+    },
+    {
+      id: 'dancer-su',
+      userId: null,
+      name: '小蘇',
+      email: 'su@example.com',
       role: 'dancer',
       blocks: [],
       lastUpdated: null,
