@@ -84,17 +84,17 @@ export function FlowSteps({
     results: t(lang, 'results'),
   }
   return (
-    <ol className="mx-auto mb-8 flex w-full max-w-4xl flex-wrap items-center gap-x-2 gap-y-3 text-sm">
+    <ol className="chip-row mx-auto w-full max-w-4xl text-sm">
       {FLOW.map((step, index) => {
         const active = step === current
         const can = enabled[step]
         return (
-          <li key={step} className="flex items-center gap-2">
+          <li key={step} className="flex shrink-0 items-center gap-1">
             <button
               type="button"
               disabled={!can}
               onClick={() => onJump(step)}
-              className={`flex items-center gap-2 rounded-full py-1 pr-2 disabled:cursor-default ${active ? '' : 'opacity-55'}`}
+              className={`flex min-h-11 items-center gap-2 rounded-full pr-2 disabled:cursor-default ${active ? '' : 'opacity-55'}`}
             >
               <span
                 className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] ${
@@ -103,7 +103,7 @@ export function FlowSteps({
               >
                 {index + 1}
               </span>
-              <span className={active ? 'font-medium' : ''}>{labels[step]}</span>
+              <span className={`whitespace-nowrap ${active ? 'font-medium' : ''}`}>{labels[step]}</span>
             </button>
             {index < FLOW.length - 1 && <span className="opacity-25">—</span>}
           </li>

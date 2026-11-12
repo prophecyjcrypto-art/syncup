@@ -116,8 +116,8 @@ export function AvailabilityEditor({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-      <div className={`lg:col-span-5 ${cardClass(isDarkMode)} h-fit rounded-[2rem] p-6`}>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-8">
+      <div className={`lg:col-span-5 ${cardClass(isDarkMode)} h-fit rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6`}>
         <h3 className={`font-serif text-2xl font-semibold ${textPrimary(isDarkMode)}`}>{t(lang, 'your_submissions')}</h3>
         <p className={`mt-3 text-sm leading-relaxed ${textMuted(isDarkMode)}`}>{t(lang, 'availability_hint')}</p>
         {missingDays.length > 0 && (
@@ -172,7 +172,7 @@ export function AvailabilityEditor({
                   <button
                     type="button"
                     onClick={() => onChange(blocks.filter((item) => item.id !== block.id))}
-                    className="text-xl text-zinc-400 hover:text-[#f19ba8]"
+                    className="flex h-11 w-11 items-center justify-center text-xl text-zinc-400 hover:text-[#f19ba8]"
                     aria-label={t(lang, 'remove')}
                   >
                     ×
@@ -184,7 +184,7 @@ export function AvailabilityEditor({
         </div>
       </div>
 
-      <div className={`lg:col-span-7 ${cardClass(isDarkMode)} rounded-[2rem] p-6 ${disabled ? 'opacity-70' : ''}`}>
+      <div className={`min-w-0 lg:col-span-7 ${cardClass(isDarkMode)} rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6 ${disabled ? 'opacity-70' : ''}`}>
         <MiniSteps steps={[t(lang, 'avail_step_1'), t(lang, 'avail_step_2'), t(lang, 'avail_step_3')]} />
         <p className={`mb-4 text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'legend_marks')}</p>
         <div className="glass-well mb-4 flex rounded-xl p-1">
@@ -224,7 +224,7 @@ export function AvailabilityEditor({
                 disabled={disabled}
                 onClick={() => toggleDate(iso)}
                 aria-label={formatLongDate(day, lang)}
-                className={`relative flex aspect-square w-full flex-col items-center justify-center rounded-xl text-sm font-bold ${
+                className={`cal-day relative flex w-full flex-col items-center justify-center rounded-lg text-xs font-bold leading-none ${
                   chosen
                     ? positive
                       ? 'bg-[#93ba8c] text-white'
@@ -234,10 +234,7 @@ export function AvailabilityEditor({
                   compulsoryDays.includes(iso) ? 'outline outline-2 outline-[#f19ba8]' : ''
                 }`}
               >
-                {onDays.includes(iso) && <span className="absolute left-1 top-1 text-[8px]">★</span>}
-                {compulsoryDays.includes(iso) && (
-                  <span className="absolute right-1 top-1 text-[8px]">{t(lang, 'must_badge')}</span>
-                )}
+                {onDays.includes(iso) ? '★' : ''}
                 {day.getDate()}
                 <span className="mt-1 flex gap-1">
                   {kinds.has('unavailable') && <i className="h-1.5 w-1.5 rounded-full bg-[#f19ba8]" />}
@@ -297,7 +294,7 @@ export function AvailabilityEditor({
               type="button"
               disabled={disabled}
               onClick={() => addSelection(mode, false)}
-              className={`rounded-2xl py-3 text-sm font-bold text-white ${positive ? 'bg-[#93ba8c]' : 'bg-[#f19ba8]'}`}
+              className={`min-h-11 rounded-2xl py-3 text-sm font-bold text-white ${positive ? 'bg-[#93ba8c]' : 'bg-[#f19ba8]'}`}
             >
               {t(lang, 'apply')}
             </button>
@@ -305,7 +302,7 @@ export function AvailabilityEditor({
               type="button"
               disabled={disabled}
               onClick={() => addSelection('unavailable', true)}
-              className="rounded-2xl bg-[#f19ba8]/20 py-3 text-sm font-bold text-[#f19ba8]"
+              className="min-h-11 rounded-2xl bg-[#f19ba8]/20 py-3 text-sm font-bold text-[#f19ba8]"
             >
               {t(lang, 'whole_day_na')}
             </button>
@@ -313,7 +310,7 @@ export function AvailabilityEditor({
               type="button"
               disabled={disabled}
               onClick={() => addSelection('available', true)}
-              className="rounded-2xl bg-[#93ba8c]/20 py-3 text-sm font-bold text-[#93ba8c]"
+              className="min-h-11 rounded-2xl bg-[#93ba8c]/20 py-3 text-sm font-bold text-[#93ba8c]"
             >
               {t(lang, 'whole_day_avail')}
             </button>

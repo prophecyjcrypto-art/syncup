@@ -188,9 +188,9 @@ const en = {
   guide_setup: 'Start with the dates and daily hours. Event days and compulsory days can wait.',
   guide_choreo: 'Add each organizer and the times they can or cannot attend. A result appears only when every checked organizer is free.',
   guide_dancers: 'Add participants the same way, or send the participant link so they fill this in themselves.',
-  guide_results: 'Check the organizers who must be there. The overlap shows when dancers are free — choose a session length, then star a time.',
+  guide_results: 'Check the organizers who must be there. Drag a session on the time grid — it shows the start, end, and length — then star a time.',
   heat_title: 'Dancer overlap',
-  heat_hint: 'Deeper color means more dancers are free in that half hour. Choose the session length after you see where they overlap.',
+  heat_hint: 'Deeper color means more dancers are free in that half hour. Drag a session above, then star a time that fits.',
   choose_length_blank: 'Choose a length',
   choose_length_first: 'Duration is not set yet. Choose a session length after you look at the overlap.',
   use_this_time: 'Use this time',
@@ -224,6 +224,11 @@ const en = {
   calendar_saved: 'Saved {n} events to Google Calendar.',
   calendar_empty: 'Shortlist or select a time first.',
   calendar_scope: 'Google did not allow calendar access. Connect again and approve calendar permission. The Google sign-in app also needs the Calendar API enabled.',
+  hours_unit: 'hours',
+  range_empty: 'Drag across the slots',
+  clear_range: 'Clear',
+  drag_hint: 'Drag across the times to book a session. Drag the block to move it, or pull the top or bottom edge to change the start or end.',
+  session_grid: 'Session time',
 } as const
 
 const zh: { [K in keyof typeof en]: string } = {
@@ -414,9 +419,9 @@ const zh: { [K in keyof typeof en]: string } = {
   guide_setup: '先設定日期與每日時間。活動日和必須出席可以稍後再加。',
   guide_choreo: '加入每位主辦人可出席或無法出席的時間。只有每位已勾選的主辦人都有空，才會出現結果。',
   guide_dancers: '用同樣方式加入參加者，或從我的活動複製參加者連結，讓他們自行填寫。',
-  guide_results: '勾選必須在場的主辦人。重疊圖顯示參加者何時有空。先選擇時長，再點星星把時間留在候選清單。',
+  guide_results: '勾選必須在場的主辦人。在時間格子上拖曳一個時段，會顯示開始、結束與時長，再點星星把時間留在候選清單。',
   heat_title: '參加者重疊',
-  heat_hint: '顏色越深，代表越多參加者在那半小時有空。看過重疊後再選擇時長。',
+  heat_hint: '顏色越深，代表越多參加者在那半小時有空。先在上方拖曳一個時段，再把合適的時間加星號。',
   choose_length_blank: '選擇時長',
   choose_length_first: '尚未設定時長。請先看重疊，再選擇練習時長。',
   use_this_time: '用這個時段',
@@ -450,6 +455,11 @@ const zh: { [K in keyof typeof en]: string } = {
   calendar_saved: '已將 {n} 個活動儲存到 Google 日曆。',
   calendar_empty: '請先將時間加入候選，或選取一個時間。',
   calendar_scope: 'Google 未允許日曆存取。請重新連接並同意日曆權限。Google 登入應用程式也必須啟用 Calendar API。',
+  hours_unit: '小時',
+  range_empty: '在格子上拖曳選取',
+  clear_range: '清除',
+  drag_hint: '在時間上拖曳訂下時段。拖曳色塊可移動，拉上緣或下緣可調整開始或結束。',
+  session_grid: '練習時段',
 }
 
 export const LANGUAGES: { code: Language; label: string }[] = [

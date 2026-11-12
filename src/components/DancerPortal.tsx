@@ -66,7 +66,7 @@ export function DancerPortal({
       </button>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className={`font-serif text-4xl font-semibold ${textPrimary(isDarkMode)}`}>{campaign.name}</h2>
+          <h2 className={`font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>{campaign.name}</h2>
           <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>
             {role === 'choreographer' ? t(lang, 'choreographer') : t(lang, 'dancer')} · {email}
           </p>
@@ -103,9 +103,11 @@ export function DancerPortal({
         disabled={locked}
       />
       {!locked && (
-        <button type="button" disabled={busy} onClick={() => void save()} className="rounded-full btn-glow bg-[#7c7bb9] px-8 py-3 font-bold text-white disabled:opacity-40">
+        <div className="dock">
+        <button type="button" disabled={busy} onClick={() => void save()} className="min-h-11 w-full rounded-full btn-glow bg-[#7c7bb9] px-8 py-3 font-bold text-white disabled:opacity-40 sm:w-auto">
           {saved && !busy ? t(lang, 'saved_ok') : busy ? t(lang, 'loading') : t(lang, 'sync_changes')}
         </button>
+        </div>
       )}
     </div>
   )

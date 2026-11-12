@@ -28,14 +28,14 @@ export function MonthBoards({
           >
             {month.label}
           </h4>
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
             {labels.map((label) => (
               <div key={`${month.key}-${label}`} className={`text-center text-[10px] font-bold ${textMuted(isDarkMode)}`}>
                 {label}
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
             {month.cells.map((day, index) =>
               day ? (
                 <div key={toISODateString(day)}>{renderDay(day)}</div>

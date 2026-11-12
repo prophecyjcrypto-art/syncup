@@ -59,14 +59,14 @@ export function RosterPanel({
       <button type="button" onClick={onBack} className={`text-xs font-bold uppercase ${textMuted(isDarkMode)}`}>
         ← {t(lang, 'campaigns')}
       </button>
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className={`font-serif text-4xl font-semibold ${textPrimary(isDarkMode)}`}>
+          <h2 className={`font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
             {variant === 'choreographer' ? t(lang, 'roster_header_leadership') : t(lang, 'roster_header_members')}
           </h2>
           <GuideNote>{variant === 'choreographer' ? t(lang, 'guide_choreo') : t(lang, 'guide_dancers')}</GuideNote>
         </div>
-        <button type="button" onClick={onNext} className={`rounded-full px-6 py-3 text-sm font-bold ${accent}`}>
+        <button type="button" onClick={onNext} className={`min-h-11 w-full rounded-full px-6 py-3 text-sm font-bold sm:w-auto ${accent}`}>
           {variant === 'choreographer' ? t(lang, 'next_dancers') : t(lang, 'view_results')}
         </button>
       </div>
@@ -91,9 +91,11 @@ export function RosterPanel({
         blocks={blocks}
         onChange={setBlocks}
       />
-      <button type="button" disabled={busy || !name.trim()} onClick={() => void save()} className="rounded-full btn-glow bg-[#7c7bb9] px-8 py-3 font-bold text-white disabled:opacity-40">
+      <div className="dock">
+      <button type="button" disabled={busy || !name.trim()} onClick={() => void save()} className="min-h-11 w-full rounded-full btn-glow bg-[#7c7bb9] px-8 py-3 font-bold text-white disabled:opacity-40 sm:w-auto">
         {busy ? t(lang, 'loading') : t(lang, 'save_member')}
       </button>
+      </div>
       <div className="grid gap-4 md:grid-cols-2">
         {people.length === 0 ? (
           <p className={`md:col-span-2 py-10 text-center text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'empty_people')}</p>
