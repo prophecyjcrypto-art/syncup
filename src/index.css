@@ -215,74 +215,101 @@
 
 .heat-scroll {
   max-width: 100%;
-  max-height: min(24rem, 58vh);
+  max-height: min(32rem, 64vh);
   overflow: auto;
   border-radius: 1rem;
   outline: none;
 }
 
-.heat-track {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.heat-sheet {
   width: max-content;
   min-width: 100%;
   user-select: none;
   -webkit-user-select: none;
 }
 
-.heat-row {
+.heat-head,
+.heat-body {
   display: flex;
   align-items: stretch;
   gap: 2px;
-  min-height: 2.25rem;
 }
 
-.heat-slots {
-  position: relative;
+.heat-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: rgba(16, 16, 20, 0.96);
+}
+
+.theme-light .heat-head {
+  background: rgba(245, 245, 247, 0.96);
+}
+
+.heat-gutter,
+.heat-time {
+  flex: none;
+  width: 3.35rem;
+  background: rgba(16, 16, 20, 0.96);
+}
+
+.heat-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 6;
+}
+
+.heat-times {
   display: flex;
   flex: none;
+  flex-direction: column;
   gap: 2px;
 }
 
-.heat-label {
+.heat-time {
   position: sticky;
   left: 0;
   z-index: 4;
   display: flex;
-  flex: none;
   align-items: center;
-  width: 6.25rem;
-  padding-right: 0.35rem;
-  overflow: hidden;
-  background: rgba(16, 16, 20, 0.94);
-  color: inherit;
-  font-size: 0.65rem;
+  height: 2.25rem;
+  color: #a1a1aa;
+  font-size: 0.62rem;
   font-weight: 700;
-  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
   touch-action: pan-x pan-y;
 }
 
-.theme-light .heat-label {
-  background: rgba(245, 245, 247, 0.94);
+.heat-day,
+.heat-col {
+  flex: 1 0 5.1rem;
+  min-width: 5.1rem;
 }
 
-.heat-axis,
-.heat-cell {
-  width: 2.25rem;
-  flex: none;
-}
-
-.heat-axis {
+.heat-day {
   display: flex;
-  align-items: end;
+  align-items: center;
   justify-content: center;
-  height: 1rem;
-  color: #a1a1aa;
-  font-size: 0.56rem;
+  min-height: 2.5rem;
+  padding: 0.2rem 0.15rem;
+  background: rgba(16, 16, 20, 0.96);
+  font-size: 0.62rem;
   font-weight: 700;
-  line-height: 1;
-  touch-action: pan-x;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.theme-light .heat-gutter,
+.theme-light .heat-time,
+.theme-light .heat-day {
+  background: rgba(245, 245, 247, 0.96);
+}
+
+.heat-col {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .heat-cell {
@@ -304,11 +331,11 @@
 .heat-block {
   position: absolute;
   z-index: 2;
-  top: 1px;
-  bottom: 1px;
+  right: 1px;
+  left: 1px;
   display: flex;
   align-items: center;
-  min-width: 0;
+  overflow: hidden;
   border: 2px solid #f6cf7a;
   border-radius: 0.55rem;
   background: #4e4c86;
@@ -319,51 +346,52 @@
 
 .heat-block-label {
   width: 100%;
-  padding: 0 0.4rem;
+  padding: 0 0.3rem;
   overflow: hidden;
   font-size: 0.62rem;
   font-weight: 700;
   line-height: 1.05;
+  text-align: center;
   cursor: grab;
   touch-action: none;
 }
 
 .heat-edge {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  right: 0;
+  left: 0;
   z-index: 3;
-  width: 0.85rem;
-  cursor: ew-resize;
+  height: 0.7rem;
+  cursor: ns-resize;
   touch-action: none;
 }
 
 .heat-edge::after {
   content: '';
   position: absolute;
-  top: 50%;
-  width: 0.28rem;
-  height: 1.05rem;
+  left: 50%;
+  width: 1.35rem;
+  height: 0.28rem;
   border-radius: 999px;
   background: #f6cf7a;
   box-shadow: 0 0 0 3px rgba(78, 76, 134, 0.45);
-  transform: translateY(-50%);
+  transform: translateX(-50%);
 }
 
 .heat-edge-start {
-  left: 0;
+  top: 0;
 }
 
 .heat-edge-start::after {
-  left: 0.15rem;
+  top: 0.12rem;
 }
 
 .heat-edge-end {
-  right: 0;
+  bottom: 0;
 }
 
 .heat-edge-end::after {
-  right: 0.15rem;
+  bottom: 0.12rem;
 }
 
 .dock {

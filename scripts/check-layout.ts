@@ -101,12 +101,16 @@ async function dragEdge(cdp: Cdp, toHour: string) {
     const scroller = row.closest('[data-slot-grid]')
     if (!(scroller instanceof HTMLElement)) return 'missing'
     scroller.scrollIntoView({ block: 'center' })
-    for (let attempt = 0; attempt < 4; attempt += 1) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
       const a = handle.getBoundingClientRect()
       const b = cell.getBoundingClientRect()
       const box = scroller.getBoundingClientRect()
       scroller.scrollLeft += (a.left + b.right) / 2 - (box.left + box.width / 2)
       scroller.scrollTop += (a.top + b.bottom) / 2 - (box.top + box.height / 2)
+      const a2 = handle.getBoundingClientRect()
+      const b2 = cell.getBoundingClientRect()
+      const mid = (Math.min(a2.top, b2.top) + Math.max(a2.bottom, b2.bottom)) / 2
+      window.scrollBy(0, mid - window.innerHeight / 2)
     }
     function center(el) {
       const rect = el.getBoundingClientRect()
@@ -137,14 +141,16 @@ async function dragHours(cdp: Cdp, fromHour: string, toHour: string, pointerType
     const scroller = row.closest('[data-slot-grid]')
     if (!(scroller instanceof HTMLElement)) return 'missing'
     scroller.scrollIntoView({ block: 'center' })
-    for (let attempt = 0; attempt < 4; attempt += 1) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
       const a = startEl.getBoundingClientRect()
       const b = endEl.getBoundingClientRect()
       const box = scroller.getBoundingClientRect()
       scroller.scrollLeft += (a.left + b.right) / 2 - (box.left + box.width / 2)
       scroller.scrollTop += (a.top + b.bottom) / 2 - (box.top + box.height / 2)
-      const page = row.getBoundingClientRect()
-      window.scrollBy(0, (page.top + page.bottom) / 2 - window.innerHeight / 2)
+      const a2 = startEl.getBoundingClientRect()
+      const b2 = endEl.getBoundingClientRect()
+      const mid = (Math.min(a2.top, b2.top) + Math.max(a2.bottom, b2.bottom)) / 2
+      window.scrollBy(0, mid - window.innerHeight / 2)
     }
     await new Promise((resolve) => setTimeout(resolve, 40))
     function center(el) {
@@ -166,7 +172,7 @@ async function dragHours(cdp: Cdp, fromHour: string, toHour: string, pointerType
     }
     const start = center(startEl)
     const end = center(endEl)
-    const inside = (point) => point.x >= 0 && point.x <= window.innerWidth && point.y >= 0 && point.y <= window.innerHeight
+    const inside = (point) => point.x >= 4 && point.x <= window.innerWidth - 4 && point.y >= 4 && point.y <= window.innerHeight - 4
     if (!inside(start) || !inside(end)) {
       return 'offscreen ' + JSON.stringify({ start, end, innerWidth: window.innerWidth, innerHeight: window.innerHeight, sameRow: startEl.parentElement === endEl.parentElement })
     }
@@ -319,7 +325,7 @@ async function main() {
     await shot(cdp, '/opt/cursor/artifacts/results_phone_session_block.png')
     await cdp.eval(`document.querySelector('[data-duration-hours]')?.scrollIntoView({ block: 'start' })`)
     await delay(80)
-    await shot(cdp, '/opt/cursor/artifacts/results_phone_hours_stepper.png')
+    await shot(cdp, '/opt/cursor/artifacts/results_phone_time_down.png')
     await cdp.eval(`(document.querySelector('[data-selected-slot]') ?? document.querySelector('[data-slot-card]'))?.scrollIntoView({ block: 'center' })`)
     await delay(80)
     await shot(cdp, '/opt/cursor/artifacts/results_phone_filtered_cards.png')
@@ -350,7 +356,7 @@ async function main() {
     await shot(cdp, '/opt/cursor/artifacts/results_desktop_session_block.png')
     await cdp.eval(`document.querySelector('[data-duration-hours]')?.scrollIntoView({ block: 'start' })`)
     await delay(80)
-    await shot(cdp, '/opt/cursor/artifacts/results_desktop_hours_stepper.png')
+    await shot(cdp, '/opt/cursor/artifacts/results_desktop_time_down.png')
     await cdp.eval(`(document.querySelector('[data-selected-slot]') ?? document.querySelector('[data-slot-card]'))?.scrollIntoView({ block: 'center' })`)
     await delay(80)
     await shot(cdp, '/opt/cursor/artifacts/results_desktop_filtered_cards.png')

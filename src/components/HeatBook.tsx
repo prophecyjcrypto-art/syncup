@@ -95,14 +95,6 @@ export function slotMatchesSession(slot: TimeSlot, session: SessionRange): boole
   return startHour === session.startHour && endHour === session.endHour
 }
 
-function axisLabel(date: Date): string {
-  if (date.getMinutes() !== 0) return ''
-  const hour = date.getHours()
-  const suffix = hour >= 12 ? 'p' : 'a'
-  const display = hour % 12 || 12
-  return `${display}${suffix}`
-}
-
 function scoreTone(score: number, isDarkMode: boolean): string {
   if (score >= 90) return 'bg-[#7c7bb9] text-white'
   if (score >= 70) return 'bg-[#93ba8c] text-white'
@@ -161,7 +153,7 @@ export function HeatBook({
     if (!scroller || !block) return
     const s = scroller.getBoundingClientRect()
     const b = block.getBoundingClientRect()
-    if (b.left < s.left + 96) scroller.scrollLeft -= s.left + 96 - b.left
+    if (b.left < s.left + 60) scroller.scrollLeft -= s.left + 60 - b.left
     else if (b.right > s.right - 8) scroller.scrollLeft += b.right - (s.right - 8)
     if (b.top < s.top) scroller.scrollTop -= s.top - b.top
     else if (b.bottom > s.bottom) scroller.scrollTop += b.bottom - s.bottom
@@ -179,7 +171,7 @@ export function HeatBook({
     const rect = scroller.getBoundingClientRect()
     if (clientY < rect.top + 28) scroller.scrollTop -= 12
     else if (clientY > rect.bottom - 28) scroller.scrollTop += 12
-    if (clientX < rect.left + 72) scroller.scrollLeft -= 16
+    if (clientX < rect.left + 52) scroller.scrollLeft -= 16
     else if (clientX > rect.right - 28) scroller.scrollLeft += 16
   }
 
@@ -233,18 +225,19 @@ export function HeatBook({
       onSession(null)
       return
     }
-    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+    const plainDayMove = (event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !event.shiftKey && !event.altKey
+    if (plainDayMove) {
       event.preventDefault()
       if (!shown) return
-      const dir = event.key === 'ArrowDown' ? 1 : -1
+      const dir = event.key === 'ArrowRight' ? 1 : -1
       const index = heat.findIndex((day) => day.iso === shown.iso)
       const next = heat[index + dir]
       if (!next) return
       onSession({ ...shown, iso: next.iso })
       return
     }
-    const forward = event.key === 'ArrowRight'
-    const back = event.key === 'ArrowLeft'
+    const forward = event.key === 'ArrowDown' || event.key === 'ArrowRight'
+    const back = event.key === 'ArrowUp' || event.key === 'ArrowLeft'
     if (!forward && !back && event.key !== 'Home' && event.key !== 'End') return
     event.preventDefault()
     if (!shown) {
@@ -331,76 +324,78 @@ export function HeatBook({
           >
             <div
               ref={gridRef}
-              className="heat-track"
+              className="heat-sheet"
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={finish}
               onPointerCancel={finish}
             >
-              <div className="heat-row">
-                <span className="heat-label" data-time-label="" />
-                <div className="heat-slots">
-                  {header.map((cell) => (
-                    <span key={cell.start.toISOString()} className="heat-axis" data-time-label="">
-                      {axisLabel(cell.start)}
+              <div className="heat-head">
+                <span className="heat-gutter" data-time-label="" />
+                {heat.map((day) => (
+                  <span key={day.iso} className={`heat-day ${textPrimary(isDarkMode)}`} data-day-label="">
+                    {formatLongDate(parseISODate(day.iso), lang)}
+                  </span>
+                ))}
+              </div>
+              <div className="heat-body">
+                <div className="heat-times">
+                  {header.map((cell, index) => (
+                    <span key={cell.start.toISOString()} className="heat-time" data-time-label="">
+                      {formatClock(roundHour(windowStart + index * SLOT_STEP))}
                     </span>
                   ))}
                 </div>
-              </div>
-              {heat.map((day) => {
-                const blockHere = shown?.iso === day.iso
-                const startIndex = blockHere ? indexForHour(shown.startHour, windowStart) : 0
-                const endIndex = blockHere ? indexForHour(shown.endHour, windowStart) : 0
-                const span = endIndex - startIndex
-                return (
-                  <div key={day.iso} className="heat-row" data-day={day.iso}>
-                    <span className={`heat-label ${textPrimary(isDarkMode)}`} data-day-label="">
-                      {formatLongDate(parseISODate(day.iso), lang)}
-                    </span>
-                    <div className="heat-slots">
-                    {day.cells.map((cell, index) => {
-                      const ratio = dancers.length === 0 ? 0 : (cell.freeIds.length / dancers.length) * 100
-                      const pinned = slots.some((slot) => {
-                        if (!savedSlots.includes(slot.start.toISOString())) return false
-                        return cell.start.getTime() >= slot.start.getTime() && cell.start.getTime() < slot.end.getTime()
-                      })
-                      return (
+                {heat.map((day) => {
+                  const blockHere = shown?.iso === day.iso
+                  const startIndex = blockHere ? indexForHour(shown.startHour, windowStart) : 0
+                  const endIndex = blockHere ? indexForHour(shown.endHour, windowStart) : 0
+                  const span = endIndex - startIndex
+                  return (
+                    <div key={day.iso} className="heat-col" data-day={day.iso}>
+                      {day.cells.map((cell, index) => {
+                        const ratio = dancers.length === 0 ? 0 : (cell.freeIds.length / dancers.length) * 100
+                        const pinned = slots.some((slot) => {
+                          if (!savedSlots.includes(slot.start.toISOString())) return false
+                          return cell.start.getTime() >= slot.start.getTime() && cell.start.getTime() < slot.end.getTime()
+                        })
+                        return (
+                          <div
+                            key={cell.start.toISOString()}
+                            role="gridcell"
+                            data-slot={index}
+                            data-day={day.iso}
+                            data-hour={hourAttr(windowStart, index)}
+                            title={`${formatTime(cell.start, lang)} · ${t(lang, 'heat_free', { n: cell.freeIds.length, total: dancers.length })}`}
+                            aria-label={`${formatLongDate(cell.start, lang)} ${formatTime(cell.start, lang)} ${t(lang, 'heat_free', { n: cell.freeIds.length, total: dancers.length })}`}
+                            className={`heat-cell ${scoreTone(ratio, isDarkMode)} ${pinned ? 'heat-cell-pinned' : ''}`}
+                          >
+                            {cell.freeIds.length}
+                          </div>
+                        )
+                      })}
+                      {blockHere && span > 0 ? (
                         <div
-                          key={cell.start.toISOString()}
-                          role="gridcell"
-                          data-slot={index}
-                          data-day={day.iso}
-                          data-hour={hourAttr(windowStart, index)}
-                          title={`${formatTime(cell.start, lang)} · ${t(lang, 'heat_free', { n: cell.freeIds.length, total: dancers.length })}`}
-                          aria-label={`${formatLongDate(cell.start, lang)} ${formatTime(cell.start, lang)} ${t(lang, 'heat_free', { n: cell.freeIds.length, total: dancers.length })}`}
-                          className={`heat-cell ${scoreTone(ratio, isDarkMode)} ${pinned ? 'heat-cell-pinned' : ''}`}
+                          data-booked=""
+                          className="heat-block"
+                          style={{
+                            top: `calc(${startIndex} * (2.25rem + 2px))`,
+                            height: `calc(${span} * 2.25rem + ${span - 1} * 2px)`,
+                          }}
                         >
-                          {cell.freeIds.length}
+                          <span data-edge="start" className="heat-edge heat-edge-start" aria-label={t(lang, 'drag_hint')} />
+                          <span className="heat-block-label">
+                            {formatClock(shown.startHour)}–{formatClock(shown.endHour)}
+                            <br />
+                            {durationHours(shown)} {t(lang, 'hours_unit')}
+                          </span>
+                          <span data-edge="end" className="heat-edge heat-edge-end" aria-label={t(lang, 'drag_hint')} />
                         </div>
-                      )
-                    })}
-                    {blockHere && span > 0 ? (
-                      <div
-                        data-booked=""
-                        className="heat-block"
-                        style={{
-                          left: `calc(${startIndex} * (2.25rem + 2px))`,
-                          width: `calc(${span} * 2.25rem + ${span - 1} * 2px)`,
-                        }}
-                      >
-                        <span data-edge="start" className="heat-edge heat-edge-start" aria-label={t(lang, 'drag_hint')} />
-                        <span className="heat-block-label">
-                          {formatClock(shown.startHour)}–{formatClock(shown.endHour)}
-                          {span < 4 ? <br /> : ' · '}
-                          {durationHours(shown)} {t(lang, 'hours_unit')}
-                        </span>
-                        <span data-edge="end" className="heat-edge heat-edge-end" aria-label={t(lang, 'drag_hint')} />
-                      </div>
-                    ) : null}
+                      ) : null}
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
           </div>
           <p id={helpId} className={`text-xs leading-relaxed ${textMuted(isDarkMode)}`}>
