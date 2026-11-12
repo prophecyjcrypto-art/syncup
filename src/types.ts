@@ -13,7 +13,7 @@ export type AppStep =
 export interface AppConfig {
   startDate: string
   endDate: string
-  durationHours: number
+  durationHours: number | null
   dayStartHour: number
   dayEndHour: number
   attendanceTolerance: number
