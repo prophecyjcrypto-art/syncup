@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { t } from '../i18n'
 import { useCalendar } from '../lib/calendarContext'
 import { buildIcs, formatSlotText } from '../lib/export'
-import { clearGoogleToken, createCalendarEvents, GoogleCalendarError } from '../lib/googleCalendar'
+import { clearGoogleToken, createCalendarEvents, GOOGLE_CALENDAR_ENABLED, GoogleCalendarError } from '../lib/googleCalendar'
 import { formatLongDate, formatTime, getDaysArray, parseISODate, toISODateString } from '../lib/dates'
 import { calculateBestSlots, compulsoryReport, sharedFreeByDay } from '../lib/schedule'
 import { cardClass, textMuted, textPrimary } from '../lib/ui'
@@ -113,6 +113,7 @@ export function ResultsPanel({
   }
 
   async function saveGoogle() {
+    if (!GOOGLE_CALENDAR_ENABLED) return
     const rows = targets()
     if (!calendar.token) {
       calendar.connect()
@@ -225,9 +226,11 @@ export function ResultsPanel({
           <button type="button" onClick={() => void copy(false)} className="glass-well rounded-full px-4 py-2 text-xs font-bold">{t(lang, 'copy_basic')}</button>
           <button type="button" onClick={() => void copy(true)} className="rounded-full btn-glow bg-[#7c7bb9] px-4 py-2 text-xs font-bold text-white">{t(lang, 'copy_full')}</button>
           <button type="button" onClick={exportCalendar} className="rounded-full border border-[#f6cf7a] px-4 py-2 text-xs font-bold text-[#f6cf7a]">{t(lang, 'export_calendar')}</button>
-          <button type="button" onClick={() => void saveGoogle()} className="glass-well rounded-full px-4 py-2 text-xs font-medium">
-            {calendar.token ? t(lang, 'calendar_save') : t(lang, 'calendar_connect')}
-          </button>
+          {GOOGLE_CALENDAR_ENABLED && (
+            <button type="button" onClick={() => void saveGoogle()} className="glass-well rounded-full px-4 py-2 text-xs font-medium">
+              {calendar.token ? t(lang, 'calendar_save') : t(lang, 'calendar_connect')}
+            </button>
+          )}
         </div>
       </div>
       <GuideNote>{t(lang, 'guide_results')}</GuideNote>
