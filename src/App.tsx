@@ -30,7 +30,13 @@ import {
   updateCampaign,
 } from './lib/db'
 import { parseAdminInvite, parseOrganizerInvite, parseParticipantInvite } from './lib/invites'
-import { captureGoogleSession, clearGoogleToken, GOOGLE_CALENDAR_SCOPES, readGoogleToken } from './lib/googleCalendar'
+import {
+  captureGoogleSession,
+  clearGoogleToken,
+  GOOGLE_CALENDAR_ENABLED,
+  GOOGLE_CALENDAR_SCOPES,
+  readGoogleToken,
+} from './lib/googleCalendar'
 import { CalendarProvider } from './lib/calendarContext'
 import { supabase, supabaseConfigError } from './lib/supabase'
 import { cardClass, inputClass, primaryButton, textMuted, textPrimary } from './lib/ui'
@@ -102,7 +108,7 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
   const [authNote, setAuthNote] = useState('')
-  const [googleToken, setGoogleToken] = useState<string | null>(() => readGoogleToken())
+  const [googleToken, setGoogleToken] = useState<string | null>(() => (GOOGLE_CALENDAR_ENABLED ? readGoogleToken() : null))
   const [calendarNote, setCalendarNote] = useState('')
   const didRoute = useRef(false)
   const hasLoaded = useRef(false)
@@ -132,17 +138,25 @@ export default function App() {
     let alive = true
     void supabase.auth.getSession().then(({ data }) => {
       if (!alive) return
-      captureGoogleSession(data.session)
-      setGoogleToken(readGoogleToken())
+      if (GOOGLE_CALENDAR_ENABLED) {
+        captureGoogleSession(data.session)
+        setGoogleToken(readGoogleToken())
+      } else {
+        sessionStorage.removeItem('syncup-gcal-pending')
+      }
       setUser(toSession(data.session?.user))
       setReady(true)
     })
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      captureGoogleSession(session)
-      setGoogleToken(readGoogleToken())
-      if (sessionStorage.getItem('syncup-gcal-pending') === '1' && _event === 'SIGNED_IN') {
+      if (GOOGLE_CALENDAR_ENABLED) {
+        captureGoogleSession(session)
+        setGoogleToken(readGoogleToken())
+        if (sessionStorage.getItem('syncup-gcal-pending') === '1' && _event === 'SIGNED_IN') {
+          sessionStorage.removeItem('syncup-gcal-pending')
+          if (!session?.provider_token) setCalendarNote('calendar_scope')
+        }
+      } else {
         sessionStorage.removeItem('syncup-gcal-pending')
-        if (!session?.provider_token) setCalendarNote('calendar_scope')
       }
       setUser(toSession(session?.user))
       setReady(true)
@@ -351,7 +365,7 @@ export default function App() {
   }
 
   const connectCalendar = useCallback(async () => {
-    if (!supabase) return
+    if (!GOOGLE_CALENDAR_ENABLED || !supabase) return
     setCalendarNote('')
     sessionStorage.setItem('syncup-gcal-pending', '1')
     const { error } = await supabase.auth.signInWithOAuth({
@@ -707,20 +721,22 @@ export default function App() {
                 <span className={`block h-4 w-4 rounded-full bg-white transition ${isDarkMode ? 'translate-x-6' : ''}`} />
               </button>
             </div>
-            <div className="space-y-2 border-t border-white/10 pt-4">
-              <p className="text-sm font-medium">{googleToken ? t(lang, 'calendar_connected') : t(lang, 'calendar_connect')}</p>
-              <p className={`text-xs leading-relaxed ${textMuted(isDarkMode)}`}>{t(lang, 'calendar_hint')}</p>
-              {shownCalendarNote && <p className="text-xs text-[#f19ba8]">{shownCalendarNote}</p>}
-              {googleToken ? (
-                <button type="button" onClick={calendarApi.disconnect} className="text-sm text-[#f19ba8]">
-                  {t(lang, 'calendar_disconnect')}
-                </button>
-              ) : (
-                <button type="button" onClick={() => void connectCalendar()} className={primaryButton('px-4 py-2 text-sm')}>
-                  {t(lang, 'calendar_connect')}
-                </button>
-              )}
-            </div>
+            {GOOGLE_CALENDAR_ENABLED && (
+              <div className="space-y-2 border-t border-white/10 pt-4">
+                <p className="text-sm font-medium">{googleToken ? t(lang, 'calendar_connected') : t(lang, 'calendar_connect')}</p>
+                <p className={`text-xs leading-relaxed ${textMuted(isDarkMode)}`}>{t(lang, 'calendar_hint')}</p>
+                {shownCalendarNote && <p className="text-xs text-[#f19ba8]">{shownCalendarNote}</p>}
+                {googleToken ? (
+                  <button type="button" onClick={calendarApi.disconnect} className="text-sm text-[#f19ba8]">
+                    {t(lang, 'calendar_disconnect')}
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => void connectCalendar()} className={primaryButton('px-4 py-2 text-sm')}>
+                    {t(lang, 'calendar_connect')}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
