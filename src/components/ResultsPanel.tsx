@@ -557,40 +557,7 @@ export function ResultsPanel({
           )}
         </div>
         <section className={`${cardClass(isDarkMode)} order-1 min-w-0 rounded-[1.5rem] p-4 sm:p-5 md:order-2`}>
-          <h3 className={`font-serif text-xl sm:text-2xl ${textPrimary(isDarkMode)}`}>
-            {selectedDates.size > 0 ? t(lang, 'dates_selected', { n: selectedDates.size }) : t(lang, 'rehearsal_recommendations')}
-          </h3>
-          {durationUnset ? null : <p className={`mt-1 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'found_slots', { n: listed.length })}</p>}
-          <div data-duration-hours="" className="mt-4 flex scroll-mt-24 items-center gap-3">
-            <p className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'rehearsal_length')}</p>
-            <div className="inline-flex items-center gap-1">
-              <button
-                type="button"
-                data-duration-step="down"
-                aria-label={t(lang, 'duration_decrease')}
-                disabled={!canSetDuration || draftHours == null || draftHours <= SLOT_STEP + 1e-6}
-                onClick={() => stepLength(-1)}
-                className="glass-well flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold leading-none disabled:cursor-default disabled:opacity-40"
-              >
-                −
-              </button>
-              <p data-duration-value="" className={`min-w-[6.25rem] text-center text-sm font-bold tabular-nums ${textPrimary(isDarkMode)}`}>
-                {draftHours == null ? '—' : `${draftHours} ${t(lang, 'hours_unit')}`}
-              </p>
-              <button
-                type="button"
-                data-duration-step="up"
-                aria-label={t(lang, 'duration_increase')}
-                disabled={!canSetDuration || (draftHours != null && draftHours >= maxHours - 1e-6)}
-                onClick={() => stepLength(1)}
-                className="glass-well flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold leading-none disabled:cursor-default disabled:opacity-40"
-              >
-                +
-              </button>
-            </div>
-          </div>
-          <div className="mt-4 space-y-2">
-            <MarkFilterControl lang={lang} value={markFilter} onChange={setMarkFilter} />
+          <div className="space-y-2">
             {campaign.groups.length > 0 ? (
               <div className="chip-row py-1">
                 <button
@@ -678,6 +645,7 @@ export function ResultsPanel({
               setFocusId(null)
             }}
             onToggleSaved={toggleSavedMany}
+            filter={<MarkFilterControl lang={lang} value={markFilter} onChange={setMarkFilter} wide />}
             sheet={
               <div className="space-y-1">
                 <p className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'shortlist_title')}</p>
@@ -717,32 +685,66 @@ export function ResultsPanel({
               <p className="text-xs text-zinc-500">{t(lang, 'no_shared_time', { n: closedDays })}</p>
             )}
           </div>
-          <div className="mt-6 space-y-4">
-            {pinned.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-baseline justify-between gap-3">
-                  <h4 className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'shortlist_title')} ({pinned.length})</h4>
-                  {listedHours != null ? (
-                    <p className="shrink-0 text-xs font-bold tabular-nums text-[#f6cf7a]">{t(lang, 'stats_session')} {listedHours}</p>
-                  ) : null}
+          <div className="mt-8 border-t border-zinc-400/25 pt-6">
+            <h3 className={`font-serif text-xl sm:text-2xl ${textPrimary(isDarkMode)}`}>
+              {selectedDates.size > 0 ? t(lang, 'dates_selected', { n: selectedDates.size }) : t(lang, 'rehearsal_recommendations')}
+            </h3>
+            {durationUnset ? null : <p className={`mt-1 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'found_slots', { n: listed.length })}</p>}
+            <div data-duration-hours="" className="mt-4 flex scroll-mt-24 items-center gap-3">
+              <p className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'rehearsal_length')}</p>
+              <div className="inline-flex items-center gap-1">
+                <button
+                  type="button"
+                  data-duration-step="down"
+                  aria-label={t(lang, 'duration_decrease')}
+                  disabled={!canSetDuration || draftHours == null || draftHours <= SLOT_STEP + 1e-6}
+                  onClick={() => stepLength(-1)}
+                  className="glass-well flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold leading-none disabled:cursor-default disabled:opacity-40"
+                >
+                  −
+                </button>
+                <p data-duration-value="" className={`min-w-[6.25rem] text-center text-sm font-bold tabular-nums ${textPrimary(isDarkMode)}`}>
+                  {draftHours == null ? '—' : `${draftHours} ${t(lang, 'hours_unit')}`}
+                </p>
+                <button
+                  type="button"
+                  data-duration-step="up"
+                  aria-label={t(lang, 'duration_increase')}
+                  disabled={!canSetDuration || (draftHours != null && draftHours >= maxHours - 1e-6)}
+                  onClick={() => stepLength(1)}
+                  className="glass-well flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold leading-none disabled:cursor-default disabled:opacity-40"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            <div className="mt-6 space-y-4">
+              {pinned.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'shortlist_title')} ({pinned.length})</h4>
+                    {listedHours != null ? (
+                      <p className="shrink-0 text-xs font-bold tabular-nums text-[#f6cf7a]">{t(lang, 'stats_session')} {listedHours}</p>
+                    ) : null}
+                  </div>
+                  {pinned.map(renderSlot)}
                 </div>
-                {pinned.map(renderSlot)}
-              </div>
-            )}
-            {others.length > 0 && (
-              <div className="space-y-2">
-                {pinned.length > 0 && <h4 className="text-xs font-bold uppercase tracking-widest text-zinc-400">{t(lang, 'all_results_title')} ({others.length})</h4>}
-                {others.map(renderSlot)}
-              </div>
-            )}
-            {durationUnset ? (
-              <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'choose_length_first')}</p>
-            ) : listed.length === 0 ? (
-              <div className="py-16 text-center">
-                <p className="font-medium text-zinc-400">{t(lang, 'no_results')}</p>
-                <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'guide_empty_results')}</p>
-              </div>
-            ) : null}
+              )}
+              {others.length > 0 && (
+                <div className="space-y-2">
+                  {pinned.length > 0 && <h4 className="text-xs font-bold uppercase tracking-widest text-zinc-400">{t(lang, 'all_results_title')} ({others.length})</h4>}
+                  {others.map(renderSlot)}
+                </div>
+              )}
+              {durationUnset ? (
+                <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'choose_length_first')}</p>
+              ) : listed.length === 0 ? (
+                <div className="py-16 text-center">
+                  <p className="font-medium text-zinc-400">{t(lang, 'no_results')}</p>
+                  <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'guide_empty_results')}</p>
+                </div>
+              ) : null}
+            </div>
           </div>
         </section>
       </div>

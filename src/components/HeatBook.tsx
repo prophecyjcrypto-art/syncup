@@ -161,6 +161,7 @@ export function HeatBook({
   onClearAll,
   onToggleSaved,
   sheet,
+  filter,
 }: {
   lang: Language
   isDarkMode: boolean
@@ -184,6 +185,7 @@ export function HeatBook({
   onClearAll: () => void
   onToggleSaved: (keys: string[]) => void
   sheet?: ReactNode
+  filter?: ReactNode
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -210,12 +212,7 @@ export function HeatBook({
   }, [focused?.id, focused?.iso, focused?.startHour, focused?.endHour])
 
   const summary = sessionSummary(shown, lang)
-  const heatHelp = [
-    t(lang, 'heat_hint'),
-    t(lang, 'drag_hint').replace(/^[^。.]*[。.]\s*/, '').trim(),
-    t(lang, 'grid_gesture'),
-    sessions.length > 0 ? t(lang, 'multi_day_hint') : '',
-  ]
+  const heatHelp = [t(lang, 'drag_hint'), t(lang, 'grid_gesture'), sessions.length > 0 ? t(lang, 'multi_day_hint') : '']
     .filter(Boolean)
     .join('\n')
   const header = heat[0]?.cells ?? []
@@ -488,7 +485,7 @@ export function HeatBook({
     <div className={full ? 'heat-full' : 'mt-4 space-y-3'} data-grid-full={full ? '' : undefined}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h4 className={`inline-flex items-center gap-2 font-bold ${textPrimary(isDarkMode)}`}>
+          <h4 id="overlap-heading" className={`inline-flex items-center gap-2 font-bold ${textPrimary(isDarkMode)}`}>
             {t(lang, 'heat_title')}
             <InfoTip lang={lang} name="heat" text={heatHelp} />
           </h4>
@@ -506,6 +503,11 @@ export function HeatBook({
           </button>
         ) : null}
       </div>
+      {filter ? (
+        <div role="group" aria-labelledby="overlap-heading" aria-controls={dancers.length > 0 && cols > 0 ? 'overlap-grid' : undefined}>
+          {filter}
+        </div>
+      ) : null}
       {dancers.length === 0 ? (
         <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>
       ) : cols === 0 ? null : (
@@ -531,6 +533,7 @@ export function HeatBook({
           <div
             ref={scrollRef}
             className="heat-scroll custom-scrollbar focus-visible:ring-2 focus-visible:ring-[#7c7bb9]"
+            id="overlap-grid"
             data-slot-grid=""
             data-heat-zoom={zoom}
             role="grid"
