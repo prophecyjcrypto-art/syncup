@@ -7,6 +7,7 @@ import {
   freeIntervals,
   markedBlockCount,
   markedHours,
+  mergeRanges,
   plannedSessionHours,
   responseCount,
 } from './schedule'
@@ -19,6 +20,7 @@ export interface AnalysisPerson {
   replied: boolean
   okHours: number
   naHours: number
+  attendedHours: number
 }
 
 export interface AnalysisGroup {
@@ -51,6 +53,7 @@ export interface EventAnalysis {
   responses: number
   people: number
   sessionHours: number
+  hasShortlist: boolean
   replied: AnalysisPerson[]
   waiting: AnalysisPerson[]
   dancers: AnalysisPerson[]
@@ -83,6 +86,12 @@ function matchesSession(slot: TimeSlot, session: GridSession): boolean {
   return startHour === session.startHour && endHour === session.endHour
 }
 
+function attendedHours(person: Person, sessions: PlannedSession[]): number {
+  if (sessions.length === 0) return 0
+  const pieces = sessions.flatMap((session) => freeIntervals(person, session.start.getTime(), session.end.getTime()))
+  return Math.round((coveredMs(mergeRanges(pieces)) / 3600000) * 10) / 10
+}
+
 function freeDuring(people: Person[], start: Date, end: Date): string[] {
   const span = end.getTime() - start.getTime()
   if (span <= 0) return []
@@ -108,13 +117,6 @@ export function analyzeEvent(input: {
   sessions: GridSession[]
 }): EventAnalysis {
   const dancers = input.dancers
-  const people = dancers.map((person) => ({
-    id: person.id,
-    name: person.name,
-    replied: person.blocks.length > 0,
-    okHours: markedHours(input.config, [person], 'available'),
-    naHours: markedHours(input.config, [person], 'unavailable'),
-  }))
   const saved = [...new Set(input.savedSlots)]
   const useSaved = saved.length > 0 && input.config.durationHours != null && input.config.durationHours > 0
   const slots = calculateBestSlots(input.config, input.choreographers, dancers)
@@ -133,6 +135,15 @@ export function analyzeEvent(input: {
         const match = slots.find((slot) => matchesSession(slot, session))
         return { id: `${session.iso}-${session.startHour}`, start, end, freeIds: match ? match.availableMembers : freeDuring(dancers, start, end) }
       })
+
+  const people = dancers.map((person) => ({
+    id: person.id,
+    name: person.name,
+    replied: person.blocks.length > 0,
+    okHours: markedHours(input.config, [person], 'available'),
+    naHours: markedHours(input.config, [person], 'unavailable'),
+    attendedHours: useSaved ? attendedHours(person, chosen) : 0,
+  }))
 
   function groupSessionHours(members: Person[]): number {
     if (members.length === 0 || chosen.length === 0) return 0
@@ -166,6 +177,7 @@ export function analyzeEvent(input: {
     responses: responseCount(dancers),
     people: dancers.length,
     sessionHours: plannedSessionHours(input.config.durationHours, input.savedSlots, input.sessions),
+    hasShortlist: useSaved,
     replied: people.filter((person) => person.replied),
     waiting: people.filter((person) => !person.replied),
     dancers: people,

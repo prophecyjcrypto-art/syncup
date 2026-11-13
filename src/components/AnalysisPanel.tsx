@@ -58,6 +58,29 @@ export function AnalysisPanel({
           <NameList lang={lang} isDarkMode={isDarkMode} title={t(lang, 'analysis_waiting')} people={report.waiting} tone={textMuted(isDarkMode)} />
         </div>
       </section>
+      <section className={`${cardClass(isDarkMode)} space-y-3 rounded-[1.5rem] p-4 sm:p-5`} data-attended="">
+        <h4 className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'analysis_attended')}</h4>
+        {report.hasShortlist ? (
+          [...report.dancers]
+            .sort((left, right) => right.attendedHours - left.attendedHours || left.name.localeCompare(right.name))
+            .map((person) => (
+              <div key={person.id} className="min-w-0" data-attended-id={person.id} data-attended-hours={person.attendedHours}>
+                <div className="mb-1 flex items-baseline justify-between gap-3">
+                  <p className={`truncate text-sm font-bold ${textPrimary(isDarkMode)}`}>{person.name}</p>
+                  <p className={`shrink-0 text-xs font-bold tabular-nums ${textPrimary(isDarkMode)}`}>{person.attendedHours}</p>
+                </div>
+                <div className={`h-1.5 overflow-hidden rounded-full ${isDarkMode ? 'bg-white/10' : 'bg-black/10'}`}>
+                  <div
+                    className="h-full bg-[#7c7bb9]"
+                    style={{ width: `${(person.attendedHours / Math.max(report.sessionHours, person.attendedHours, 1)) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))
+        ) : (
+          <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'analysis_attended_empty')}</p>
+        )}
+      </section>
       <section className={`${cardClass(isDarkMode)} space-y-3 rounded-[1.5rem] p-4 sm:p-5`}>
         <h4 className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'filter_dancers')}</h4>
         {report.dancers.length === 0 ? (

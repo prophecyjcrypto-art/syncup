@@ -248,7 +248,7 @@ const en = {
   delete_group: 'Delete this group?',
   guide_groups: 'Name a group, then tap it on a dancer to assign them. Tap the group name again to rename it.',
   guide_marks: 'Both follows the usual schedule. OK and NA show only time marked that way.',
-  guide_stats: 'NA and OK count marked blocks. Responses are people who saved at least one time. Session hours add up the shortlist, or the sessions on the grid when nothing is shortlisted.',
+  guide_stats: 'NA and OK count marked blocks. Responses are people who saved at least one time. Session hours add up the shortlist, or the sessions on the grid when nothing is shortlisted. Attended hours are the time each person is free during those shortlisted sessions.',
   stats_title: 'Overview',
   stats_session: 'Session hours',
   stats_responses: 'Responses',
@@ -259,6 +259,8 @@ const en = {
   analysis_waiting: 'Waiting',
   analysis_days: 'Days',
   analysis_none: 'None yet',
+  analysis_attended: 'Attended',
+  analysis_attended_empty: 'No shortlist yet',
   analysis_ungrouped: 'Ungrouped',
 } as const
 
@@ -510,7 +512,7 @@ const zh: { [K in keyof typeof en]: string } = {
   delete_group: '刪除此組別？',
   guide_groups: '先為組別命名，再在參加者上點選該組別以加入。再點一次組別名稱可重新命名。',
   guide_marks: '全部沿用一般時間表。OK 與 NA 只顯示已這樣標記的時間。',
-  guide_stats: 'NA 與 OK 計算已標記的時段。已回覆是已儲存至少一段時間的人數。練習時數是候選時間的總和；若尚未候選，則以格子上的時段計算。',
+  guide_stats: 'NA 與 OK 計算已標記的時段。已回覆是已儲存至少一段時間的人數。練習時數是候選時間的總和；若尚未候選，則以格子上的時段計算。出席時數是每人在候選時段內有空的時間。',
   stats_title: '概覽',
   stats_session: '練習時數',
   stats_responses: '已回覆',
@@ -521,6 +523,8 @@ const zh: { [K in keyof typeof en]: string } = {
   analysis_waiting: '未回覆',
   analysis_days: '日期',
   analysis_none: '尚無',
+  analysis_attended: '出席時數',
+  analysis_attended_empty: '尚未有候選',
   analysis_ungrouped: '未分組',
 }
 

@@ -233,6 +233,7 @@ const waiting = analyzeEvent({
   savedSlots: [],
   sessions: [{ iso: day, startHour: 12, endHour: 14.5 }],
 })
+assert(waiting.hasShortlist === false && waiting.dancers[0]?.attendedHours === 0, 'attended hours stay empty until a time is shortlisted')
 assert(waiting.responses === 0 && waiting.waiting.length === 1 && waiting.replied.length === 0, 'a dancer with no marks is waiting')
 assert(waiting.sessionHours === 2.5 && waiting.sessions.length === 1, 'one grid session is enough for the analysis')
 assert(waiting.days.length === 1 && waiting.days[0].freePeak === 1, 'an empty schedule is free across the day')
@@ -273,5 +274,42 @@ assert(grouped.naCount === 1 && grouped.okCount === 1, 'NA and OK counts stay th
 assert(grouped.groups.length === 1 && grouped.groups[0].naHours === 2 && grouped.groups[0].okHours === 4, 'group hours follow that dancer')
 assert(grouped.ungrouped?.people === 1, 'dancers outside a group stay visible')
 assert(grouped.responses === 1 && grouped.waiting.length === 1, 'coverage splits replies from people who have not saved')
+
+const noonKey = setTime(parseISODate(day), 12).toISOString()
+const attended = analyzeEvent({
+  config: { ...config, durationHours: 2 },
+  dancers: [
+    { id: 'free', userId: null, name: 'Free', email: '', role: 'dancer', blocks: [], lastUpdated: null },
+    {
+      id: 'late',
+      userId: null,
+      name: 'Late',
+      email: '',
+      role: 'dancer',
+      blocks: [{ ...block(12, 13, 'unavailable'), id: 'late-na', wholeDay: false }],
+      lastUpdated: null,
+    },
+    {
+      id: 'out',
+      userId: null,
+      name: 'Out',
+      email: '',
+      role: 'dancer',
+      blocks: [{ ...block(12, 14, 'unavailable'), id: 'out-na', wholeDay: false }],
+      lastUpdated: null,
+    },
+  ],
+  choreographers: [],
+  groups: [],
+  savedSlots: [noonKey, noonKey],
+  sessions: [],
+})
+assert(attended.hasShortlist && attended.sessionHours === 2, 'duplicate shortlist keys count as one session')
+const freeHours = attended.dancers.find((person) => person.id === 'free')?.attendedHours
+const lateHours = attended.dancers.find((person) => person.id === 'late')?.attendedHours
+const outHours = attended.dancers.find((person) => person.id === 'out')?.attendedHours
+assert(freeHours === 2, `a fully free dancer attends the whole shortlist (${freeHours})`)
+assert(lateHours === 1, `partial overlap counts only the free part (${lateHours})`)
+assert(outHours === 0, `a dancer who is NA for the session attends 0 (${outHours})`)
 
 console.log('schedule checks passed')

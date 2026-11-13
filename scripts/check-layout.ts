@@ -667,6 +667,7 @@ async function main() {
         responses: text.includes('已回覆'),
         waiting: text.includes('未回覆'),
         hours: text.includes('練習時數'),
+        attended: text.includes('出席時數'),
         days: text.includes('日期'),
         google: text.includes('Google'),
         avail: text.includes('Avail'),
@@ -678,12 +679,16 @@ async function main() {
       responses: boolean
       waiting: boolean
       hours: boolean
+      attended: boolean
       days: boolean
       google: boolean
       avail: boolean
     }
     assert(analysisParsed.open && !analysisParsed.grid, 'analysis did not replace the schedule')
-    assert(analysisParsed.responses && analysisParsed.waiting && analysisParsed.hours && analysisParsed.days, `analysis tab was ${analysis}`)
+    assert(analysisParsed.responses && analysisParsed.waiting && analysisParsed.hours && analysisParsed.attended && analysisParsed.days, `analysis tab was ${analysis}`)
+    const attendedRows = await cdp.eval<string>(`JSON.stringify([...document.querySelectorAll('[data-attended-hours]')].map((node) => Number(node.getAttribute('data-attended-hours'))))`)
+    const attendedHours = JSON.parse(attendedRows) as number[]
+    assert(attendedHours.length === 6 && attendedHours.some((hours) => hours > 0), `attended hours were ${attendedRows}`)
     assert(!analysisParsed.google && !analysisParsed.avail, 'analysis showed calendar or Avail')
     const devSize = await overflow(cdp)
     assert(devSize.scrollWidth <= devSize.clientWidth + 1, `dev results overflows: ${devSize.scrollWidth}`)
