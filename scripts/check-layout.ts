@@ -225,6 +225,7 @@ async function dragHours(cdp: Cdp, fromHour: string, toHour: string, pointerType
       return 'offscreen ' + JSON.stringify({ start, end, innerWidth: window.innerWidth, innerHeight: window.innerHeight, sameRow: startEl.parentElement === endEl.parentElement })
     }
     fire('pointerdown', start, startEl)
+    if ('${pointerType}' === 'touch') await new Promise((resolve) => setTimeout(resolve, 400))
     fire('pointermove', end, endEl)
     if (${release}) fire('pointerup', end, endEl)
     await new Promise((resolve) => setTimeout(resolve, 50))
@@ -599,6 +600,63 @@ async function main() {
     assert(!devParsed.google && !devParsed.avail, 'dev results showed calendar or Avail')
     const scheduleHours = await cdp.eval<string>(`document.querySelector('[data-shortlist-hours]')?.textContent ?? ''`)
     assert(scheduleHours.includes('練習時數') && scheduleHours.includes('4'), `schedule shortlist hours were "${scheduleHours}"`)
+    const pan = await cdp.eval<string>(`(async () => {
+      const cell = document.querySelector('.heat-cell')
+      const touchAction = cell ? getComputedStyle(cell).touchAction : ''
+      const startEl = document.querySelector('[data-slot-grid] [data-hour="14"]')
+      const endEl = document.querySelector('[data-slot-grid] [data-hour="16"]')
+      if (!(startEl instanceof HTMLElement) || !(endEl instanceof HTMLElement)) return 'missing ' + touchAction
+      const point = (el) => {
+        const rect = el.getBoundingClientRect()
+        return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+      }
+      const fire = (type, el) => {
+        const at = point(el)
+        el.dispatchEvent(new PointerEvent(type, {
+          bubbles: true, cancelable: true, clientX: at.x, clientY: at.y,
+          pointerId: 7, pointerType: 'touch', button: 0, buttons: type === 'pointerup' ? 0 : 1, isPrimary: true,
+        }))
+      }
+      const before = document.querySelector('[data-range-summary]')?.textContent ?? ''
+      fire('pointerdown', startEl)
+      fire('pointermove', endEl)
+      fire('pointerup', endEl)
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      const after = document.querySelector('[data-range-summary]')?.textContent ?? ''
+      return JSON.stringify({ touchAction, same: before === after, after })
+    })()`)
+    const panParsed = JSON.parse(pan) as { touchAction: string; same: boolean; after: string }
+    assert(panParsed.touchAction.includes('pan'), `grid cells do not pan (${panParsed.touchAction})`)
+    assert(panParsed.same, `a quick touch drag booked a session (${panParsed.after})`)
+    const zoomed = await cdp.eval<string>(`(async () => {
+      const grid = document.querySelector('[data-slot-grid]')
+      const cell = document.querySelector('.heat-cell')
+      if (!(grid instanceof HTMLElement) || !(cell instanceof HTMLElement) || typeof Touch !== 'function') return 'skip'
+      const before = cell.getBoundingClientRect().height
+      const rect = grid.getBoundingClientRect()
+      const finger = (id, y) => new Touch({ identifier: id, target: grid, clientX: rect.left + 48, clientY: y })
+      grid.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [finger(1, rect.top + 120), finger(2, rect.top + 200)] }))
+      grid.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [finger(1, rect.top + 40), finger(2, rect.top + 320)] }))
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const after = document.querySelector('.heat-cell')?.getBoundingClientRect().height ?? before
+      return JSON.stringify({ before, after })
+    })()`)
+    if (zoomed !== 'skip') {
+      const zoomParsed = JSON.parse(zoomed) as { before: number; after: number }
+      assert(zoomParsed.after > zoomParsed.before + 2, `pinch did not enlarge the grid (${zoomed})`)
+    }
+    await cdp.eval(`document.querySelector('[data-grid-expand]')?.click()`)
+    await delay(40)
+    const expanded = await cdp.eval<string>(`JSON.stringify({
+      full: document.querySelector('[data-grid-full]') != null,
+      sheet: document.querySelector('[data-grid-sheet]')?.textContent ?? '',
+    })`)
+    const expandedParsed = JSON.parse(expanded) as { full: boolean; sheet: string }
+    assert(expandedParsed.full && expandedParsed.sheet.includes('候選'), `full calendar was ${expanded}`)
+    await cdp.eval(`document.querySelector('[data-grid-expand]')?.click()`)
+    await delay(40)
+    const closed = await cdp.eval<boolean>(`document.querySelector('[data-grid-full]') == null`)
+    assert(closed, 'full calendar stayed open')
     await cdp.eval(`document.querySelector('[data-results-view="analysis"]')?.click()`)
     await delay(60)
     const analysis = await cdp.eval<string>(`(() => {

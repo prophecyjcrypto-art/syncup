@@ -123,6 +123,11 @@ function scoreTone(score: number, isDarkMode: boolean, mode: MarkFilter): string
   return isDarkMode ? 'bg-black/30 text-zinc-500' : 'bg-zinc-100 text-zinc-400'
 }
 
+const HOLD_MS = 340
+const PAN_SLOP = 12
+const ZOOM_MIN = 0.7
+const ZOOM_MAX = 1.65
+
 function hourAttr(windowStart: number, index: number): string {
   return String(roundHour(windowStart + index * SLOT_STEP))
 }
@@ -155,6 +160,7 @@ export function HeatBook({
   onRemove,
   onClearAll,
   onToggleSaved,
+  sheet,
 }: {
   lang: Language
   isDarkMode: boolean
@@ -177,11 +183,17 @@ export function HeatBook({
   onRemove: (id: string) => void
   onClearAll: () => void
   onToggleSaved: (keys: string[]) => void
+  sheet?: ReactNode
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<HeatDrag | null>(null)
+  const holdRef = useRef<number>(0)
+  const pendingRef = useRef<{ pointerId: number; x: number; y: number; hit: { iso: string; index: number } } | null>(null)
+  const zoomRef = useRef(1)
   const [preview, setPreview] = useState<Preview | null>(null)
+  const [zoom, setZoom] = useState(1)
+  const [full, setFull] = useState(false)
   const focused = sessions.find((item) => item.id === focusId) ?? sessions[0] ?? null
   const shown = preview?.block ?? focused
 
@@ -201,6 +213,7 @@ export function HeatBook({
   const heatHelp = [
     t(lang, 'heat_hint'),
     t(lang, 'drag_hint').replace(/^[^。.]*[。.]\s*/, '').trim(),
+    t(lang, 'grid_gesture'),
     sessions.length > 0 ? t(lang, 'multi_day_hint') : '',
   ]
     .filter(Boolean)
@@ -213,6 +226,63 @@ export function HeatBook({
   const matching = !preview && focused ? slots.find((slot) => slotMatchesSession(slot, focused)) ?? null : null
   const saved = chosenSlots.length > 0 && chosenSlots.every((slot) => savedSlots.includes(slot.start.toISOString()))
   const countLabel = markFilter === 'na' ? 'heat_na' : markFilter === 'ok' ? 'heat_ok' : 'heat_free'
+
+  useEffect(() => {
+    document.body.style.overflow = full ? 'hidden' : ''
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [full])
+
+  useEffect(() => {
+    const node = scrollRef.current
+    if (!node) return
+    const scroller: HTMLDivElement = node
+    const distance = (touches: TouchList) => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY)
+    let pinch: { dist: number; zoom: number } | null = null
+    function onTouchStart(event: TouchEvent) {
+      if (event.touches.length >= 2) {
+        window.clearTimeout(holdRef.current)
+        pendingRef.current = null
+        dragRef.current = null
+        pinch = { dist: distance(event.touches), zoom: zoomRef.current }
+      }
+    }
+    function onTouchMove(event: TouchEvent) {
+      if (dragRef.current && event.touches.length === 1) event.preventDefault()
+      if (!pinch || event.touches.length < 2) return
+      event.preventDefault()
+      const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, pinch.zoom * (distance(event.touches) / pinch.dist)))
+      const prev = zoomRef.current
+      if (Math.abs(next - prev) < 0.01) return
+      const rect = scroller.getBoundingClientRect()
+      const midX = (event.touches[0].clientX + event.touches[1].clientX) / 2 - rect.left
+      const midY = (event.touches[0].clientY + event.touches[1].clientY) / 2 - rect.top
+      const ratio = next / prev
+      const left = scroller.scrollLeft
+      const top = scroller.scrollTop
+      zoomRef.current = next
+      setZoom(next)
+      requestAnimationFrame(() => {
+        scroller.scrollLeft = (left + midX) * ratio - midX
+        scroller.scrollTop = (top + midY) * ratio - midY
+      })
+    }
+    function onTouchEnd(event: TouchEvent) {
+      if (event.touches.length < 2) pinch = null
+    }
+    scroller.addEventListener('touchstart', onTouchStart, { passive: true })
+    scroller.addEventListener('touchmove', onTouchMove, { passive: false })
+    scroller.addEventListener('touchend', onTouchEnd)
+    scroller.addEventListener('touchcancel', onTouchEnd)
+    return () => {
+      window.clearTimeout(holdRef.current)
+      scroller.removeEventListener('touchstart', onTouchStart)
+      scroller.removeEventListener('touchmove', onTouchMove)
+      scroller.removeEventListener('touchend', onTouchEnd)
+      scroller.removeEventListener('touchcancel', onTouchEnd)
+    }
+  }, [cols, heat.length])
 
   function maybeScroll(clientX: number, clientY: number) {
     const scroller = scrollRef.current
@@ -242,6 +312,24 @@ export function HeatBook({
     })
   }
 
+  function startDrag(event: ReactPointerEvent<HTMLDivElement>, drag: HeatDrag, hit: { iso: string; index: number } | null) {
+    event.preventDefault()
+    scrollRef.current?.classList.add('heat-scroll-lock')
+    try {
+      gridRef.current?.setPointerCapture(event.pointerId)
+    } catch {
+      // Synthetic pointers cannot be captured. Later moves still update the block.
+    }
+    dragRef.current = drag
+    const seed = hit ?? fallbackCell(drag, windowStart)
+    publish(drag, seed.iso, seed.index, null)
+  }
+
+  function clearHold() {
+    window.clearTimeout(holdRef.current)
+    pendingRef.current = null
+  }
+
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (!editable || event.button !== 0 || !gridRef.current) return
     const target = event.target as Element
@@ -256,20 +344,41 @@ export function HeatBook({
     if (focused && edgeName === 'start') drag = { kind: 'resize-start', range: focused }
     else if (focused && edgeName === 'end') drag = { kind: 'resize-end', range: focused }
     else if (grabbed && hit) drag = { kind: 'move', origin: hit.index, range: grabbed }
-    else if (hit) drag = { kind: 'create', id: crypto.randomUUID(), iso: hit.iso, origin: hit.index }
-    if (!drag) return
-    event.preventDefault()
-    try {
-      gridRef.current.setPointerCapture(event.pointerId)
-    } catch {
-      // Synthetic pointers cannot be captured. Later moves still update the block.
+    if (drag) {
+      clearHold()
+      startDrag(event, drag, hit)
+      return
     }
-    dragRef.current = drag
-    const seed = hit ?? fallbackCell(drag, windowStart)
-    publish(drag, seed.iso, seed.index, null)
+    if (!hit) return
+    if (event.pointerType !== 'touch') {
+      startDrag(event, { kind: 'create', id: crypto.randomUUID(), iso: hit.iso, origin: hit.index }, hit)
+      return
+    }
+    clearHold()
+    pendingRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, hit }
+    holdRef.current = window.setTimeout(() => {
+      const pending = pendingRef.current
+      if (!pending || pending.pointerId !== event.pointerId || !gridRef.current) return
+      pendingRef.current = null
+      const created: HeatDrag = { kind: 'create', id: crypto.randomUUID(), iso: pending.hit.iso, origin: pending.hit.index }
+      scrollRef.current?.classList.add('heat-scroll-lock')
+      try {
+        gridRef.current.setPointerCapture(pending.pointerId)
+      } catch {
+        // The hold can outlive a synthetic pointer. Moves still update the block.
+      }
+      dragRef.current = created
+      publish(created, pending.hit.iso, pending.hit.index, null)
+    }, HOLD_MS)
   }
 
   function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const pending = pendingRef.current
+    if (pending && pending.pointerId === event.pointerId) {
+      const moved = (event.clientX - pending.x) ** 2 + (event.clientY - pending.y) ** 2
+      if (moved > PAN_SLOP ** 2) clearHold()
+      return
+    }
     const drag = dragRef.current
     if (!drag || !gridRef.current) return
     maybeScroll(event.clientX, event.clientY)
@@ -279,8 +388,10 @@ export function HeatBook({
   }
 
   function finish(event: ReactPointerEvent<HTMLDivElement>) {
+    if (pendingRef.current?.pointerId === event.pointerId) clearHold()
     const drag = dragRef.current
     dragRef.current = null
+    scrollRef.current?.classList.remove('heat-scroll-lock')
     if (!drag || !gridRef.current) return
     const hit = cellFromPoint(event.clientX, event.clientY, gridRef.current) ?? fallbackCell(drag, windowStart)
     const block = blockFromDrag(drag, hit.index, hit.iso, windowStart, windowEnd, chosenHours)
@@ -371,8 +482,10 @@ export function HeatBook({
     )
   }
 
+  const cell = `${(2.25 * zoom).toFixed(3)}rem`
+  const column = `${Math.max(3.2, 5.1 * zoom).toFixed(3)}rem`
   return (
-    <div className="mt-4 space-y-3">
+    <div className={full ? 'heat-full' : 'mt-4 space-y-3'} data-grid-full={full ? '' : undefined}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h4 className={`inline-flex items-center gap-2 font-bold ${textPrimary(isDarkMode)}`}>
@@ -380,6 +493,18 @@ export function HeatBook({
             <InfoTip lang={lang} name="heat" text={heatHelp} />
           </h4>
         </div>
+        {dancers.length > 0 && cols > 0 ? (
+          <button
+            type="button"
+            data-grid-expand=""
+            aria-pressed={full}
+            aria-label={t(lang, full ? 'grid_collapse' : 'grid_expand')}
+            onClick={() => setFull((value) => !value)}
+            className="glass-well flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+          >
+            {full ? '↓' : '↗'}
+          </button>
+        ) : null}
       </div>
       {dancers.length === 0 ? (
         <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>
@@ -407,15 +532,17 @@ export function HeatBook({
             ref={scrollRef}
             className="heat-scroll custom-scrollbar focus-visible:ring-2 focus-visible:ring-[#7c7bb9]"
             data-slot-grid=""
+            data-heat-zoom={zoom}
             role="grid"
             tabIndex={editable ? 0 : -1}
             aria-label={t(lang, 'heat_title')}
             onKeyDown={onKeyDown}
+            style={{ ['--heat-cell' as string]: cell, ['--heat-col' as string]: column, ['--heat-gap' as string]: '2px' }}
           >
             <div
               ref={gridRef}
               className="heat-sheet"
-              style={{ gridTemplateColumns: `3.35rem repeat(${heat.length}, minmax(5.1rem, 1fr))`, gridTemplateRows: `auto repeat(${cols}, 2.25rem)` }}
+              style={{ gridTemplateColumns: `3.35rem repeat(${heat.length}, minmax(var(--heat-col), 1fr))`, gridTemplateRows: `auto repeat(${cols}, var(--heat-cell))` }}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={finish}
@@ -496,8 +623,8 @@ export function HeatBook({
                             data-focused={isFocus ? '' : undefined}
                             className={`heat-block ${isFocus ? 'heat-block-focus' : ''}`}
                             style={{
-                              top: `calc(${startIndex} * (2.25rem + 2px))`,
-                              height: `calc(${span} * 2.25rem + ${Math.max(span - 1, 0) * 2}px)`,
+                              top: `calc(${startIndex} * (var(--heat-cell) + var(--heat-gap)))`,
+                              height: `calc(${span} * var(--heat-cell) + ${Math.max(span - 1, 0)} * var(--heat-gap))`,
                               zIndex: isFocus ? 3 : 2,
                             }}
                           >
@@ -519,6 +646,11 @@ export function HeatBook({
         </>
       )}
       {detail}
+      {full ? (
+        <div className="heat-full-sheet" data-grid-sheet="">
+          {sheet}
+        </div>
+      ) : null}
     </div>
   )
 }

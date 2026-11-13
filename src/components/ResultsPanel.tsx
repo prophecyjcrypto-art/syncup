@@ -678,6 +678,22 @@ export function ResultsPanel({
               setFocusId(null)
             }}
             onToggleSaved={toggleSavedMany}
+            sheet={
+              <div className="space-y-1">
+                <p className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'shortlist_title')}</p>
+                {campaign.savedSlots.length === 0 ? (
+                  <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'analysis_none')}</p>
+                ) : (
+                  slots
+                    .filter((slot) => campaign.savedSlots.includes(slotKey(slot)))
+                    .map((slot) => (
+                      <p key={slotKey(slot)} className={`text-sm font-medium ${textPrimary(isDarkMode)}`}>
+                        {formatLongDate(slot.start, lang)} · {formatTime(slot.start, lang)} – {formatTime(slot.end, lang)}
+                      </p>
+                    ))
+                )}
+              </div>
+            }
           />
           <div className="mt-4 max-h-48 space-y-2 overflow-y-auto custom-scrollbar">
             <p className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'choreographer_overlap')}</p>
