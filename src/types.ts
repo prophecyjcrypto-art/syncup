@@ -9,6 +9,7 @@ export type AppStep =
   | 'dancers'
   | 'results'
   | 'portal'
+  | 'hub'
 
 export interface AppConfig {
   startDate: string
@@ -47,6 +48,7 @@ export interface DanceGroup {
   id: string
   name: string
   memberIds: string[]
+  inviteCode?: string | null
 }
 
 export interface Campaign {
@@ -61,8 +63,11 @@ export interface Campaign {
   savedSlots: string[]
   createdAt: string
   adminCode: string | null
+  adminShort: string | null
   organizerCode: string | null
+  organizerShort: string | null
   participantCode: string | null
+  participantShort: string | null
   admins: CampaignAdmin[]
   choreographers: Person[]
   dancers: Person[]

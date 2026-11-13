@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { t } from '../i18n'
 import { formatHourOption, formatLongDate, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
-import { adminInviteUrl, organizerInviteUrl, participantInviteUrl } from '../lib/invites'
+import { preferredInviteCode, preferredInviteLink, shortInviteUrl } from '../lib/invites'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { FieldLabel, InfoTip } from './Guide'
+import { InviteCode } from './InviteCode'
 import type { AppConfig, Campaign, CampaignInput, Language } from '../types'
 import { MonthBoards } from './MonthBoards'
 
@@ -20,6 +21,13 @@ export function SetupPanel({
   onRotateOrganizer,
   onRotateParticipant,
   onRemoveAdmin,
+  onCreateGroup,
+  onRenameGroup,
+  onDeleteGroup,
+  onRotateGroup,
+  showGroups = true,
+  showInvites = true,
+  embedded = false,
 }: {
   lang: Language
   isDarkMode: boolean
@@ -27,12 +35,19 @@ export function SetupPanel({
   readOnly: boolean
   onCancel: () => void
   onEdit?: () => void
-  onConfirm: (input: CampaignInput) => void
-  onCopy?: (value: string) => void
+  onConfirm: (input: CampaignInput, newGroups?: string[]) => void
+  onCopy?: (value: string, kind?: 'code' | 'link') => void
   onRotateInvite?: () => void
   onRotateOrganizer?: () => void
   onRotateParticipant?: () => void
   onRemoveAdmin?: (adminId: string) => void
+  onCreateGroup?: (name: string) => void
+  onRenameGroup?: (groupId: string, name: string) => void
+  onDeleteGroup?: (groupId: string) => void
+  onRotateGroup?: (groupId: string) => void
+  showGroups?: boolean
+  showInvites?: boolean
+  embedded?: boolean
 }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [remarks, setRemarks] = useState(initial?.remarks ?? '')
@@ -55,6 +70,9 @@ export function SetupPanel({
   const [compulsoryDays, setCompulsoryDays] = useState<string[]>(initial?.compulsoryDays ?? [])
   const [markMode, setMarkMode] = useState<'show' | 'must'>('show')
   const [note, setNote] = useState('')
+  const [draftGroups, setDraftGroups] = useState<string[]>([])
+  const [draftGroup, setDraftGroup] = useState('')
+  const [renamingId, setRenamingId] = useState<string | null>(null)
   const days = useMemo(
     () => getDaysArray(parseISODate(config.startDate), parseISODate(config.endDate)),
     [config.startDate, config.endDate],
@@ -89,18 +107,37 @@ export function SetupPanel({
       return
     }
     const expiryDate = new Date(`${expiry}T23:59:59`)
-    onConfirm({
-      name,
-      remarks,
-      config,
-      expiryDate: expiryDate.toISOString(),
-      onDays: [...onDays].sort(),
-      compulsoryDays: [...compulsoryDays].sort(),
-    })
+    onConfirm(
+      {
+        name,
+        remarks,
+        config,
+        expiryDate: expiryDate.toISOString(),
+        onDays: [...onDays].sort(),
+        compulsoryDays: [...compulsoryDays].sort(),
+      },
+      initial ? undefined : draftGroups,
+    )
+  }
+
+  function addDraftGroup(event: FormEvent) {
+    event.preventDefault()
+    const trimmed = draftGroup.trim()
+    if (!trimmed) return
+    if (initial && onCreateGroup) onCreateGroup(trimmed)
+    else setDraftGroups((current) => [...current, trimmed])
+    setDraftGroup('')
+  }
+
+  function share(code: string | null, link: string, kind: 'code' | 'link') {
+    if (!onCopy) return
+    if (kind === 'code' && code) onCopy(code, 'code')
+    else if (link) onCopy(link, 'link')
   }
 
   return (
     <div className="mx-auto w-full max-w-4xl">
+      {embedded ? null : (
       <div className="mb-8 text-center">
         <h2 className={`flex items-center justify-center gap-2 font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
           {readOnly ? initial?.name : initial ? t(lang, 'edit_event') : t(lang, 'new_campaign')}
@@ -108,6 +145,7 @@ export function SetupPanel({
         </h2>
         {readOnly ? <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'view_only')}</p> : null}
       </div>
+      )}
       <div className={`${cardClass(isDarkMode)} space-y-6 rounded-[1.5rem] p-4 sm:space-y-8 sm:rounded-[2rem] sm:p-8`}>
         <label className="block space-y-2">
           <span className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'campaign_name')}</span>
@@ -227,6 +265,95 @@ export function SetupPanel({
           />
         </label>
 
+        {showGroups ? (
+          <div className="space-y-3">
+            <h3 className={`inline-flex items-center gap-2 font-serif text-2xl ${textPrimary(isDarkMode)}`}>
+              {t(lang, 'groups_label')}
+              <InfoTip lang={lang} name="groups" text={t(lang, 'groups_setup_hint')} />
+            </h3>
+            {!readOnly ? (
+              <form onSubmit={addDraftGroup} className={`flex gap-2 ${lock}`}>
+                <input
+                  value={draftGroup}
+                  onChange={(event) => setDraftGroup(event.target.value)}
+                  placeholder={t(lang, 'group_placeholder')}
+                  aria-label={t(lang, 'group_placeholder')}
+                  className={`min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+                />
+                <button type="submit" disabled={!draftGroup.trim()} className="min-h-11 shrink-0 rounded-full bg-[#7c7bb9] px-4 text-sm font-bold text-white disabled:opacity-40">
+                  {t(lang, 'add_group')}
+                </button>
+              </form>
+            ) : null}
+            {initial
+              ? initial.groups.length === 0 && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_groups')}</p>
+              : draftGroups.length === 0 && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_groups')}</p>}
+            {(initial ? initial.groups.length : draftGroups.length) > 0 ? (
+              <div className="space-y-4">
+                {initial
+                  ? initial.groups.map((group) => (
+                      <div key={group.id} className="space-y-2" data-group-id={group.id}>
+                        <div className="flex items-center justify-between gap-3">
+                          {renamingId === group.id && onRenameGroup ? (
+                            <input
+                              autoFocus
+                              defaultValue={group.name}
+                              aria-label={t(lang, 'group_placeholder')}
+                              onBlur={(event) => {
+                                setRenamingId(null)
+                                const next = event.target.value.trim()
+                                if (next && next !== group.name) onRenameGroup(group.id, next)
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') event.currentTarget.blur()
+                                if (event.key === 'Escape') setRenamingId(null)
+                              }}
+                              className={`min-w-0 flex-1 rounded-xl px-3 py-2 text-sm font-bold ${inputClass(isDarkMode)}`}
+                            />
+                          ) : (
+                            <button type="button" onClick={() => !readOnly && onRenameGroup && setRenamingId(group.id)} className={`truncate text-left text-sm font-bold ${textPrimary(isDarkMode)}`}>
+                              {group.name}
+                            </button>
+                          )}
+                          {!readOnly && onDeleteGroup ? (
+                            <button
+                              type="button"
+                              className="text-sm font-bold text-[#f19ba8]"
+                              onClick={() => {
+                                if (window.confirm(t(lang, 'delete_group'))) onDeleteGroup(group.id)
+                              }}
+                            >
+                              {t(lang, 'remove')}
+                            </button>
+                          ) : null}
+                        </div>
+                        <InviteCode
+                          lang={lang}
+                          isDarkMode={isDarkMode}
+                          label=""
+                          code={group.inviteCode ?? null}
+                          empty={t(lang, 'organizer_after_create')}
+                          readOnly={readOnly}
+                          onCopy={(_value, kind) =>
+                            share(group.inviteCode ?? null, group.inviteCode ? shortInviteUrl(group.inviteCode) : '', kind)
+                          }
+                          onRotate={!readOnly && onRotateGroup ? () => onRotateGroup(group.id) : undefined}
+                        />
+                      </div>
+                    ))
+                  : draftGroups.map((group, index) => (
+                      <div key={`${group}-${index}`} className="flex items-center justify-between gap-3">
+                        <p className={`truncate text-sm font-bold ${textPrimary(isDarkMode)}`}>{group}</p>
+                        <button type="button" className="text-sm font-bold text-[#f19ba8]" onClick={() => setDraftGroups((current) => current.filter((_, item) => item !== index))}>
+                          {t(lang, 'remove')}
+                        </button>
+                      </div>
+                    ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -276,70 +403,73 @@ export function SetupPanel({
           </div>
         </div>
 
-        {(!readOnly || initial?.organizerCode || initial?.participantCode) && (
-          <div className="space-y-3">
+        {showInvites && (!readOnly || initial?.organizerCode || initial?.participantCode || initial?.organizerShort || initial?.participantShort) && (
+          <div className="space-y-5">
             <h3 className={`inline-flex items-center gap-2 font-serif text-2xl ${textPrimary(isDarkMode)}`}>
               {t(lang, 'organizer_link')}
               <InfoTip lang={lang} name="links" text={t(lang, 'organizer_link_hint')} />
             </h3>
-            {initial?.participantCode && (
-              <div className="space-y-3">
-                <p className={`break-all rounded-xl px-4 py-3 text-sm ${inputClass(isDarkMode)}`}>{participantInviteUrl(initial.participantCode)}</p>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => onCopy?.(participantInviteUrl(initial.participantCode!))} className="rounded-xl border border-[#7c7bb9]/50 px-4 py-3 text-sm font-bold text-[#7c7bb9]">
-                    {t(lang, 'copy_link_dancer')}
-                  </button>
-                  {!readOnly && onRotateParticipant && (
-                    <button type="button" onClick={onRotateParticipant} className="rounded-xl px-4 py-3 text-sm font-bold text-[#f19ba8]">
-                      {t(lang, 'rotate_invite')}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-            {initial?.organizerCode ? (
-              <div className="space-y-3">
-                <p className={`break-all rounded-xl px-4 py-3 text-sm ${inputClass(isDarkMode)}`}>{organizerInviteUrl(initial.organizerCode)}</p>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => onCopy?.(organizerInviteUrl(initial.organizerCode!))} className="rounded-xl btn-glow bg-[#f6cf7a] px-4 py-3 text-sm font-bold text-zinc-900">
-                    {t(lang, 'copy_link_leader')}
-                  </button>
-                  {!readOnly && onRotateOrganizer && (
-                    <button type="button" onClick={onRotateOrganizer} className="rounded-xl px-4 py-3 text-sm font-bold text-[#f19ba8]">
-                      {t(lang, 'rotate_invite')}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              !initial?.participantCode && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
-            )}
+            {initial?.participantCode || initial?.participantShort ? (
+              <InviteCode
+                lang={lang}
+                isDarkMode={isDarkMode}
+                label={t(lang, 'dancer')}
+                code={preferredInviteCode(initial.participantShort, initial.participantCode)}
+                readOnly={readOnly}
+                onCopy={(_value, kind) =>
+                  share(
+                    preferredInviteCode(initial.participantShort, initial.participantCode),
+                    preferredInviteLink(initial.participantShort, initial.participantCode, 'participant'),
+                    kind,
+                  )
+                }
+                onRotate={onRotateParticipant}
+              />
+            ) : null}
+            {initial?.organizerCode || initial?.organizerShort ? (
+              <InviteCode
+                lang={lang}
+                isDarkMode={isDarkMode}
+                label={t(lang, 'choreographer')}
+                code={preferredInviteCode(initial.organizerShort, initial.organizerCode)}
+                readOnly={readOnly}
+                onCopy={(_value, kind) =>
+                  share(
+                    preferredInviteCode(initial.organizerShort, initial.organizerCode),
+                    preferredInviteLink(initial.organizerShort, initial.organizerCode, 'organizer'),
+                    kind,
+                  )
+                }
+                onRotate={onRotateOrganizer}
+              />
+            ) : !initial?.participantCode && !initial?.participantShort ? (
+              <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
+            ) : null}
           </div>
         )}
 
+        {showInvites ? (
         <div className="space-y-3">
           <h3 className={`inline-flex items-center gap-2 font-serif text-2xl ${textPrimary(isDarkMode)}`}>
             {t(lang, 'admins_label')}
             <InfoTip lang={lang} name="admins" text={t(lang, 'invite_admin_hint')} />
           </h3>
-          {initial?.adminCode ? (
-            <div className="space-y-3">
-              <p className={`break-all rounded-xl px-4 py-3 text-sm ${inputClass(isDarkMode)}`}>{adminInviteUrl(initial.adminCode)}</p>
-              <p className={`font-mono text-sm tracking-wide ${textPrimary(isDarkMode)}`}>{initial.adminCode}</p>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => onCopy?.(adminInviteUrl(initial.adminCode!))} className="rounded-xl btn-glow bg-[#7c7bb9] px-4 py-3 text-sm font-bold text-white">
-                  {t(lang, 'copy_invite')}
-                </button>
-                <button type="button" onClick={() => onCopy?.(initial.adminCode!)} className="glass-well rounded-xl px-4 py-3 text-sm font-bold">
-                  {t(lang, 'copy_code')}
-                </button>
-                {!readOnly && onRotateInvite && (
-                  <button type="button" onClick={onRotateInvite} className="rounded-xl px-4 py-3 text-sm font-bold text-[#f19ba8]">
-                    {t(lang, 'rotate_invite')}
-                  </button>
-                )}
-              </div>
-            </div>
+          {initial?.adminCode || initial?.adminShort ? (
+            <InviteCode
+              lang={lang}
+              isDarkMode={isDarkMode}
+              label={t(lang, 'admin')}
+              code={preferredInviteCode(initial.adminShort, initial.adminCode)}
+              readOnly={readOnly}
+              onCopy={(_value, kind) =>
+                share(
+                  preferredInviteCode(initial.adminShort, initial.adminCode),
+                  preferredInviteLink(initial.adminShort, initial.adminCode, 'admin'),
+                  kind,
+                )
+              }
+              onRotate={onRotateInvite}
+            />
           ) : (
             <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'invite_after_create')}</p>
           )}
@@ -360,6 +490,7 @@ export function SetupPanel({
             ))}
           </div>
         </div>
+        ) : null}
         {note && <p className="font-bold text-[#f19ba8]">{note}</p>}
       </div>
       <div className="dock mt-6 flex justify-center gap-3 sm:mt-8">
