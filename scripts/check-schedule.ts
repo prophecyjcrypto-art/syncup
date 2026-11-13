@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { getDaysArray, groupByMonth, parseISODate, setTime, toISODateString } from '../src/lib/dates.ts'
-import { availabilityHeatmap, calculateBestSlots, coveredMs, freeIntervals, markedBlockCount, markedHours, normalizeDurationHours, plannedSessionHours, responseCount, uncoveredDays } from '../src/lib/schedule.ts'
+import { availabilityHeatmap, calculateBestSlots, coveredMs, freeIntervals, markedBlockCount, markedHours, normalizeDurationHours, plannedSessionHours, responseCount, shortlistSessionHours, uncoveredDays } from '../src/lib/schedule.ts'
 import { analyzeEvent } from '../src/lib/analysis.ts'
 import { devResultsAllowed, isDevResultsPath } from '../src/lib/devPreview.ts'
 import { buildCampaign, sampleShortlist } from '../src/dev/resultsPreview.tsx'
@@ -141,6 +141,8 @@ assert(responseCount([naOnly, { id: 'd4', blocks: [] }]) === 1, 'only people who
 assert(plannedSessionHours(null, ['existing'], []) === 0, 'a shortlist without a duration does not invent hours from nowhere')
 assert(plannedSessionHours(2, ['existing', 'existing'], []) === 2, 'duplicate shortlist keys are not double counted')
 assert(plannedSessionHours(null, [], [{ startHour: 19, endHour: 21.5 }]) === 2.5, 'grid sessions supply hours when nothing is shortlisted')
+assert(shortlistSessionHours(2, ['a', 'a', 'b']) === 4, 'schedule shows each shortlisted session once')
+assert(shortlistSessionHours(2, []) === null && shortlistSessionHours(null, ['a']) === null, 'schedule hides session hours when nothing is shortlisted')
 
 const morningSession: SessionRange = { id: 'one', iso: day, startHour: 9, endHour: 11 }
 const eveningSession: SessionRange = { id: 'two', iso: day, startHour: 19, endHour: 21.5 }

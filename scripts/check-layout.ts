@@ -597,6 +597,8 @@ async function main() {
     assert(devParsed.marks.includes('na') && devParsed.marks.includes('both') && devParsed.marks.includes('ok'), `dev mark filter was ${devParsed.marks.join(', ')}`)
     assert(!devParsed.password && !devParsed.signIn, 'dev results asked for a sign-in')
     assert(!devParsed.google && !devParsed.avail, 'dev results showed calendar or Avail')
+    const scheduleHours = await cdp.eval<string>(`document.querySelector('[data-shortlist-hours]')?.textContent ?? ''`)
+    assert(scheduleHours.includes('練習時數') && scheduleHours.includes('4'), `schedule shortlist hours were "${scheduleHours}"`)
     await cdp.eval(`document.querySelector('[data-results-view="analysis"]')?.click()`)
     await delay(60)
     const analysis = await cdp.eval<string>(`(() => {

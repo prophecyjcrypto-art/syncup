@@ -268,10 +268,17 @@ export function markedHours(config: AppConfig, people: SchedulePerson[], kind: B
   return Math.round((ms / 3600000) * 10) / 10
 }
 
+/** Hours of the saved shortlist. Null when there is no shortlist or no session length. Does not write. */
+export function shortlistSessionHours(duration: number | null, savedSlots: string[]): number | null {
+  const saved = new Set(savedSlots).size
+  if (saved === 0 || duration == null || duration <= 0) return null
+  return roundHour(saved * duration)
+}
+
 /** Shortlisted hours when any exist. Otherwise the sessions currently on the grid. Does not write. */
 export function plannedSessionHours(duration: number | null, savedSlots: string[], sessions: HourRange[]): number {
-  const saved = new Set(savedSlots).size
-  if (saved > 0 && duration != null && duration > 0) return roundHour(saved * duration)
+  const listed = shortlistSessionHours(duration, savedSlots)
+  if (listed != null) return listed
   return roundHour(sessions.reduce((sum, session) => sum + (session.endHour - session.startHour), 0))
 }
 

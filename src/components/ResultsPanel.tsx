@@ -5,7 +5,7 @@ import { buildIcs, formatSlotText } from '../lib/export'
 import { clearGoogleToken, createCalendarEvents, GOOGLE_CALENDAR_ENABLED, GoogleCalendarError } from '../lib/googleCalendar'
 import { formatLongDate, formatTime, getDaysArray, parseISODate, toISODateString } from '../lib/dates'
 import { durationHours, fitDuration, roundHour, SLOT_STEP } from '../lib/timeRange'
-import { availabilityHeatmap, calculateBestSlots, compulsoryReport, sharedFreeByDay, type MarkFilter } from '../lib/schedule'
+import { availabilityHeatmap, calculateBestSlots, compulsoryReport, sharedFreeByDay, shortlistSessionHours, type MarkFilter } from '../lib/schedule'
 import { commitSessions, pinsToSave, toggleSessionDay, type SessionRange } from '../lib/sessions'
 import { cardClass, textMuted, textPrimary } from '../lib/ui'
 import { InfoTip } from './Guide'
@@ -115,6 +115,7 @@ export function ResultsPanel({
       ? campaign.onDays
       : days.map((day) => toISODateString(day))
   ).sort()
+  const listedHours = shortlistSessionHours(campaign.config.durationHours, campaign.savedSlots)
   const overlap = sharedFreeByDay(campaign.config, required, overlapDates)
   const heat = availabilityHeatmap(campaign.config, dancers, overlapDates, markFilter)
   const pinKeys = sessions.flatMap((session) => {
@@ -419,6 +420,11 @@ export function ResultsPanel({
           <InfoTip lang={lang} name="results" text={t(lang, 'guide_results')} />
         </div>
         <div className="chip-row">
+          {listedHours != null ? (
+            <p data-shortlist-hours="" className={`shrink-0 self-center text-xs font-bold tabular-nums ${textMuted(isDarkMode)}`}>
+              {t(lang, 'stats_session')} {listedHours}
+            </p>
+          ) : null}
           <button type="button" onClick={() => void copy(false)} className="glass-well min-h-11 shrink-0 whitespace-nowrap rounded-full px-4 text-xs font-bold">{t(lang, 'copy_basic')}</button>
           <button type="button" onClick={() => void copy(true)} className="min-h-11 shrink-0 whitespace-nowrap rounded-full btn-glow bg-[#7c7bb9] px-4 text-xs font-bold text-white">{t(lang, 'copy_full')}</button>
           <button type="button" onClick={exportCalendar} className="min-h-11 shrink-0 whitespace-nowrap rounded-full border border-[#f6cf7a] px-4 text-xs font-bold text-[#f6cf7a]">{t(lang, 'export_calendar')}</button>
@@ -698,7 +704,12 @@ export function ResultsPanel({
           <div className="mt-6 space-y-4">
             {pinned.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'shortlist_title')} ({pinned.length})</h4>
+                <div className="flex items-baseline justify-between gap-3">
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'shortlist_title')} ({pinned.length})</h4>
+                  {listedHours != null ? (
+                    <p className="shrink-0 text-xs font-bold tabular-nums text-[#f6cf7a]">{t(lang, 'stats_session')} {listedHours}</p>
+                  ) : null}
+                </div>
                 {pinned.map(renderSlot)}
               </div>
             )}
