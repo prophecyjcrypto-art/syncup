@@ -214,7 +214,7 @@ const editor = renderToStaticMarkup(
 )
 assert(!editor.includes('Connect Google Calendar'), 'availability editor hides Google Calendar')
 assert(!editor.includes(calendar.token), 'a stored calendar token is not rendered')
-assert(editor.includes('Avail'), 'availability entry stays')
+assert(editor.includes('OK'), 'availability entry stays')
 
 assert(GOOGLE_CALENDAR_ENABLED === false, 'the calendar flag stays off')
 

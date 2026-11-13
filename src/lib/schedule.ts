@@ -64,7 +64,7 @@ export function usesBothKinds(blocks: ScheduleBlock[]): boolean {
   return available && unavailable
 }
 
-/** Days whose daily window is not fully marked. Only applies when both NA and Avail exist. */
+/** Days whose daily window is not fully marked. Only applies when both NA and OK exist. */
 export function uncoveredDays(config: AppConfig, blocks: ScheduleBlock[]): string[] {
   if (!usesBothKinds(blocks)) return []
   const missing: string[] = []

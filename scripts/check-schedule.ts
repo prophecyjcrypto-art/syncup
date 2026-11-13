@@ -47,7 +47,7 @@ const covered = coveredMs(
     bothEnd,
   ),
 )
-assert(covered === 2 * 60 * 60 * 1000, 'Avail minus overlapping NA should leave 2 hours')
+assert(covered === 2 * 60 * 60 * 1000, 'OK minus overlapping NA should leave 2 hours')
 
 const blocked = calculateBestSlots(config, [{ id: 'c1', blocks: [block(9, 22, 'unavailable')] }], [naOnly])
 assert(blocked.length === 0, 'an all-day NA organizer removes every slot')
