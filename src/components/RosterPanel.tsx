@@ -1,12 +1,14 @@
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { AvailabilityEditor } from './AvailabilityEditor'
+import { MarkFilterControl } from './MarkFilter'
 import { t } from '../i18n'
 import { formatBlockLabel } from '../lib/blocks'
 import { formatDate, formatLongDate, parseISODate } from '../lib/dates'
 import { uncoveredDays } from '../lib/schedule'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { InfoTip } from './Guide'
-import type { Campaign, Language, PersonRole, TimeBlock } from '../types'
+import type { MarkFilter } from '../lib/schedule'
+import type { Campaign, DanceGroup, Language, PersonRole, TimeBlock } from '../types'
 
 export function RosterPanel({
   lang,
@@ -17,6 +19,10 @@ export function RosterPanel({
   onNext,
   onSave,
   onDelete,
+  onCreateGroup,
+  onRenameGroup,
+  onDeleteGroup,
+  onToggleMember,
 }: {
   lang: Language
   isDarkMode: boolean
@@ -26,12 +32,21 @@ export function RosterPanel({
   onNext: () => void
   onSave: (input: { personId?: string; name: string; role: PersonRole; blocks: TimeBlock[] }) => Promise<boolean>
   onDelete: (personId: string) => Promise<void>
+  onCreateGroup?: (name: string) => Promise<boolean>
+  onRenameGroup?: (groupId: string, name: string) => Promise<boolean>
+  onDeleteGroup?: (groupId: string) => Promise<boolean>
+  onToggleMember?: (groupId: string, personId: string, included: boolean) => Promise<boolean>
 }) {
   const people = variant === 'choreographer' ? campaign.choreographers : campaign.dancers
+  const groups = variant === 'dancer' ? campaign.groups : []
   const [name, setName] = useState('')
   const [blocks, setBlocks] = useState<TimeBlock[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [groupName, setGroupName] = useState('')
+  const [groupId, setGroupId] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [markFilter, setMarkFilter] = useState<MarkFilter>('both')
   const accent = variant === 'choreographer' ? 'bg-[#f6cf7a] text-zinc-900' : 'bg-[#7c7bb9] text-white'
 
   async function save() {
@@ -52,6 +67,25 @@ export function RosterPanel({
     } finally {
       setBusy(false)
     }
+  }
+
+  const shown = people.filter((person) => {
+    if (!groupId) return true
+    return groups.find((group) => group.id === groupId)?.memberIds.includes(person.id) ?? false
+  })
+
+  async function addGroup(event: FormEvent) {
+    event.preventDefault()
+    const trimmed = groupName.trim()
+    if (!trimmed || !onCreateGroup) return
+    const ok = await onCreateGroup(trimmed)
+    if (ok) setGroupName('')
+  }
+
+  function visibleBlocks(blocks: TimeBlock[]): TimeBlock[] {
+    if (markFilter === 'na') return blocks.filter((block) => block.kind === 'unavailable')
+    if (markFilter === 'ok') return blocks.filter((block) => block.kind === 'available')
+    return blocks
   }
 
   return (
@@ -78,6 +112,62 @@ export function RosterPanel({
           </button>
         </p>
       )}
+      {variant === 'dancer' && onCreateGroup ? (
+        <section className="space-y-3">
+          <h3 className={`inline-flex items-center gap-2 text-sm font-bold ${textPrimary(isDarkMode)}`}>
+            {t(lang, 'groups_label')}
+            <InfoTip lang={lang} name="groups" text={t(lang, 'guide_groups')} />
+          </h3>
+          <form onSubmit={(event) => void addGroup(event)} className="flex max-w-md gap-2">
+            <input
+              value={groupName}
+              onChange={(event) => setGroupName(event.target.value)}
+              placeholder={t(lang, 'groups_label')}
+              aria-label={t(lang, 'groups_label')}
+              className={`min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+            />
+            <button type="submit" disabled={!groupName.trim()} className="min-h-11 shrink-0 rounded-full bg-[#7c7bb9] px-4 text-xs font-bold text-white disabled:opacity-40">
+              {t(lang, 'add_admin')}
+            </button>
+          </form>
+          {groups.length > 0 ? (
+            <div className="chip-row py-1">
+              <button
+                type="button"
+                data-group-id="all"
+                aria-pressed={groupId === null}
+                onClick={() => setGroupId(null)}
+                className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${groupId === null ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
+              >
+                {t(lang, 'filter_all')}
+              </button>
+              {groups.map((group) => (
+                <GroupChip
+                  key={group.id}
+                  group={group}
+                  selected={groupId === group.id}
+                  renaming={renamingId === group.id}
+                  isDarkMode={isDarkMode}
+                  onSelect={() => {
+                    if (groupId === group.id) setRenamingId(group.id)
+                    else setGroupId(group.id)
+                  }}
+                  onRename={async (next) => {
+                    setRenamingId(null)
+                    if (next.trim() && next.trim() !== group.name && onRenameGroup) await onRenameGroup(group.id, next)
+                  }}
+                  onDelete={() => {
+                    if (!onDeleteGroup || !window.confirm(t(lang, 'delete_group'))) return
+                    if (groupId === group.id) setGroupId(null)
+                    void onDeleteGroup(group.id)
+                  }}
+                />
+              ))}
+            </div>
+          ) : null}
+          <MarkFilterControl lang={lang} value={markFilter} onChange={setMarkFilter} />
+        </section>
+      ) : null}
       <label className="block max-w-md space-y-2">
         <span className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'member_name')}</span>
         <input value={name} onChange={(event) => setName(event.target.value)} className={`w-full rounded-2xl px-4 py-3 font-bold ${inputClass(isDarkMode)}`} />
@@ -97,10 +187,10 @@ export function RosterPanel({
       </button>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
-        {people.length === 0 ? (
+        {shown.length === 0 ? (
           <p className={`md:col-span-2 py-10 text-center text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'list_empty')}</p>
         ) : (
-          people.map((person) => (
+          shown.map((person) => (
             <article key={person.id} className={`${cardClass(isDarkMode)} rounded-[1.5rem] p-5`}>
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
@@ -133,11 +223,30 @@ export function RosterPanel({
                   </button>
                 </div>
               </div>
+              {groups.length > 0 && onToggleMember ? (
+                <div className="chip-row mb-3 py-1">
+                  {groups.map((group) => {
+                    const on = group.memberIds.includes(person.id)
+                    return (
+                      <button
+                        key={group.id}
+                        type="button"
+                        data-assign-group={group.id}
+                        aria-pressed={on}
+                        onClick={() => void onToggleMember(group.id, person.id, !on)}
+                        className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
+                      >
+                        {group.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : null}
               <div className="space-y-1">
-                {person.blocks.length === 0 ? (
+                {visibleBlocks(person.blocks).length === 0 ? (
                   <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_times')}</p>
                 ) : (
-                  person.blocks.slice(0, 6).map((block) => (
+                  visibleBlocks(person.blocks).slice(0, 6).map((block) => (
                     <p key={block.id} className={`text-xs ${textMuted(isDarkMode)}`}>
                       <span className={block.kind === 'available' ? 'text-[#93ba8c]' : 'text-[#f19ba8]'}>
                         {block.kind === 'available' ? t(lang, 'mode_available') : t(lang, 'mode_unavailable')}
@@ -147,12 +256,56 @@ export function RosterPanel({
                     </p>
                   ))
                 )}
-                {person.blocks.length > 6 && <p className="text-xs text-zinc-400">+{person.blocks.length - 6}</p>}
+                {visibleBlocks(person.blocks).length > 6 && <p className="text-xs text-zinc-400">+{visibleBlocks(person.blocks).length - 6}</p>}
               </div>
             </article>
           ))
         )}
       </div>
     </div>
+  )
+}
+
+function GroupChip({
+  group,
+  selected,
+  renaming,
+  isDarkMode,
+  onSelect,
+  onRename,
+  onDelete,
+}: {
+  group: DanceGroup
+  selected: boolean
+  renaming: boolean
+  isDarkMode: boolean
+  onSelect: () => void
+  onRename: (name: string) => void
+  onDelete: () => void
+}) {
+  if (renaming) {
+    return (
+      <input
+        autoFocus
+        defaultValue={group.name}
+        aria-label={group.name}
+        onBlur={(event) => onRename(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur()
+          if (event.key === 'Escape') onRename(group.name)
+        }}
+        className={`min-h-11 w-28 rounded-full px-3 text-xs font-bold ${inputClass(isDarkMode)}`}
+      />
+    )
+  }
+  return (
+    <span className={`inline-flex shrink-0 items-center rounded-full ${selected ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}>
+      <button type="button" data-group-id={group.id} aria-pressed={selected} onClick={onSelect} className="min-h-11 px-3 text-xs font-bold">
+        {group.name}
+      </button>
+      <button type="button" onClick={onDelete} className="min-h-11 pr-3 text-xs font-bold" aria-label="×">
+        ×
+      </button>
+    </span>
   )
 }

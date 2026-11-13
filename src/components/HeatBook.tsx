@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { t } from '../i18n'
 import { formatLongDate, formatTime, parseISODate, toISODateString } from '../lib/dates'
+import { rangesOverlap, type SessionRange } from '../lib/sessions'
 import {
   SLOT_STEP,
   durationHours,
@@ -17,14 +18,12 @@ import {
 import { textMuted, textPrimary } from '../lib/ui'
 import { InfoTip } from './Guide'
 import type { Language, TimeSlot } from '../types'
-import type { OverlapCell } from '../lib/schedule'
+import type { MarkFilter, OverlapCell } from '../lib/schedule'
 
-export interface SessionRange extends HourRange {
-  iso: string
-}
+export type { SessionRange }
 
 type HeatDrag =
-  | { kind: 'create'; iso: string; origin: number }
+  | { kind: 'create'; id: string; iso: string; origin: number }
   | { kind: 'move'; origin: number; range: SessionRange }
   | { kind: 'resize-start'; range: SessionRange }
   | { kind: 'resize-end'; range: SessionRange }
@@ -34,25 +33,37 @@ interface HeatDay {
   cells: OverlapCell[]
 }
 
-function cellAt(x: number, y: number, root: HTMLElement): { iso: string; index: number } | null {
-  const direct = document.elementFromPoint(x, y)?.closest('[data-slot]')
-  if (direct instanceof HTMLElement && root.contains(direct) && direct.dataset.day) {
-    return { iso: direct.dataset.day, index: Number(direct.dataset.slot) }
-  }
+interface Preview {
+  block: SessionRange
+  sourceId: string | null
+}
+
+/** Measure day columns, not every cell. A block covers the cells underneath, and reading each cell forced a layout on every move. */
+function cellFromPoint(x: number, y: number, root: HTMLElement): { iso: string; index: number } | null {
+  const columns = [...root.querySelectorAll<HTMLElement>('.heat-col')]
+  if (columns.length === 0) return null
+  const sample = columns[0].querySelector<HTMLElement>('[data-slot="0"]')
+  const next = columns[0].querySelector<HTMLElement>('[data-slot="1"]')
+  if (!sample) return null
+  const sampleRect = sample.getBoundingClientRect()
+  const pitch = next ? next.getBoundingClientRect().top - sampleRect.top : sampleRect.height
+  if (pitch <= 0) return null
+  const count = columns[0].querySelectorAll('[data-slot]').length
   let best: { iso: string; index: number } | null = null
   let bestDist = 64 ** 2
-  for (const cell of root.querySelectorAll<HTMLElement>('[data-slot]')) {
-    if (!cell.dataset.day) continue
-    const rect = cell.getBoundingClientRect()
-    const cx = Math.max(rect.left, Math.min(x, rect.right))
-    const cy = Math.max(rect.top, Math.min(y, rect.bottom))
-    const dist = (cx - x) ** 2 + (cy - y) ** 2
-    if (dist <= bestDist) {
-      bestDist = dist
-      best = { iso: cell.dataset.day, index: Number(cell.dataset.slot) }
-    }
+  for (const column of columns) {
+    const rect = column.getBoundingClientRect()
+    const dx = x < rect.left ? rect.left - x : x > rect.right ? x - rect.right : 0
+    const dy = y < rect.top ? rect.top - y : y > rect.bottom ? y - rect.bottom : 0
+    const dist = dx * dx + dy * dy
+    if (dist > bestDist) continue
+    let index = Math.floor((y - sampleRect.top) / pitch)
+    if (index < 0) index = 0
+    if (count > 0 && index > count - 1) index = count - 1
+    bestDist = dist
+    best = { iso: column.dataset.day ?? '', index }
   }
-  return best
+  return best?.iso ? best : null
 }
 
 function fallbackCell(drag: HeatDrag, windowStart: number): { iso: string; index: number } {
@@ -62,13 +73,7 @@ function fallbackCell(drag: HeatDrag, windowStart: number): { iso: string; index
   return { iso: drag.range.iso, index: indexForHour(drag.range.startHour, windowStart) }
 }
 
-function placedBlock(drag: HeatDrag, block: SessionRange, sessions: SessionRange[]): SessionRange {
-  if (drag.kind !== 'move' || block.iso === drag.range.iso) return block
-  const taken = sessions.some((item) => item.iso === block.iso && item.iso !== drag.range.iso)
-  return taken ? { ...block, iso: drag.range.iso } : block
-}
-
-function sessionFromDrag(
+function blockFromDrag(
   drag: HeatDrag,
   index: number,
   iso: string,
@@ -78,14 +83,16 @@ function sessionFromDrag(
 ): SessionRange {
   if (drag.kind === 'create' && index === drag.origin && duration != null && duration > SLOT_STEP) {
     const start = roundHour(windowStart + drag.origin * SLOT_STEP)
-    return { iso: drag.iso, ...fitDuration({ startHour: start, endHour: start }, duration, windowStart, windowEnd) }
+    return { id: drag.id, iso: drag.iso, ...fitDuration({ startHour: start, endHour: start }, duration, windowStart, windowEnd) }
   }
-  if (drag.kind === 'create') return { iso: drag.iso, ...rangeFromCellIndexes(windowStart, drag.origin, index) }
-  if (drag.kind === 'move') {
-    return { iso, ...moveHourRange(drag.range, index - drag.origin, windowStart, windowEnd) }
-  }
-  if (drag.kind === 'resize-end') return { iso: drag.range.iso, ...resizeToCell('end', index, drag.range, windowStart, windowEnd) }
-  return { iso: drag.range.iso, ...resizeToCell('start', index, drag.range, windowStart, windowEnd) }
+  if (drag.kind === 'create') return { id: drag.id, iso: drag.iso, ...rangeFromCellIndexes(windowStart, drag.origin, index) }
+  if (drag.kind === 'move') return { ...drag.range, iso, ...moveHourRange(drag.range, index - drag.origin, windowStart, windowEnd) }
+  if (drag.kind === 'resize-end') return { ...drag.range, ...resizeToCell('end', index, drag.range, windowStart, windowEnd) }
+  return { ...drag.range, ...resizeToCell('start', index, drag.range, windowStart, windowEnd) }
+}
+
+function sourceIdOf(drag: HeatDrag): string | null {
+  return drag.kind === 'create' ? null : drag.range.id
 }
 
 export function sessionSummary(range: HourRange | null, lang: Language): string {
@@ -102,7 +109,13 @@ export function slotMatchesSession(slot: TimeSlot, session: SessionRange): boole
   return startHour === session.startHour && endHour === session.endHour
 }
 
-function scoreTone(score: number, isDarkMode: boolean): string {
+function scoreTone(score: number, isDarkMode: boolean, mode: MarkFilter): string {
+  if (mode === 'na') {
+    if (score >= 70) return 'bg-[#f19ba8] text-white'
+    if (score >= 40) return isDarkMode ? 'bg-[#f19ba8]/40 text-white' : 'bg-[#f19ba8]/30 text-zinc-800'
+    if (score > 0) return isDarkMode ? 'bg-white/10 text-zinc-200' : 'bg-white text-zinc-600'
+    return isDarkMode ? 'bg-black/30 text-zinc-500' : 'bg-zinc-100 text-zinc-400'
+  }
   if (score >= 90) return 'bg-[#7c7bb9] text-white'
   if (score >= 70) return 'bg-[#93ba8c] text-white'
   if (score >= 50) return 'bg-[#f6cf7a] text-zinc-900'
@@ -114,6 +127,12 @@ function hourAttr(windowStart: number, index: number): string {
   return String(roundHour(windowStart + index * SLOT_STEP))
 }
 
+function hiddenSession(item: SessionRange, preview: Preview | null): boolean {
+  if (!preview) return false
+  if (preview.sourceId) return item.id === preview.sourceId
+  return item.iso === preview.block.iso && rangesOverlap(item, preview.block)
+}
+
 export function HeatBook({
   lang,
   isDarkMode,
@@ -122,7 +141,8 @@ export function HeatBook({
   slots,
   savedSlots,
   sessions,
-  focusIso,
+  focusId,
+  markFilter,
   durationHours: chosenHours,
   editable,
   canPin,
@@ -143,25 +163,26 @@ export function HeatBook({
   slots: TimeSlot[]
   savedSlots: string[]
   sessions: SessionRange[]
-  focusIso: string | null
+  focusId: string | null
+  markFilter: MarkFilter
   durationHours: number | null
   editable: boolean
   canPin: boolean
   windowStart: number
   windowEnd: number
   nameOf: (id: string) => string
-  onCommit: (block: SessionRange, fromIso: string) => void
-  onFocus: (iso: string) => void
+  onCommit: (block: SessionRange, sourceId: string | null) => void
+  onFocus: (id: string) => void
   onToggleDay: (iso: string) => void
-  onRemove: (iso: string) => void
+  onRemove: (id: string) => void
   onClearAll: () => void
   onToggleSaved: (keys: string[]) => void
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<HeatDrag | null>(null)
-  const [preview, setPreview] = useState<{ block: SessionRange; fromIso: string } | null>(null)
-  const focused = sessions.find((item) => item.iso === focusIso) ?? sessions[0] ?? null
+  const [preview, setPreview] = useState<Preview | null>(null)
+  const focused = sessions.find((item) => item.id === focusId) ?? sessions[0] ?? null
   const shown = preview?.block ?? focused
 
   useEffect(() => {
@@ -174,7 +195,8 @@ export function HeatBook({
     else if (b.right > s.right - 8) scroller.scrollLeft += b.right - (s.right - 8)
     if (b.top < s.top) scroller.scrollTop -= s.top - b.top
     else if (b.bottom > s.bottom) scroller.scrollTop += b.bottom - s.bottom
-  }, [focused?.iso, focused?.startHour, focused?.endHour])
+  }, [focused?.id, focused?.iso, focused?.startHour, focused?.endHour])
+
   const summary = sessionSummary(shown, lang)
   const heatHelp = [
     t(lang, 'heat_hint'),
@@ -190,6 +212,7 @@ export function HeatBook({
     .filter((slot): slot is TimeSlot => slot != null)
   const matching = !preview && focused ? slots.find((slot) => slotMatchesSession(slot, focused)) ?? null : null
   const saved = chosenSlots.length > 0 && chosenSlots.every((slot) => savedSlots.includes(slot.start.toISOString()))
+  const countLabel = markFilter === 'na' ? 'heat_na' : markFilter === 'ok' ? 'heat_ok' : 'heat_free'
 
   function maybeScroll(clientX: number, clientY: number) {
     const scroller = scrollRef.current
@@ -201,21 +224,39 @@ export function HeatBook({
     else if (clientX > rect.right - 28) scroller.scrollLeft += 16
   }
 
+  function publish(drag: HeatDrag, iso: string, index: number, duration: number | null) {
+    const block = blockFromDrag(drag, index, iso, windowStart, windowEnd, duration)
+    const sourceId = sourceIdOf(drag)
+    setPreview((current) => {
+      if (
+        current &&
+        current.sourceId === sourceId &&
+        current.block.id === block.id &&
+        current.block.iso === block.iso &&
+        current.block.startHour === block.startHour &&
+        current.block.endHour === block.endHour
+      ) {
+        return current
+      }
+      return { block, sourceId }
+    })
+  }
+
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (!editable || event.button !== 0 || !gridRef.current) return
     const target = event.target as Element
     if (target.closest('[data-day-label], [data-time-label]')) return
-    const hit = cellAt(event.clientX, event.clientY, gridRef.current)
+    const hit = cellFromPoint(event.clientX, event.clientY, gridRef.current)
     const edge = target.closest('[data-edge]')
     const edgeName = edge instanceof HTMLElement ? edge.dataset.edge : null
     const booked = target.closest('[data-booked]')
-    const bookedIso = booked instanceof HTMLElement ? booked.dataset.bookedIso : null
-    const grabbed = sessions.find((item) => item.iso === bookedIso) ?? null
+    const bookedId = booked instanceof HTMLElement ? booked.dataset.sessionId : null
+    const grabbed = sessions.find((item) => item.id === bookedId) ?? null
     let drag: HeatDrag | null = null
     if (focused && edgeName === 'start') drag = { kind: 'resize-start', range: focused }
     else if (focused && edgeName === 'end') drag = { kind: 'resize-end', range: focused }
     else if (grabbed && hit) drag = { kind: 'move', origin: hit.index, range: grabbed }
-    else if (hit) drag = { kind: 'create', iso: hit.iso, origin: hit.index }
+    else if (hit) drag = { kind: 'create', id: crypto.randomUUID(), iso: hit.iso, origin: hit.index }
     if (!drag) return
     event.preventDefault()
     try {
@@ -225,38 +266,34 @@ export function HeatBook({
     }
     dragRef.current = drag
     const seed = hit ?? fallbackCell(drag, windowStart)
-    const block = placedBlock(drag, sessionFromDrag(drag, seed.index, seed.iso, windowStart, windowEnd, null), sessions)
-    setPreview({ block, fromIso: drag.kind === 'create' ? drag.iso : drag.range.iso })
+    publish(drag, seed.iso, seed.index, null)
   }
 
   function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     const drag = dragRef.current
     if (!drag || !gridRef.current) return
     maybeScroll(event.clientX, event.clientY)
-    const hit = cellAt(event.clientX, event.clientY, gridRef.current)
+    const hit = cellFromPoint(event.clientX, event.clientY, gridRef.current)
     if (!hit) return
-    const block = placedBlock(drag, sessionFromDrag(drag, hit.index, hit.iso, windowStart, windowEnd, null), sessions)
-    setPreview({ block, fromIso: drag.kind === 'create' ? drag.iso : drag.range.iso })
+    publish(drag, hit.iso, hit.index, null)
   }
 
   function finish(event: ReactPointerEvent<HTMLDivElement>) {
     const drag = dragRef.current
     dragRef.current = null
     if (!drag || !gridRef.current) return
-    const hit = cellAt(event.clientX, event.clientY, gridRef.current) ?? fallbackCell(drag, windowStart)
-    const raw = sessionFromDrag(drag, hit.index, hit.iso, windowStart, windowEnd, chosenHours)
-    const block = placedBlock(drag, raw, sessions)
-    const fromIso = drag.kind === 'create' ? drag.iso : drag.range.iso
+    const hit = cellFromPoint(event.clientX, event.clientY, gridRef.current) ?? fallbackCell(drag, windowStart)
+    const block = blockFromDrag(drag, hit.index, hit.iso, windowStart, windowEnd, chosenHours)
     setPreview(null)
     if (
-      drag.kind === 'move' &&
+      drag.kind !== 'create' &&
       block.iso === drag.range.iso &&
       block.startHour === drag.range.startHour &&
       block.endHour === drag.range.endHour
     ) {
-      onFocus(drag.range.iso)
+      onFocus(drag.range.id)
     } else {
-      onCommit(block, fromIso)
+      onCommit(block, sourceIdOf(drag))
     }
     scrollRef.current?.focus()
   }
@@ -265,7 +302,7 @@ export function HeatBook({
     if (!editable) return
     if (event.key === 'Backspace' || event.key === 'Delete') {
       event.preventDefault()
-      if (focused) onRemove(focused.iso)
+      if (focused) onRemove(focused.id)
       return
     }
     const plainDayMove = (event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !event.shiftKey && !event.altKey
@@ -275,8 +312,8 @@ export function HeatBook({
       const dir = event.key === 'ArrowRight' ? 1 : -1
       const index = heat.findIndex((day) => day.iso === focused.iso)
       const next = heat[index + dir]
-      if (!next || sessions.some((item) => item.iso === next.iso)) return
-      onCommit({ ...focused, iso: next.iso }, focused.iso)
+      if (!next) return
+      onCommit({ ...focused, iso: next.iso }, focused.id)
       return
     }
     const forward = event.key === 'ArrowDown' || event.key === 'ArrowRight'
@@ -286,10 +323,10 @@ export function HeatBook({
     if (!focused) {
       const iso = heat[0]?.iso
       if (!iso) return
-      onCommit({ iso, ...rangeFromCellIndexes(windowStart, 0, 0) }, iso)
+      onCommit({ id: crypto.randomUUID(), iso, ...rangeFromCellIndexes(windowStart, 0, 0) }, null)
       return
     }
-    const write = (block: HourRange) => onCommit({ ...block, iso: focused.iso }, focused.iso)
+    const write = (block: HourRange) => onCommit({ ...focused, ...block }, focused.id)
     if (event.key === 'Home') {
       write(moveHourRange(focused, -999, windowStart, windowEnd))
       return
@@ -351,11 +388,11 @@ export function HeatBook({
           <div className="flex items-center justify-between gap-3">
             <p className={`text-sm font-semibold tabular-nums ${textPrimary(isDarkMode)}`} data-range-summary="" aria-live="polite">
               {summary}
-              {sessions.length > 1 ? ` · ${t(lang, 'days_picked', { n: sessions.length })}` : ''}
+              {sessions.length > 1 ? ` · ${t(lang, 'slots_picked', { n: sessions.length })}` : ''}
             </p>
             {editable && focused ? (
               <div className="flex shrink-0 gap-2">
-                <button type="button" onClick={() => onRemove(focused.iso)} className={`min-h-11 text-xs font-bold ${textMuted(isDarkMode)}`}>
+                <button type="button" data-remove-session="" onClick={() => onRemove(focused.id)} className={`min-h-11 text-xs font-bold ${textMuted(isDarkMode)}`}>
                   {t(lang, 'clear_range')}
                 </button>
                 {sessions.length > 1 ? (
@@ -416,9 +453,8 @@ export function HeatBook({
                 </span>
               ))}
               {heat.map((day, dayIndex) => {
-                const hidden = preview != null && (preview.fromIso === day.iso || preview.block.iso === day.iso)
                 const blocks = [
-                  ...sessions.filter((item) => item.iso === day.iso && !hidden),
+                  ...sessions.filter((item) => item.iso === day.iso && !hiddenSession(item, preview)),
                   ...(preview?.block.iso === day.iso ? [preview.block] : []),
                 ]
                 return (
@@ -436,9 +472,9 @@ export function HeatBook({
                             data-slot={index}
                             data-day={day.iso}
                             data-hour={hourAttr(windowStart, index)}
-                            title={`${formatTime(cell.start, lang)} · ${t(lang, 'heat_free', { n: cell.freeIds.length, total: dancers.length })}`}
-                            aria-label={`${formatLongDate(cell.start, lang)} ${formatTime(cell.start, lang)} ${t(lang, 'heat_free', { n: cell.freeIds.length, total: dancers.length })}`}
-                            className={`heat-cell ${scoreTone(ratio, isDarkMode)} ${pinned ? 'heat-cell-pinned' : ''}`}
+                            title={`${formatTime(cell.start, lang)} · ${t(lang, countLabel, { n: cell.freeIds.length, total: dancers.length })}`}
+                            aria-label={`${formatLongDate(cell.start, lang)} ${formatTime(cell.start, lang)} ${t(lang, countLabel, { n: cell.freeIds.length, total: dancers.length })}`}
+                            className={`heat-cell ${scoreTone(ratio, isDarkMode, markFilter)} ${pinned ? 'heat-cell-pinned' : ''}`}
                           >
                             {cell.freeIds.length}
                           </div>
@@ -449,11 +485,12 @@ export function HeatBook({
                         const endIndex = indexForHour(block.endHour, windowStart)
                         const span = endIndex - startIndex
                         if (span <= 0) return null
-                        const isFocus = block.iso === (preview ? preview.block.iso : focused?.iso)
+                        const isFocus = preview ? block.id === preview.block.id : block.id === focused?.id
                         return (
                           <div
-                            key={block.iso}
+                            key={block.id}
                             data-booked=""
+                            data-session-id={block.id}
                             data-booked-iso={block.iso}
                             data-day={block.iso}
                             data-focused={isFocus ? '' : undefined}
@@ -461,6 +498,7 @@ export function HeatBook({
                             style={{
                               top: `calc(${startIndex} * (2.25rem + 2px))`,
                               height: `calc(${span} * 2.25rem + ${Math.max(span - 1, 0) * 2}px)`,
+                              zIndex: isFocus ? 3 : 2,
                             }}
                           >
                             {isFocus ? <span data-edge="start" className="heat-edge heat-edge-start" aria-label={t(lang, 'drag_hint')} /> : null}

@@ -54,6 +54,7 @@ const campaign: Campaign = {
   organizerCode: 'ORG',
   participantCode: 'PART',
   admins: [],
+  groups: [],
   choreographers: [
     {
       id: 'org-1',
@@ -230,6 +231,10 @@ function Preview({ name }: { name: string }) {
           onNext={() => undefined}
           onSave={async () => true}
           onDelete={async () => undefined}
+          onCreateGroup={name === 'members' ? async () => true : undefined}
+          onRenameGroup={name === 'members' ? async () => true : undefined}
+          onDeleteGroup={name === 'members' ? async () => true : undefined}
+          onToggleMember={name === 'members' ? async () => true : undefined}
         />
       </Shell>
     )

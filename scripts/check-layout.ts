@@ -429,6 +429,32 @@ async function main() {
     const phone = await overflow(cdp)
     assert(phone.scrollWidth <= phone.clientWidth + 1, `results still overflows after drag: ${phone.scrollWidth}`)
 
+    await openPage(cdp, '/?preview=results&lang=zh', 390, 844)
+    const aligned = await cdp.eval<number>(`(() => {
+      const label = document.querySelector('.heat-time')
+      const cell = document.querySelector('[data-slot="0"]')
+      if (!(label instanceof HTMLElement) || !(cell instanceof HTMLElement)) return 999
+      return Math.abs(label.getBoundingClientRect().top - cell.getBoundingClientRect().top)
+    })()`)
+    assert(aligned <= 4, `time label sits ${aligned}px off the grid line`)
+    const firstSlot = await dragHours(cdp, '9', '10', 'mouse', true)
+    assert(firstSlot.includes('09:00') && firstSlot.includes('10:30'), `first session was "${firstSlot}"`)
+    const secondSlot = await dragHours(cdp, '19', '21', 'mouse', true)
+    assert(secondSlot.includes('19:00') && secondSlot.includes('21:30'), `second session was "${secondSlot}"`)
+    const sameDay = await cdp.eval<string>(`(() => {
+      const blocks = [...document.querySelectorAll('[data-booked]')]
+      const days = blocks.map((el) => el.getAttribute('data-booked-iso'))
+      return JSON.stringify({ count: blocks.length, same: days.length === 2 && days[0] === days[1] })
+    })()`)
+    const sameParsed = JSON.parse(sameDay) as { count: number; same: boolean }
+    assert(sameParsed.count === 2 && sameParsed.same, `a day did not keep two sessions (${sameDay})`)
+    await cdp.eval(`document.querySelector('[data-remove-session]')?.click()`)
+    await delay(40)
+    const remaining = await cdp.eval<number>(`document.querySelectorAll('[data-booked]').length`)
+    assert(remaining === 1, `removing the focused session left ${remaining}`)
+    const multiOverflow = await overflow(cdp)
+    assert(multiOverflow.scrollWidth <= multiOverflow.clientWidth + 1, `two sessions overflow: ${multiOverflow.scrollWidth}`)
+
     await openPage(cdp, '/?preview=results&lang=zh', 1280, 800)
     const desktopBooked = await dragHours(cdp, '19', '21', 'mouse', true)
     assert(desktopBooked.includes('19:00') && desktopBooked.includes('2.5'), `desktop block was "${desktopBooked}"`)

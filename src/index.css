@@ -279,10 +279,13 @@
 
 .heat-time {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 0 0.15rem 0 0;
   color: #a1a1aa;
   font-size: 0.62rem;
   font-weight: 700;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   touch-action: pan-x pan-y;
 }
@@ -336,9 +339,14 @@ button.heat-day:disabled {
   align-items: center;
   justify-content: center;
   border-radius: 0.45rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
   font-size: 0.65rem;
   font-weight: 700;
   touch-action: none;
+}
+
+.theme-light .heat-cell {
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.12);
 }
 
 .heat-cell-pinned {

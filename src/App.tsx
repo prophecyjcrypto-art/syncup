@@ -15,7 +15,9 @@ import {
   claimOrganizerInvite,
   claimParticipantInvite,
   createCampaign,
+  createDanceGroup,
   deleteCampaign,
+  deleteDanceGroup,
   deletePerson,
   campaignVisible,
   fetchCampaigns,
@@ -23,9 +25,11 @@ import {
   removeAdmin,
   rotateAdminInvite,
   rotateOrganizerInvite,
+  renameDanceGroup,
   rotateParticipantInvite,
   savePortalPerson,
   saveRosterPerson,
+  setDanceGroupMember,
   setSavedSlots,
   updateCampaign,
 } from './lib/db'
@@ -639,6 +643,10 @@ export default function App() {
                 onDelete={async (personId) => {
                   await run(() => deletePerson(personId))
                 }}
+                onCreateGroup={(name) => run(() => createDanceGroup(active.id, name))}
+                onRenameGroup={(groupId, name) => run(() => renameDanceGroup(groupId, name))}
+                onDeleteGroup={(groupId) => run(() => deleteDanceGroup(groupId))}
+                onToggleMember={(groupId, personId, included) => run(() => setDanceGroupMember(groupId, personId, included))}
               />
             ) : step === 'results' && active ? (
               <ResultsPanel

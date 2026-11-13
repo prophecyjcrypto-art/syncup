@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs'
 import { getDaysArray, groupByMonth, parseISODate, setTime, toISODateString } from '../src/lib/dates.ts'
-import { availabilityHeatmap, calculateBestSlots, coveredMs, freeIntervals, normalizeDurationHours, uncoveredDays } from '../src/lib/schedule.ts'
+import { availabilityHeatmap, calculateBestSlots, coveredMs, freeIntervals, markedBlockCount, markedHours, normalizeDurationHours, plannedSessionHours, responseCount, uncoveredDays } from '../src/lib/schedule.ts'
+import { commitSessions, pinsToSave, type SessionRange } from '../src/lib/sessions.ts'
 import {
   durationFromCellCount,
   durationHours,
@@ -116,5 +118,60 @@ const fitted = fitDuration({ startHour: 18, endHour: 20 }, 1.5, 9, 22)
 assert(fitted.startHour === 18 && fitted.endHour === 19.5, 'a shorter length keeps the start and moves the end')
 const shifted = fitDuration({ startHour: 21, endHour: 22 }, 2, 9, 22)
 assert(shifted.startHour === 20 && shifted.endHour === 22 && durationHours(shifted) === 2, 'a length that would pass the day end shifts earlier')
+
+const legacyHeat = availabilityHeatmap(config, [naOnly], [day])
+const bothHeat = availabilityHeatmap(config, [naOnly], [day], 'both')
+assert(
+  legacyHeat[0].cells.every((cell, index) => cell.freeIds.join() === bothHeat[0].cells[index].freeIds.join()),
+  'the default overlap stays the usual schedule when no mark filter is set',
+)
+const naHeat = availabilityHeatmap({ ...config, dayEndHour: 12 }, [naOnly], [day], 'na')
+assert(naHeat[0].cells[0].freeIds.length === 0, '9:00 is not an NA mark')
+assert(naHeat[0].cells[2].freeIds.includes('d1'), '10:00 counts the NA mark')
+const okHeat = availabilityHeatmap({ ...config, dayEndHour: 14 }, [{ id: 'd2', blocks: [block(9, 13, 'available')] }], [day], 'ok')
+assert(okHeat[0].cells[0].freeIds.includes('d2'), 'an OK mark shows in that half hour')
+assert(!okHeat[0].cells[okHeat[0].cells.length - 1].freeIds.includes('d2'), 'OK mode ignores time that was not marked OK')
+
+assert(markedBlockCount([naOnly], 'unavailable') === 1, 'NA count is the marked block, not a rewritten schedule')
+assert(markedHours(config, [naOnly], 'unavailable') === 2, 'that NA block is 2 hours inside the day')
+assert(responseCount([naOnly, { id: 'd4', blocks: [] }]) === 1, 'only people who saved a time count as responses')
+assert(plannedSessionHours(null, ['existing'], []) === 0, 'a shortlist without a duration does not invent hours from nowhere')
+assert(plannedSessionHours(2, ['existing', 'existing'], []) === 2, 'duplicate shortlist keys are not double counted')
+assert(plannedSessionHours(null, [], [{ startHour: 19, endHour: 21.5 }]) === 2.5, 'grid sessions supply hours when nothing is shortlisted')
+
+const morningSession: SessionRange = { id: 'one', iso: day, startHour: 9, endHour: 11 }
+const eveningSession: SessionRange = { id: 'two', iso: day, startHour: 19, endHour: 21.5 }
+const originalSessions = [morningSession]
+const addedSessions = commitSessions(originalSessions, eveningSession, null)
+assert(originalSessions.length === 1 && originalSessions[0].id === 'one', 'booking another slot does not rewrite the existing session')
+assert(addedSessions.sessions.length === 2, 'one day can hold two sessions')
+const redrawn = commitSessions(addedSessions.sessions, { id: 'three', iso: day, startHour: 18, endHour: 20 }, null)
+assert(redrawn.sessions.length === 2 && redrawn.sessions.some((item) => item.id === 'two' && item.startHour === 18), 'redrawing over a slot updates that slot')
+assert(redrawn.sessions.some((item) => item.id === 'one'), 'the other slot on that day stays')
+const movedSession = commitSessions(addedSessions.sessions, { ...morningSession, startHour: 12, endHour: 14 }, 'one')
+assert(movedSession.sessions.length === 2 && movedSession.sessions.some((item) => item.id === 'two'), 'moving one slot leaves the other in place')
+
+assert(pinsToSave(true, ['kept', 'also'], []) === null, 'an empty grid does not rewrite the shortlist')
+assert(pinsToSave(false, ['kept'], ['new']) === null, 'someone who cannot pin does not write')
+assert(pinsToSave(true, ['kept'], ['kept']) === null, 'an existing shortlist key is not written again')
+const pinned = pinsToSave(true, ['kept'], ['fresh'])
+assert(pinned?.join() === 'kept,fresh', 'a new session is added after the times already saved')
+
+const migration = readFileSync(new URL('../supabase/migrations/20261113120000_dance_groups.sql', import.meta.url), 'utf8')
+assert(/create table public\.hupaak_groups/i.test(migration), 'groups table is created')
+assert(/create table public\.hupaak_group_members/i.test(migration), 'group membership is created')
+assert(!/\bdrop\b/i.test(migration), 'group migration does not drop anything')
+assert(!/\btruncate\b/i.test(migration), 'group migration does not truncate')
+assert(!/\bdelete\s+from\b/i.test(migration), 'group migration does not delete rows')
+assert(!/\bupdate\s+public\.hupaak_/i.test(migration), 'group migration does not rewrite existing tables')
+assert(!/insert\s+into\s+public\.hupaak_(campaigns|people|blocks|admins|access)/i.test(migration), 'group migration does not insert into existing tables')
+assert(!/alter\s+table\s+public\.hupaak_(campaigns|people|blocks|admins|access)/i.test(migration), 'group migration does not alter existing tables')
+
+const dbSource = readFileSync(new URL('../src/lib/db.ts', import.meta.url), 'utf8')
+const campaignSelect = dbSource.match(/const campaignSelect = `([\s\S]*?)`/)
+assert(campaignSelect != null && !campaignSelect[1].includes('hupaak_groups'), 'loading an event does not depend on the groups table')
+const groupWrites = dbSource.slice(dbSource.indexOf('export async function createDanceGroup'))
+assert(groupWrites.includes('hupaak_groups') && !groupWrites.includes('hupaak_people'), 'group edits do not rewrite people')
+assert(!groupWrites.includes('hupaak_blocks') && !groupWrites.includes('hupaak_campaigns'), 'group edits do not rewrite blocks or events')
 
 console.log('schedule checks passed')

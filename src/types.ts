@@ -43,6 +43,12 @@ export interface CampaignAdmin {
   email: string
 }
 
+export interface DanceGroup {
+  id: string
+  name: string
+  memberIds: string[]
+}
+
 export interface Campaign {
   id: string
   ownerId: string
@@ -60,6 +66,7 @@ export interface Campaign {
   admins: CampaignAdmin[]
   choreographers: Person[]
   dancers: Person[]
+  groups: DanceGroup[]
 }
 
 export interface CampaignInput {

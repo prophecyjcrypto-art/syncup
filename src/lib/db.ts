@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { AppConfig, BlockKind, Campaign, CampaignInput, Person, PersonRole, TimeBlock } from '../types'
+import type { AppConfig, BlockKind, Campaign, CampaignInput, DanceGroup, Person, PersonRole, TimeBlock } from '../types'
 import { sortBlocks } from './blocks'
 import { todayISO } from './dates'
 import { normalizeDurationHours } from './schedule'
@@ -127,6 +127,7 @@ function mapCampaign(
       .sort((left, right) => left.email.localeCompare(right.email)),
     choreographers: people.filter((person) => person.role === 'choreographer'),
     dancers: people.filter((person) => person.role === 'dancer'),
+    groups: [],
   }
 }
 
@@ -147,6 +148,54 @@ async function inviteCodes(
   )
 }
 
+interface GroupRow {
+  id: string
+  campaign_id: string
+  name: string
+  position: number
+}
+
+async function fetchGroups(campaignIds: string[]): Promise<Map<string, DanceGroup[]>> {
+  const grouped = new Map<string, DanceGroup[]>()
+  if (campaignIds.length === 0) return grouped
+  const db = client()
+  const groups = await db
+    .from('hupaak_groups')
+    .select('id, campaign_id, name, position')
+    .in('campaign_id', campaignIds)
+    .order('position', { ascending: true })
+    .order('created_at', { ascending: true })
+  if (missingRelation(groups.error, 'hupaak_groups')) return grouped
+  fail(groups.error)
+  const rows = (groups.data ?? []) as GroupRow[]
+  if (rows.length === 0) return grouped
+  const members = await db.from('hupaak_group_members').select('group_id, person_id').in(
+    'group_id',
+    rows.map((row) => row.id),
+  )
+  if (missingRelation(members.error, 'hupaak_group_members')) {
+    for (const row of rows) {
+      const list = grouped.get(row.campaign_id) ?? []
+      list.push({ id: row.id, name: row.name, memberIds: [] })
+      grouped.set(row.campaign_id, list)
+    }
+    return grouped
+  }
+  fail(members.error)
+  const memberIds = new Map<string, string[]>()
+  for (const member of (members.data ?? []) as { group_id: string; person_id: string }[]) {
+    const list = memberIds.get(member.group_id) ?? []
+    list.push(member.person_id)
+    memberIds.set(member.group_id, list)
+  }
+  for (const row of rows) {
+    const list = grouped.get(row.campaign_id) ?? []
+    list.push({ id: row.id, name: row.name, memberIds: memberIds.get(row.id) ?? [] })
+    grouped.set(row.campaign_id, list)
+  }
+  return grouped
+}
+
 export async function fetchCampaigns(): Promise<Campaign[]> {
   const db = client()
   const { data, error } = await db.from('hupaak_campaigns').select(campaignSelect).order('created_at', { ascending: false })
@@ -154,9 +203,16 @@ export async function fetchCampaigns(): Promise<Campaign[]> {
   const codes = await inviteCodes('hupaak_admin_invites')
   const organizerCodes = await inviteCodes('hupaak_organizer_invites')
   const participantCodes = await inviteCodes('hupaak_participant_invites')
-  return ((data ?? []) as CampaignRow[]).map((row) =>
+  const campaigns = ((data ?? []) as CampaignRow[]).map((row) =>
     mapCampaign(row, codes.get(row.id) ?? null, organizerCodes.get(row.id) ?? null, participantCodes.get(row.id) ?? null),
   )
+  let groups = new Map<string, DanceGroup[]>()
+  try {
+    groups = await fetchGroups(campaigns.map((campaign) => campaign.id))
+  } catch {
+    groups = new Map()
+  }
+  return campaigns.map((campaign) => ({ ...campaign, groups: groups.get(campaign.id) ?? [] }))
 }
 
 export async function campaignVisible(campaignId: string): Promise<boolean> {
@@ -381,5 +437,47 @@ export async function saveRosterPerson(input: {
 
 export async function deletePerson(personId: string): Promise<void> {
   const { error } = await client().from('hupaak_people').delete().eq('id', personId)
+  fail(error)
+}
+
+export async function createDanceGroup(campaignId: string, name: string): Promise<void> {
+  const trimmed = name.trim()
+  if (!trimmed) return
+  const db = client()
+  const existing = await db
+    .from('hupaak_groups')
+    .select('position')
+    .eq('campaign_id', campaignId)
+    .order('position', { ascending: false })
+    .limit(1)
+  fail(existing.error)
+  const position = ((existing.data?.[0] as { position: number } | undefined)?.position ?? -1) + 1
+  const inserted = await db.from('hupaak_groups').insert({ campaign_id: campaignId, name: trimmed, position })
+  fail(inserted.error)
+}
+
+export async function renameDanceGroup(groupId: string, name: string): Promise<void> {
+  const trimmed = name.trim()
+  if (!trimmed) return
+  const { error } = await client().from('hupaak_groups').update({ name: trimmed }).eq('id', groupId)
+  fail(error)
+}
+
+export async function deleteDanceGroup(groupId: string): Promise<void> {
+  const { error } = await client().from('hupaak_groups').delete().eq('id', groupId)
+  fail(error)
+}
+
+export async function setDanceGroupMember(groupId: string, personId: string, included: boolean): Promise<void> {
+  const db = client()
+  if (!included) {
+    const { error } = await db.from('hupaak_group_members').delete().eq('group_id', groupId).eq('person_id', personId)
+    fail(error)
+    return
+  }
+  const { error } = await db.from('hupaak_group_members').upsert(
+    { group_id: groupId, person_id: personId },
+    { onConflict: 'group_id,person_id' },
+  )
   fail(error)
 }

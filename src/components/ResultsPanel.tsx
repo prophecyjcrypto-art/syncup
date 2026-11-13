@@ -1,16 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { t } from '../i18n'
 import { useCalendar } from '../lib/calendarContext'
 import { buildIcs, formatSlotText } from '../lib/export'
 import { clearGoogleToken, createCalendarEvents, GOOGLE_CALENDAR_ENABLED, GoogleCalendarError } from '../lib/googleCalendar'
 import { formatLongDate, formatTime, getDaysArray, parseISODate, toISODateString } from '../lib/dates'
 import { durationHours, fitDuration, roundHour, SLOT_STEP } from '../lib/timeRange'
-import { availabilityHeatmap, calculateBestSlots, compulsoryReport, sharedFreeByDay } from '../lib/schedule'
+import { availabilityHeatmap, calculateBestSlots, compulsoryReport, markedBlockCount, markedHours, plannedSessionHours, responseCount, sharedFreeByDay, type MarkFilter } from '../lib/schedule'
+import { commitSessions, pinsToSave, toggleSessionDay, type SessionRange } from '../lib/sessions'
 import { cardClass, textMuted, textPrimary } from '../lib/ui'
 import { InfoTip } from './Guide'
 import type { Campaign, Language, TimeSlot } from '../types'
 import { MonthBoards } from './MonthBoards'
-import { HeatBook, slotMatchesSession, type SessionRange } from './HeatBook'
+import { HeatBook, slotMatchesSession } from './HeatBook'
+import { MarkFilterControl } from './MarkFilter'
 
 function slotKey(slot: TimeSlot): string {
   return slot.start.toISOString()
@@ -57,8 +59,13 @@ export function ResultsPanel({
   const [notice, setNotice] = useState('')
   const [draftHours, setDraftHours] = useState<number | null>(campaign.config.durationHours)
   const [sessions, setSessions] = useState<SessionRange[]>([])
-  const [focusIso, setFocusIso] = useState<string | null>(null)
+  const [focusId, setFocusId] = useState<string | null>(null)
+  const [groupId, setGroupId] = useState<string | null>(null)
+  const [markFilter, setMarkFilter] = useState<MarkFilter>('both')
   const calendar = useCalendar()
+  const saveSlotsRef = useRef(onSaveSlots)
+  const armPin = useRef(false)
+  saveSlotsRef.current = onSaveSlots
 
   useEffect(() => {
     setRequiredIds(choreoKey ? choreoKey.split('|') : [])
@@ -75,8 +82,9 @@ export function ResultsPanel({
     [campaign.config.startDate, campaign.config.endDate],
   )
   const required = campaign.choreographers.filter((person) => requiredIds.includes(person.id))
-  const dancers =
-    dancerFilter.length === 0 ? campaign.dancers : campaign.dancers.filter((person) => dancerFilter.includes(person.id))
+  const activeGroup = campaign.groups.find((group) => group.id === groupId) ?? null
+  const population = activeGroup ? campaign.dancers.filter((person) => activeGroup.memberIds.includes(person.id)) : campaign.dancers
+  const dancers = dancerFilter.length === 0 ? population : population.filter((person) => dancerFilter.includes(person.id))
   const everyone = [...campaign.choreographers, ...campaign.dancers]
   const durationUnset = draftHours == null
   const slotConfig = { ...campaign.config, durationHours: draftHours }
@@ -106,7 +114,23 @@ export function ResultsPanel({
       : days.map((day) => toISODateString(day))
   ).sort()
   const overlap = sharedFreeByDay(campaign.config, required, overlapDates)
-  const heat = availabilityHeatmap(campaign.config, dancers, overlapDates)
+  const heat = availabilityHeatmap(campaign.config, dancers, overlapDates, markFilter)
+  const pinKeys = sessions.flatMap((session) => {
+    const slot = slots.find((item) => slotMatchesSession(item, session))
+    return slot ? [slotKey(slot)] : []
+  })
+  const pinKey = pinKeys.join('|')
+
+  useEffect(() => {
+    if (groupId && !campaign.groups.some((group) => group.id === groupId)) setGroupId(null)
+  }, [campaign.groups, groupId])
+
+  useEffect(() => {
+    if (!armPin.current) return
+    armPin.current = false
+    const next = pinsToSave(canPin, campaign.savedSlots, pinKeys)
+    if (next) saveSlotsRef.current(next)
+  }, [canPin, pinKey, campaign.savedSlots])
   const openDays = overlap.filter((day) => day.windows.length > 0)
   const closedDays = overlap.length - openDays.length
   const report = compulsoryReport(campaign.config, everyone, campaign.compulsoryDays)
@@ -152,41 +176,49 @@ export function ResultsPanel({
     if (hours !== campaign.config.durationHours) onSaveDuration?.(hours)
   }
 
-  function commitSession(block: SessionRange, fromIso: string) {
-    const taken = block.iso !== fromIso && sessions.some((item) => item.iso === block.iso)
-    const placed = taken ? { ...block, iso: fromIso } : block
-    setSessions((current) => [...current.filter((item) => item.iso !== fromIso && item.iso !== placed.iso), placed])
-    setFocusIso(placed.iso)
-    syncDuration(placed)
+  function commitSession(block: SessionRange, sourceId: string | null) {
+    armPin.current = true
+    const result = commitSessions(sessions, block, sourceId)
+    setSessions(result.sessions)
+    setFocusId(result.focusId)
+    const placed = result.sessions.find((item) => item.id === result.focusId)
+    if (placed) syncDuration(placed)
   }
 
-  function focusSession(iso: string) {
-    const block = sessions.find((item) => item.iso === iso)
+  function focusSession(id: string) {
+    const block = sessions.find((item) => item.id === id)
     if (!block) return
-    setFocusIso(iso)
+    setFocusId(id)
     syncDuration(block)
   }
 
   function toggleDay(iso: string) {
-    const existing = sessions.find((item) => item.iso === iso)
-    if (existing) {
-      const next = sessions.filter((item) => item.iso !== iso)
-      setSessions(next)
-      if (focusIso === iso) {
-        setFocusIso(next[0]?.iso ?? null)
-        if (next[0]) syncDuration(next[0])
+    const source = sessions.find((item) => item.id === focusId) ?? sessions[0]
+    if (!source) return
+    const exact = sessions.find((item) => item.iso === iso && item.startHour === source.startHour && item.endHour === source.endHour)
+    if (exact) {
+      setSessions((current) => current.filter((item) => item.id !== exact.id && !(item.iso === iso && item.startHour === source.startHour && item.endHour === source.endHour)))
+      if (focusId === exact.id) {
+        const rest = sessions.filter((item) => item.id !== exact.id)
+        setFocusId(rest[0]?.id ?? null)
+        if (rest[0]) syncDuration(rest[0])
       }
       return
     }
-    const source = sessions.find((item) => item.iso === focusIso) ?? sessions[0]
-    if (!source) return
-    setSessions((current) => [...current.filter((item) => item.iso !== iso), { ...source, iso }])
+    const addedId = crypto.randomUUID()
+    armPin.current = true
+    setSessions((current) => {
+      const base = current.find((item) => item.id === source.id) ?? source
+      return toggleSessionDay(current, iso, base, addedId).sessions
+    })
+    setFocusId(addedId)
+    syncDuration({ ...source, id: addedId, iso })
   }
 
-  function removeSession(iso: string) {
-    const next = sessions.filter((item) => item.iso !== iso)
+  function removeSession(id: string) {
+    const next = sessions.filter((item) => item.id !== id)
     setSessions(next)
-    if (focusIso === iso) setFocusIso(next[0]?.iso ?? null)
+    if (focusId === id) setFocusId(next[0]?.id ?? null)
   }
 
   function setLength(hours: number | null) {
@@ -194,15 +226,15 @@ export function ResultsPanel({
     if (hours == null || !Number.isFinite(hours) || hours <= 0) {
       setDraftHours(null)
       setSessions([])
-      setFocusIso(null)
+      setFocusId(null)
       return
     }
     const fitted = Math.min(Math.max(roundHour(hours), SLOT_STEP), maxHours)
     setDraftHours(fitted)
-    if (focusIso) {
+    if (focusId) {
       setSessions((current) =>
         current.map((item) =>
-          item.iso === focusIso ? { ...item, ...fitDuration(item, fitted, campaign.config.dayStartHour, campaign.config.dayEndHour) } : item,
+          item.id === focusId ? { ...item, ...fitDuration(item, fitted, campaign.config.dayStartHour, campaign.config.dayEndHour) } : item,
         ),
       )
     }
@@ -236,8 +268,12 @@ export function ResultsPanel({
 
   function selectSlot(slot: TimeSlot) {
     const hours = windowHours(slot)
-    const iso = focusIso ?? hours.iso
-    commitSession({ iso, startHour: hours.startHour, endHour: hours.endHour }, focusIso ?? iso)
+    const current = sessions.find((item) => item.id === focusId) ?? sessions[0]
+    if (!current) {
+      commitSession({ id: crypto.randomUUID(), ...hours }, null)
+      return
+    }
+    commitSession({ ...current, iso: hours.iso, startHour: hours.startHour, endHour: hours.endHour }, current.id)
   }
 
   function targets(): TimeSlot[] {
@@ -486,6 +522,7 @@ export function ResultsPanel({
           )}
         </div>
         <section className={`${cardClass(isDarkMode)} order-1 min-w-0 rounded-[1.5rem] p-4 sm:p-5 md:order-2`}>
+          {canPin ? <EventStats lang={lang} isDarkMode={isDarkMode} campaign={campaign} sessions={sessions} /> : null}
           <h3 className={`font-serif text-xl sm:text-2xl ${textPrimary(isDarkMode)}`}>
             {selectedDates.size > 0 ? t(lang, 'dates_selected', { n: selectedDates.size }) : t(lang, 'rehearsal_recommendations')}
           </h3>
@@ -519,6 +556,38 @@ export function ResultsPanel({
             </div>
           </div>
           <div className="mt-4 space-y-2">
+            <MarkFilterControl lang={lang} value={markFilter} onChange={setMarkFilter} />
+            {campaign.groups.length > 0 ? (
+              <div className="chip-row py-1">
+                <button
+                  type="button"
+                  data-group-id="all"
+                  aria-pressed={groupId === null}
+                  onClick={() => setGroupId(null)}
+                  className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${groupId === null ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
+                >
+                  {t(lang, 'filter_all')}
+                </button>
+                {campaign.groups.map((group) => {
+                  const on = groupId === group.id
+                  return (
+                    <button
+                      key={group.id}
+                      type="button"
+                      data-group-id={group.id}
+                      aria-pressed={on}
+                      onClick={() => {
+                        setGroupId(group.id)
+                        setDancerFilter([])
+                      }}
+                      className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
+                    >
+                      {group.name}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
             <p className={`inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>
               {t(lang, 'filter_dancers')}
               <InfoTip lang={lang} name="dancers" text={t(lang, dancerFilter.length === 0 ? 'filter_hint' : 'filter_active')} />
@@ -533,7 +602,7 @@ export function ResultsPanel({
               >
                 {t(lang, 'filter_all')}
               </button>
-              {campaign.dancers.map((person) => {
+              {population.map((person) => {
                 const on = dancerFilter.includes(person.id)
                 return (
                   <button
@@ -558,7 +627,8 @@ export function ResultsPanel({
             slots={slots}
             savedSlots={campaign.savedSlots}
             sessions={sessions}
-            focusIso={focusIso}
+            focusId={focusId}
+            markFilter={markFilter}
             durationHours={draftHours}
             editable={canSetDuration}
             canPin={canPin}
@@ -571,7 +641,7 @@ export function ResultsPanel({
             onRemove={removeSession}
             onClearAll={() => {
               setSessions([])
-              setFocusIso(null)
+              setFocusId(null)
             }}
             onToggleSaved={toggleSavedMany}
           />
@@ -622,6 +692,60 @@ export function ResultsPanel({
         </section>
       </div>
     </div>
+  )
+}
+
+function EventStats({
+  lang,
+  isDarkMode,
+  campaign,
+  sessions,
+}: {
+  lang: Language
+  isDarkMode: boolean
+  campaign: Campaign
+  sessions: SessionRange[]
+}) {
+  const dancers = campaign.dancers
+  const na = markedBlockCount(dancers, 'unavailable')
+  const ok = markedBlockCount(dancers, 'available')
+  const responses = responseCount(dancers)
+  const sessionHours = plannedSessionHours(campaign.config.durationHours, campaign.savedSlots, sessions)
+  const figures = [
+    { label: t(lang, 'mode_unavailable'), value: String(na) },
+    { label: t(lang, 'mode_available'), value: String(ok) },
+    { label: t(lang, 'stats_responses'), value: `${responses}/${dancers.length}` },
+    { label: t(lang, 'stats_session'), value: String(sessionHours) },
+  ]
+  return (
+    <section className="mb-4 space-y-3">
+      <h3 className={`inline-flex items-center gap-2 text-sm font-bold ${textPrimary(isDarkMode)}`}>
+        {t(lang, 'stats_title')}
+        <InfoTip lang={lang} name="stats" text={t(lang, 'guide_stats')} />
+      </h3>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {figures.map((figure) => (
+          <div key={figure.label} className="glass-well min-w-0 rounded-2xl px-3 py-2">
+            <p className="truncate text-[10px] font-bold uppercase tracking-widest text-zinc-400">{figure.label}</p>
+            <p className={`text-lg font-bold tabular-nums ${textPrimary(isDarkMode)}`}>{figure.value}</p>
+          </div>
+        ))}
+      </div>
+      {campaign.groups.length > 0 ? (
+        <div className="space-y-1">
+          {campaign.groups.map((group) => {
+            const members = dancers.filter((person) => group.memberIds.includes(person.id))
+            const okHours = markedHours(campaign.config, members, 'available')
+            const naHours = markedHours(campaign.config, members, 'unavailable')
+            return (
+              <p key={group.id} className={`truncate text-xs ${textMuted(isDarkMode)}`}>
+                {group.name} · {t(lang, 'mode_available')} {okHours} · {t(lang, 'mode_unavailable')} {naHours}
+              </p>
+            )
+          })}
+        </div>
+      ) : null}
+    </section>
   )
 }
 

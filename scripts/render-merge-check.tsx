@@ -70,6 +70,7 @@ const campaign: Campaign = {
   admins: [],
   choreographers: [],
   dancers: [dancer],
+  groups: [],
 }
 
 const calendar = {
