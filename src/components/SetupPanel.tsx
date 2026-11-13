@@ -3,7 +3,7 @@ import { t } from '../i18n'
 import { formatHourOption, formatLongDate, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
 import { adminInviteUrl, organizerInviteUrl, participantInviteUrl } from '../lib/invites'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
-import { FieldLabel, GuideNote } from './Guide'
+import { FieldLabel, InfoTip } from './Guide'
 import type { AppConfig, Campaign, CampaignInput, Language } from '../types'
 import { MonthBoards } from './MonthBoards'
 
@@ -102,13 +102,11 @@ export function SetupPanel({
   return (
     <div className="mx-auto w-full max-w-4xl">
       <div className="mb-8 text-center">
-        <h2 className={`font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
+        <h2 className={`flex items-center justify-center gap-2 font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
           {readOnly ? initial?.name : initial ? t(lang, 'edit_event') : t(lang, 'new_campaign')}
+          <InfoTip lang={lang} name="setup" text={t(lang, 'guide_setup')} />
         </h2>
-        <GuideNote className="mx-auto">
-          {t(lang, 'guide_setup')}
-          {readOnly ? ` · ${t(lang, 'view_only')}` : ''}
-        </GuideNote>
+        {readOnly ? <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'view_only')}</p> : null}
       </div>
       <div className={`${cardClass(isDarkMode)} space-y-6 rounded-[1.5rem] p-4 sm:space-y-8 sm:rounded-[2rem] sm:p-8`}>
         <label className="block space-y-2">
@@ -232,12 +230,14 @@ export function SetupPanel({
         <div className="space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h3 className={`font-serif text-2xl ${textPrimary(isDarkMode)}`}>{t(lang, 'on_days')} / {t(lang, 'compulsory_days')}</h3>
-              <p className={`mt-1 text-sm ${textMuted(isDarkMode)}`}>
-                {markMode === 'show' ? t(lang, 'on_days_hint') : t(lang, 'compulsory_days_hint')}
-                {' '}
-                {t(lang, 'legend_marks')}
-              </p>
+              <h3 className={`inline-flex items-center gap-2 font-serif text-2xl ${textPrimary(isDarkMode)}`}>
+                {t(lang, 'on_days')} / {t(lang, 'compulsory_days')}
+                <InfoTip
+                  lang={lang}
+                  name="days"
+                  text={`${markMode === 'show' ? t(lang, 'on_days_hint') : t(lang, 'compulsory_days_hint')}\n${t(lang, 'legend_marks')}`}
+                />
+              </h3>
             </div>
             <div className={`glass-well flex rounded-xl p-1 ${lock}`}>
               <button type="button" onClick={() => setMarkMode('show')} className={`rounded-lg px-3 py-2 text-xs font-bold ${markMode === 'show' ? 'bg-[#f6cf7a] text-zinc-900' : textMuted(isDarkMode)}`}>
@@ -278,8 +278,10 @@ export function SetupPanel({
 
         {(!readOnly || initial?.organizerCode || initial?.participantCode) && (
           <div className="space-y-3">
-            <h3 className={`font-serif text-2xl ${textPrimary(isDarkMode)}`}>{t(lang, 'organizer_link')}</h3>
-            <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_link_hint')}</p>
+            <h3 className={`inline-flex items-center gap-2 font-serif text-2xl ${textPrimary(isDarkMode)}`}>
+              {t(lang, 'organizer_link')}
+              <InfoTip lang={lang} name="links" text={t(lang, 'organizer_link_hint')} />
+            </h3>
             {initial?.participantCode && (
               <div className="space-y-3">
                 <p className={`break-all rounded-xl px-4 py-3 text-sm ${inputClass(isDarkMode)}`}>{participantInviteUrl(initial.participantCode)}</p>
@@ -316,8 +318,10 @@ export function SetupPanel({
         )}
 
         <div className="space-y-3">
-          <h3 className={`font-serif text-2xl ${textPrimary(isDarkMode)}`}>{t(lang, 'admins_label')}</h3>
-          <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'invite_admin_hint')}</p>
+          <h3 className={`inline-flex items-center gap-2 font-serif text-2xl ${textPrimary(isDarkMode)}`}>
+            {t(lang, 'admins_label')}
+            <InfoTip lang={lang} name="admins" text={t(lang, 'invite_admin_hint')} />
+          </h3>
           {initial?.adminCode ? (
             <div className="space-y-3">
               <p className={`break-all rounded-xl px-4 py-3 text-sm ${inputClass(isDarkMode)}`}>{adminInviteUrl(initial.adminCode)}</p>

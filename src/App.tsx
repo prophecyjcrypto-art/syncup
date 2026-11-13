@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import type { User } from '@supabase/supabase-js'
 import { CampaignList } from './components/CampaignList'
 import { DancerPortal } from './components/DancerPortal'
-import { FlowSteps, type FlowStep } from './components/Guide'
+import { FlowSteps, InfoTip, type FlowStep } from './components/Guide'
 import { Landing } from './components/Landing'
 import { ResultsPanel } from './components/ResultsPanel'
 import { RosterPanel } from './components/RosterPanel'
@@ -730,8 +730,10 @@ export default function App() {
             </div>
             {GOOGLE_CALENDAR_ENABLED && (
               <div className="space-y-2 border-t border-white/10 pt-4">
-                <p className="text-sm font-medium">{googleToken ? t(lang, 'calendar_connected') : t(lang, 'calendar_connect')}</p>
-                <p className={`text-xs leading-relaxed ${textMuted(isDarkMode)}`}>{t(lang, 'calendar_hint')}</p>
+                <p className="inline-flex items-center gap-1.5 text-sm font-medium">
+                  {googleToken ? t(lang, 'calendar_connected') : t(lang, 'calendar_connect')}
+                  <InfoTip lang={lang} name="calendar" text={t(lang, 'calendar_hint')} />
+                </p>
                 {shownCalendarNote && <p className="text-xs text-[#f19ba8]">{shownCalendarNote}</p>}
                 {googleToken ? (
                   <button type="button" onClick={calendarApi.disconnect} className="text-sm text-[#f19ba8]">

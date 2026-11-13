@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { GuideNote, InfoTip } from './Guide'
+import { InfoTip } from './Guide'
 import { t } from '../i18n'
 import { canManageRoster, isAdmin, isChoreographer, isOwner } from '../lib/access'
 import { formatDate, isPast } from '../lib/dates'
@@ -51,8 +51,10 @@ export function CampaignList({
   const joinForm = (
     <form onSubmit={submitInvite} className={`${cardClass(isDarkMode)} mb-8 flex flex-col gap-3 rounded-[2rem] p-5 sm:flex-row sm:items-center`}>
       <div className="min-w-0 flex-1">
-        <p className={`text-sm font-semibold ${textPrimary(isDarkMode)}`}>{t(lang, 'join_admin')}</p>
-        <p className={`mt-1 text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'invite_admin_hint')}</p>
+        <p className={`inline-flex items-center gap-1.5 text-sm font-semibold ${textPrimary(isDarkMode)}`}>
+          {t(lang, 'join_admin')}
+          <InfoTip lang={lang} name="join-admin" text={t(lang, 'invite_admin_hint')} />
+        </p>
       </div>
       <input
         value={invite}
@@ -72,9 +74,11 @@ export function CampaignList({
         {joinForm}
       <div className={`${cardClass(isDarkMode)} rounded-[2rem] px-8 py-16 text-center`}>
         <img src="/logo.png" alt="" className="mx-auto mb-6 h-20 w-20 object-contain" />
-        <h2 className={`font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>{t(lang, 'no_active_projects')}</h2>
+        <h2 className={`flex items-center justify-center gap-2 font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
+          {t(lang, 'no_active_projects')}
+          <InfoTip lang={lang} name="events" text={t(lang, 'guide_events')} />
+        </h2>
         <p className={`mt-3 ${textMuted(isDarkMode)}`}>{t(lang, 'create_project_desc')}</p>
-        <p className={`mx-auto mt-6 max-w-md text-sm leading-relaxed ${textMuted(isDarkMode)}`}>{t(lang, 'guide_events')}</p>
         <button type="button" onClick={onCreate} className={primaryButton('mt-8 px-8 py-3')}>
           {t(lang, 'create_first_project')}
         </button>
@@ -89,9 +93,8 @@ export function CampaignList({
         <div>
           <h2 className={`inline-flex items-center gap-2 font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
             {t(lang, 'campaigns')}
-            <InfoTip lang={lang} text={t(lang, 'tip_links')} />
+            <InfoTip lang={lang} name="events" text={`${t(lang, 'guide_events')}\n${t(lang, 'tip_links')}`} />
           </h2>
-          <GuideNote>{t(lang, 'guide_events')}</GuideNote>
         </div>
         <button type="button" onClick={onCreate} className={primaryButton('min-h-11 w-full shrink-0 px-6 py-3 text-sm sm:w-auto')}>
           + {t(lang, 'new_campaign')}

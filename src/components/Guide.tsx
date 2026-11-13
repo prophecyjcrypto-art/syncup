@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { t } from '../i18n'
 import type { Language } from '../types'
 
@@ -6,26 +6,113 @@ export type FlowStep = 'setup' | 'choreographers' | 'dancers' | 'results'
 
 const FLOW: FlowStep[] = ['setup', 'choreographers', 'dancers', 'results']
 
-export function InfoTip({ lang, text }: { lang: Language; text: string }) {
-  const [open, setOpen] = useState(false)
+export function InfoTip({ lang, text, name }: { lang: Language; text: string; name?: string }) {
+  const [pinned, setPinned] = useState(false)
+  const [hover, setHover] = useState(false)
+  const [focus, setFocus] = useState(false)
+  const rootRef = useRef<HTMLSpanElement>(null)
+  const bubbleRef = useRef<HTMLSpanElement>(null)
+  const fromPointer = useRef(false)
+  const touchAt = useRef(0)
+  const pinnedRef = useRef(false)
+  const hoverRef = useRef(false)
+  const tipId = useId()
+  const open = pinned || hover || focus
+  pinnedRef.current = pinned
+  hoverRef.current = hover
+
+  useEffect(() => {
+    function onPointerDown(event: PointerEvent) {
+      if (event.pointerType !== 'mouse') {
+        touchAt.current = Date.now()
+        if (hoverRef.current) setHover(false)
+      }
+      if (pinnedRef.current && !rootRef.current?.contains(event.target as Node)) setPinned(false)
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return
+      setPinned(false)
+      setHover(false)
+      setFocus(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    const root = rootRef.current
+    const bubble = bubbleRef.current
+    if (!open || !root || !bubble) return
+    const card = root.closest('.glass')
+    const previous = card instanceof HTMLElement ? { zIndex: card.style.zIndex, position: card.style.position } : null
+    if (card instanceof HTMLElement) {
+      if (getComputedStyle(card).position === 'static') card.style.position = 'relative'
+      card.style.zIndex = '40'
+    }
+    const pad = 12
+    bubble.style.left = '0px'
+    const rect = bubble.getBoundingClientRect()
+    let shift = 0
+    if (rect.right > window.innerWidth - pad) shift = rect.right - (window.innerWidth - pad)
+    if (rect.left - shift < pad) shift -= pad - (rect.left - shift)
+    bubble.style.left = `${-shift}px`
+    return () => {
+      if (!(card instanceof HTMLElement) || !previous) return
+      card.style.zIndex = previous.zIndex
+      card.style.position = previous.position
+    }
+  }, [open, text])
+
+  function allowHover(event: { pointerType: string }) {
+    return event.pointerType === 'mouse' && Date.now() - touchAt.current > 1000
+  }
+
   return (
-    <span className="group relative inline-flex align-middle">
+    <span
+      ref={rootRef}
+      className={`info-tip ${open ? 'z-50' : ''}`}
+      onPointerEnter={(event) => {
+        if (allowHover(event)) setHover(true)
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === 'mouse') setHover(false)
+      }}
+    >
       <button
         type="button"
+        data-info={name}
         aria-label={t(lang, 'info')}
         aria-expanded={open}
+        aria-describedby={open ? tipId : undefined}
+        onPointerDown={(event) => {
+          fromPointer.current = true
+          if (event.pointerType !== 'mouse') touchAt.current = Date.now()
+        }}
+        onFocus={() => {
+          if (!fromPointer.current) setFocus(true)
+        }}
+        onBlur={() => {
+          fromPointer.current = false
+          setFocus(false)
+        }}
         onClick={(event) => {
           event.preventDefault()
           event.stopPropagation()
-          setOpen((value) => !value)
+          setPinned((value) => !value)
         }}
         className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full border border-current/25 text-[10px] font-semibold leading-none opacity-60 hover:opacity-100"
       >
         i
       </button>
-      <span role="tooltip" className={open ? 'tip-bubble' : 'tip-bubble hidden group-hover:block group-focus-within:block'}>
-        {text}
-      </span>
+      {open ? (
+        <span ref={bubbleRef} id={tipId} role="tooltip" className="tip-bubble">
+          <span className="tip-bubble-body">{text}</span>
+        </span>
+      ) : null}
     </span>
   )
 }
@@ -47,10 +134,6 @@ export function FieldLabel({
       {tip ? <InfoTip lang={lang} text={tip} /> : null}
     </span>
   )
-}
-
-export function GuideNote({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <p className={`guide-note mt-3 opacity-75 ${className}`}>{children}</p>
 }
 
 export function MiniSteps({ steps }: { steps: string[] }) {

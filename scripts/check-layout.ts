@@ -87,6 +87,54 @@ async function overflow(cdp: Cdp): Promise<{ scrollWidth: number; clientWidth: n
   return cdp.eval(`(() => ({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth }))()`)
 }
 
+const HIDDEN_COPY: { match: string; phrases: string[] }[] = [
+  {
+    match: 'results',
+    phrases: [
+      '勾選必須在場的主辦人',
+      '取消勾選就不會計算此人的時間',
+      '列出的時間足夠本次時長',
+      '一週從星期一開始',
+      '預設是全部參加者',
+      '顏色越深',
+      '在日期直欄往下拖曳訂下時段',
+    ],
+  },
+  {
+    match: 'events',
+    phrases: ['先建立活動，再複製兩條連結', '分享此連結或邀請碼', '主辦人連結可以管理名單'],
+  },
+  {
+    match: 'setup',
+    phrases: ['先設定日期與每日時間', '標記最重要的日子', '金圈是活動日', '主辦人連結可以管理名單', '分享此連結或邀請碼'],
+  },
+  {
+    match: 'availability',
+    phrases: ['若只標記 NA', '金圈是活動日'],
+  },
+  {
+    match: 'roster',
+    phrases: ['加入每位主辦人可出席或無法出席的時間'],
+  },
+  {
+    match: 'members',
+    phrases: ['用同樣方式加入參加者', '請在上方加入名稱'],
+  },
+  {
+    match: 'portal',
+    phrases: ['填寫你的名稱，點選日期', '若只標記 NA'],
+  },
+]
+
+async function assertCopyHidden(cdp: Cdp, name: string, path: string) {
+  const rule = HIDDEN_COPY.find((item) => path.includes(item.match))
+  if (!rule) return
+  const text = await cdp.eval<string>(`document.body.innerText`)
+  for (const phrase of rule.phrases) {
+    assert(!text.includes(phrase), `${name} still shows “${phrase}”`)
+  }
+}
+
 async function shot(cdp: Cdp, file: string) {
   const result = (await cdp.send('Page.captureScreenshot', { format: 'png' })) as { data: string }
   await writeFile(file, Buffer.from(result.data, 'base64'))
@@ -225,11 +273,17 @@ async function main() {
       { name: 'login phone', path: '/?preview=login&lang=zh', width: 390, height: 844, shot: '/opt/cursor/artifacts/login-mobile.png' },
       { name: 'setup phone', path: '/?preview=setup&lang=zh', width: 390, height: 844, shot: '/opt/cursor/artifacts/setup-mobile.png' },
       { name: 'availability phone', path: '/?preview=availability&lang=zh', width: 390, height: 844 },
+      { name: 'events phone', path: '/?preview=events&lang=zh', width: 390, height: 844 },
+      { name: 'events desktop', path: '/?preview=events&lang=zh', width: 1280, height: 800 },
+      { name: 'roster phone', path: '/?preview=roster&lang=zh', width: 390, height: 844 },
+      { name: 'members phone', path: '/?preview=members&lang=zh', width: 390, height: 844 },
+      { name: 'portal phone', path: '/?preview=portal&lang=zh', width: 390, height: 844 },
     ]
     for (const item of widths) {
       await openPage(cdp, item.path, item.width, item.height)
       const size = await overflow(cdp)
       assert(size.scrollWidth <= size.clientWidth + 1, `${item.name} overflows: scroll ${size.scrollWidth} > client ${size.clientWidth}`)
+      await assertCopyHidden(cdp, item.name, item.path)
       const calendarText = await cdp.eval<string>(`document.body.innerText.includes('Google 日曆') || document.body.innerText.includes('Google Calendar') ? document.body.innerText.slice(0, 500) : ''`)
       assert(calendarText === '', `${item.name} shows Google Calendar: ${calendarText}`)
       if (item.path.includes('results') || item.path.includes('availability') || item.path.includes('setup')) {
@@ -438,6 +492,50 @@ async function main() {
     await shot(cdp, '/opt/cursor/artifacts/availability-mobile.png')
     const availOverflow = await overflow(cdp)
     assert(availOverflow.scrollWidth <= availOverflow.clientWidth + 1, `availability overflows: ${availOverflow.scrollWidth}`)
+
+    await openPage(cdp, '/?preview=events&lang=zh', 1280, 800)
+    const eventsTip = await cdp.eval<string>(`(async () => {
+      const button = document.querySelector('[data-info="events"]')
+      if (!(button instanceof HTMLElement)) return 'missing'
+      button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse', pointerId: 1, isPrimary: true, button: 0 }))
+      button.click()
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      return document.querySelector('[role="tooltip"]')?.textContent ?? ''
+    })()`)
+    assert(eventsTip.includes('先建立活動，再複製兩條連結'), `events tip was "${eventsTip}"`)
+    assert(eventsTip.includes('主辦人連結可以管理名單'), `events tip dropped the link note: "${eventsTip}"`)
+
+    await openPage(cdp, '/?preview=results&lang=zh', 390, 844)
+    const datesTip = await cdp.eval<string>(`(async () => {
+      const button = document.querySelector('[data-info="dates"]')
+      if (!(button instanceof HTMLElement)) return 'missing'
+      button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'touch', pointerId: 1, isPrimary: true, button: 0 }))
+      button.click()
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      return document.querySelector('[role="tooltip"]')?.textContent ?? ''
+    })()`)
+    assert(datesTip.includes('一週從星期一開始'), `dates tip was "${datesTip}"`)
+    const datesClosed = await cdp.eval<string>(`(async () => {
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'touch', pointerId: 1, isPrimary: true, button: 0 }))
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      return document.querySelector('[role="tooltip"]')?.textContent ?? ''
+    })()`)
+    assert(datesClosed === '', `dates tip stayed open: "${datesClosed}"`)
+
+    await openPage(cdp, '/?preview=results&lang=zh', 1280, 800)
+    const organizer = await cdp.eval<{ x: number; y: number } | null>(`(() => {
+      const button = document.querySelector('[data-info="organizers"]')
+      if (!(button instanceof HTMLElement)) return null
+      const rect = button.getBoundingClientRect()
+      return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+    })()`)
+    assert(organizer != null, 'organizers info button is missing')
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 8, y: 8, pointerType: 'mouse' })
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: organizer.x, y: organizer.y, pointerType: 'mouse' })
+    await delay(80)
+    const hovered = await cdp.eval<string>(`document.querySelector('[role="tooltip"]')?.textContent ?? ''`)
+    assert(hovered.includes('取消勾選就不會計算此人的時間'), `organizer hover tip was "${hovered}"`)
+    assert(hovered.includes('尚未設定時長'), `organizer hover tip dropped the duration note: "${hovered}"`)
     cdp.close()
     console.log('layout checks passed')
   } finally {
