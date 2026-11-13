@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AppConfig, BlockKind, Campaign, CampaignInput, DanceGroup, Person, PersonRole, TimeBlock } from '../types'
+import type { InviteKind } from './invites'
 import { sortBlocks } from './blocks'
 import { todayISO } from './dates'
 import { normalizeDurationHours } from './schedule'
@@ -101,11 +102,16 @@ function mapPerson(row: PersonRow): Person {
   }
 }
 
+interface InvitePair {
+  code: string
+  short: string | null
+}
+
 function mapCampaign(
   row: CampaignRow,
-  adminCode: string | null,
-  organizerCode: string | null,
-  participantCode: string | null,
+  adminInvite: InvitePair | null,
+  organizerInvite: InvitePair | null,
+  participantInvite: InvitePair | null,
 ): Campaign {
   const people = (row.people ?? []).map(mapPerson).sort((left, right) => left.name.localeCompare(right.name))
   return {
@@ -119,9 +125,12 @@ function mapCampaign(
     compulsoryDays: asDates(row.compulsory_days),
     savedSlots: row.saved_slots ?? [],
     createdAt: row.created_at,
-    adminCode,
-    organizerCode,
-    participantCode,
+    adminCode: adminInvite?.code ?? null,
+    adminShort: adminInvite?.short ?? null,
+    organizerCode: organizerInvite?.code ?? null,
+    organizerShort: organizerInvite?.short ?? null,
+    participantCode: participantInvite?.code ?? null,
+    participantShort: participantInvite?.short ?? null,
     admins: (row.admins ?? [])
       .map((admin) => ({ id: admin.id, userId: admin.user_id, email: admin.email }))
       .sort((left, right) => left.email.localeCompare(right.email)),
@@ -137,14 +146,27 @@ function missingRelation(error: { message: string } | null, relation: string): b
   return message.includes(relation) && (message.includes('schema cache') || message.includes('does not exist') || message.includes('could not find'))
 }
 
+function missingColumn(error: { message: string } | null, column: string): boolean {
+  if (!error) return false
+  const message = error.message.toLowerCase()
+  return message.includes(column.toLowerCase()) && (message.includes('schema cache') || message.includes('does not exist') || message.includes('could not find'))
+}
+
 async function inviteCodes(
   relation: 'hupaak_admin_invites' | 'hupaak_organizer_invites' | 'hupaak_participant_invites',
-): Promise<Map<string, string>> {
-  const invites = await client().from(relation).select('campaign_id, code')
+): Promise<Map<string, InvitePair>> {
+  const db = client()
+  const withShort = await db.from(relation).select('campaign_id, code, short_code')
+  const invites = missingColumn(withShort.error, 'short_code')
+    ? await db.from(relation).select('campaign_id, code')
+    : withShort
   if (missingRelation(invites.error, relation)) return new Map()
   fail(invites.error)
   return new Map(
-    ((invites.data ?? []) as { campaign_id: string; code: string }[]).map((invite) => [invite.campaign_id, invite.code]),
+    ((invites.data ?? []) as { campaign_id: string; code: string; short_code?: string | null }[]).map((invite) => [
+      invite.campaign_id,
+      { code: invite.code, short: invite.short_code ?? null },
+    ]),
   )
 }
 
@@ -176,7 +198,7 @@ async function fetchGroups(campaignIds: string[]): Promise<Map<string, DanceGrou
   if (missingRelation(members.error, 'hupaak_group_members')) {
     for (const row of rows) {
       const list = grouped.get(row.campaign_id) ?? []
-      list.push({ id: row.id, name: row.name, memberIds: [] })
+      list.push({ id: row.id, name: row.name, memberIds: [], inviteCode: null })
       grouped.set(row.campaign_id, list)
     }
     return grouped
@@ -188,9 +210,24 @@ async function fetchGroups(campaignIds: string[]): Promise<Map<string, DanceGrou
     list.push(member.person_id)
     memberIds.set(member.group_id, list)
   }
+  const inviteCodesByGroup = new Map<string, string>()
+  const invites = await db.from('hupaak_group_invites').select('group_id, short_code').in(
+    'group_id',
+    rows.map((row) => row.id),
+  )
+  if (!invites.error) {
+    for (const invite of (invites.data ?? []) as { group_id: string; short_code: string }[]) {
+      inviteCodesByGroup.set(invite.group_id, invite.short_code)
+    }
+  }
   for (const row of rows) {
     const list = grouped.get(row.campaign_id) ?? []
-    list.push({ id: row.id, name: row.name, memberIds: memberIds.get(row.id) ?? [] })
+    list.push({
+      id: row.id,
+      name: row.name,
+      memberIds: memberIds.get(row.id) ?? [],
+      inviteCode: inviteCodesByGroup.get(row.id) ?? null,
+    })
     grouped.set(row.campaign_id, list)
   }
   return grouped
@@ -280,6 +317,69 @@ export async function claimParticipantInvite(invite: string): Promise<string> {
 
 export async function rotateParticipantInvite(campaignId: string): Promise<void> {
   const { error } = await client().rpc('rotate_hupaak_participant_invite', { campaign: campaignId })
+  fail(error)
+}
+
+export interface ClaimedInvite {
+  campaignId: string
+  kind: InviteKind
+}
+
+function missingRpc(error: { message: string } | null, name: string): boolean {
+  if (!error) return false
+  const message = error.message.toLowerCase()
+  return message.includes(name.toLowerCase()) && (message.includes('schema cache') || message.includes('does not exist') || message.includes('could not find'))
+}
+
+export async function claimAnyInvite(invite: string): Promise<ClaimedInvite> {
+  const { data, error } = await client().rpc('claim_hupaak_invite', { invite })
+  if (missingRpc(error, 'claim_hupaak_invite')) return claimAnyInviteLegacy(invite)
+  if (error) {
+    if (/invalid invite/i.test(error.message)) throw new InviteError()
+    throw new Error(error.message)
+  }
+  const row = data as { campaign_id?: string; kind?: string } | null
+  const kind = row?.kind
+  if (!row?.campaign_id || (kind !== 'admin' && kind !== 'organizer' && kind !== 'participant' && kind !== 'group')) {
+    throw new InviteError()
+  }
+  return { campaignId: row.campaign_id, kind }
+}
+
+async function claimAnyInviteLegacy(invite: string): Promise<ClaimedInvite> {
+  const attempts: { kind: InviteKind; claim: (code: string) => Promise<string> }[] = [
+    { kind: 'admin', claim: claimAdminInvite },
+    { kind: 'organizer', claim: claimOrganizerInvite },
+    { kind: 'participant', claim: claimParticipantInvite },
+  ]
+  let last = new InviteError()
+  for (const attempt of attempts) {
+    try {
+      const campaignId = await attempt.claim(invite)
+      return { campaignId, kind: attempt.kind }
+    } catch (error) {
+      if (!(error instanceof InviteError)) throw error
+      last = error
+    }
+  }
+  throw last
+}
+
+export function campaignNeedsShortCodes(campaign: Campaign): boolean {
+  if (campaign.adminCode && !campaign.adminShort) return true
+  if (campaign.organizerCode && !campaign.organizerShort) return true
+  if (campaign.participantCode && !campaign.participantShort) return true
+  return campaign.groups.some((group) => !group.inviteCode)
+}
+
+export async function ensureShortCodes(campaignId: string): Promise<void> {
+  const { error } = await client().rpc('ensure_hupaak_short_codes', { campaign: campaignId })
+  if (missingRpc(error, 'ensure_hupaak_short_codes')) return
+  fail(error)
+}
+
+export async function rotateGroupInvite(groupId: string): Promise<void> {
+  const { error } = await client().rpc('rotate_hupaak_group_invite', { target: groupId })
   fail(error)
 }
 

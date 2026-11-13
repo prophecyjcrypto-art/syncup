@@ -3,7 +3,7 @@ import { InfoTip } from './Guide'
 import { t } from '../i18n'
 import { canManageRoster, isAdmin, isChoreographer, isOwner } from '../lib/access'
 import { formatDate, isPast } from '../lib/dates'
-import { adminInviteUrl, organizerInviteUrl, participantInviteUrl } from '../lib/invites'
+import { preferredInviteLink } from '../lib/invites'
 import { cardClass, inputClass, primaryButton, textMuted, textPrimary } from '../lib/ui'
 import type { Campaign, Language, PersonRole } from '../types'
 
@@ -20,6 +20,7 @@ export function CampaignList({
   onDancers,
   onResults,
   onPortal,
+  onHub,
   onCopy,
   onJoinAdmin,
 }: {
@@ -35,6 +36,7 @@ export function CampaignList({
   onDancers: (campaign: Campaign) => void
   onResults: (campaign: Campaign) => void
   onPortal: (campaign: Campaign, role: PersonRole) => void
+  onHub: (campaign: Campaign) => void
   onCopy: (url: string) => void
   onJoinAdmin: (value: string) => void
 }) {
@@ -53,7 +55,7 @@ export function CampaignList({
       <div className="min-w-0 flex-1">
         <p className={`inline-flex items-center gap-1.5 text-sm font-semibold ${textPrimary(isDarkMode)}`}>
           {t(lang, 'join_admin')}
-          <InfoTip lang={lang} name="join-admin" text={t(lang, 'invite_admin_hint')} />
+          <InfoTip lang={lang} name="join-admin" text={t(lang, 'join_code_hint')} />
         </p>
       </div>
       <input
@@ -108,7 +110,9 @@ export function CampaignList({
           const choreographer = isChoreographer(campaign, userId)
           const manager = canManageRoster(campaign, userId, email)
           const expired = isPast(campaign.expiryDate)
-          const participantLink = campaign.participantCode ? participantInviteUrl(campaign.participantCode) : ''
+          const participantLink = preferredInviteLink(campaign.participantShort, campaign.participantCode, 'participant')
+          const organizerLink = preferredInviteLink(campaign.organizerShort, campaign.organizerCode, 'organizer')
+          const adminLink = preferredInviteLink(campaign.adminShort, campaign.adminCode, 'admin')
           return (
             <article key={campaign.id} className={`${cardClass(isDarkMode)} glass-lift flex flex-col rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6`}>
               <div className="mb-4 flex items-start justify-between gap-3">
@@ -133,7 +137,7 @@ export function CampaignList({
                   )}
                 </div>
               </div>
-              <button type="button" onClick={() => onOpen(campaign, admin ? 'edit' : 'view')} className={`text-left font-serif text-2xl ${textPrimary(isDarkMode)}`}>
+              <button type="button" onClick={() => (manager ? onHub(campaign) : onOpen(campaign, 'view'))} className={`text-left font-serif text-2xl ${textPrimary(isDarkMode)}`}>
                 {campaign.name}
               </button>
               <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
@@ -152,6 +156,12 @@ export function CampaignList({
               <div className="mt-6 space-y-2">
                 {manager ? (
                   <>
+                    <button type="button" onClick={() => onHub(campaign)} className="w-full rounded-2xl bg-[#7c7bb9] py-3 text-sm font-bold text-white">
+                      {t(lang, 'hub_open')}
+                    </button>
+                    {campaign.participantShort ? (
+                      <p className={`text-center font-mono text-sm tracking-[0.18em] ${textPrimary(isDarkMode)}`}>{campaign.participantShort}</p>
+                    ) : null}
                     <div className="grid grid-cols-2 gap-2">
                       <button type="button" onClick={() => onChoreographers(campaign)} className="rounded-2xl bg-[#f6cf7a] py-3 text-xs font-bold text-zinc-900">
                         {t(lang, 'manage_leadership')}
@@ -163,8 +173,8 @@ export function CampaignList({
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        disabled={!campaign.organizerCode}
-                        onClick={() => campaign.organizerCode && onCopy(organizerInviteUrl(campaign.organizerCode))}
+                        disabled={!organizerLink}
+                        onClick={() => organizerLink && onCopy(organizerLink)}
                         className="rounded-xl border border-[#f6cf7a]/50 py-2 text-xs font-medium text-[#f6cf7a] disabled:opacity-40"
                       >
                         {t(lang, 'copy_link_leader')}
@@ -178,8 +188,8 @@ export function CampaignList({
                         {t(lang, 'copy_link_dancer')}
                       </button>
                     </div>
-                    {admin && campaign.adminCode && (
-                      <button type="button" onClick={() => onCopy(adminInviteUrl(campaign.adminCode!))} className="glass-well w-full rounded-xl py-2 text-xs font-medium">
+                    {admin && adminLink && (
+                      <button type="button" onClick={() => onCopy(adminLink)} className="glass-well w-full rounded-xl py-2 text-xs font-medium">
                         {t(lang, 'copy_invite')}
                       </button>
                     )}

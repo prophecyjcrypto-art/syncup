@@ -65,8 +65,11 @@ const campaign: Campaign = {
   savedSlots: [],
   createdAt: '2026-11-12T00:00:00.000Z',
   adminCode: 'a'.repeat(32),
+  adminShort: '4H8K2MQ',
   organizerCode: 'b'.repeat(32),
+  organizerShort: '7K2MQ9P',
   participantCode: 'c'.repeat(32),
+  participantShort: '9RWT3MD',
   admins: [],
   choreographers: [],
   dancers: [dancer],
@@ -96,7 +99,7 @@ const setup = renderToStaticMarkup(
 )
 assert(setup.includes('Duration (Optional)'), 'new events mark duration optional')
 assert(setup.includes('Not set yet'), 'new events start with no duration')
-assert(setup.includes('The organizer link appears here after you create the event.'), 'invite links are part of create')
+assert(setup.includes('Invite codes appear here after you create the event.'), 'invite codes are part of create')
 assert(!setup.includes('Connect Google Calendar'), 'setup does not offer Google Calendar')
 
 const setupZh = renderToStaticMarkup(
@@ -125,10 +128,11 @@ const existing = renderToStaticMarkup(
     }),
   ),
 )
-assert(existing.includes('Share links'), 'organizer and participant links stay on the event editor')
-assert(existing.includes('organizer=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'), 'organizer invite uses an unguessable code')
-assert(existing.includes('participant=cccccccccccccccccccccccccccccccc'), 'participant invite uses an unguessable code')
-assert(existing.includes('admin=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), 'admin invite stays')
+assert(existing.includes('Invite codes'), 'organizer and participant codes stay on the event editor')
+assert(existing.includes('7K2MQ9P'), 'organizer invite shows the short code')
+assert(existing.includes('9RWT3MD'), 'participant invite shows the short code')
+assert(existing.includes('4H8K2MQ'), 'admin invite shows the short code')
+assert(!existing.includes('organizer=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'), 'the editor copies a code instead of showing the long organizer url')
 assert(!existing.includes('Not set yet'), 'an event that already has a duration does not offer a blank length')
 
 const results = renderToStaticMarkup(

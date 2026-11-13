@@ -1,4 +1,4 @@
-import { StrictMode, type ReactNode } from 'react'
+import { StrictMode, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AvailabilityEditor } from '../components/AvailabilityEditor'
 import { CampaignList } from '../components/CampaignList'
@@ -7,6 +7,7 @@ import { FlowSteps } from '../components/Guide'
 import { Landing } from '../components/Landing'
 import { ResultsPanel } from '../components/ResultsPanel'
 import { RosterPanel } from '../components/RosterPanel'
+import { OrganizerPortal } from '../components/OrganizerPortal'
 import { SetupPanel } from '../components/SetupPanel'
 import { CalendarProvider } from '../lib/calendarContext'
 import { parseISODate, setTime } from '../lib/dates'
@@ -50,11 +51,17 @@ const campaign: Campaign = {
   compulsoryDays: [],
   savedSlots: [],
   createdAt: '2026-11-12T00:00:00.000Z',
-  adminCode: 'ADMIN',
-  organizerCode: 'ORG',
-  participantCode: 'PART',
+  adminCode: 'a'.repeat(32),
+  adminShort: '4H8K2MQ',
+  organizerCode: 'b'.repeat(32),
+  organizerShort: '7K2MQ9P',
+  participantCode: 'c'.repeat(32),
+  participantShort: '9RWT3MD',
   admins: [],
-  groups: [],
+  groups: [
+    { id: 'g-a', name: 'A組', memberIds: ['dancer-jie', 'dancer-min'], inviteCode: '2K7MQ9H' },
+    { id: 'g-b', name: 'B組', memberIds: ['dancer-ren'], inviteCode: '8NP4KWT' },
+  ],
   choreographers: [
     {
       id: 'org-1',
@@ -151,6 +158,93 @@ function Shell({ children, flow }: { children: ReactNode; flow?: boolean }) {
   )
 }
 
+function LivePreview({ name }: { name: string }) {
+  const tab = name === 'hub-stats' ? 'stats' : name === 'hub-settings' ? 'settings' : 'people'
+  const [event, setEvent] = useState(campaign)
+  if (name === 'setup-event') {
+    return (
+      <Shell>
+        <SetupPanel
+          lang={lang}
+          isDarkMode
+          initial={event}
+          readOnly={false}
+          onCancel={() => undefined}
+          onConfirm={() => undefined}
+          onCopy={() => undefined}
+          onRotateInvite={() => undefined}
+          onRotateOrganizer={() => undefined}
+          onRotateParticipant={() => undefined}
+          onCreateGroup={(groupName) =>
+            setEvent((current) => ({
+              ...current,
+              groups: [...current.groups, { id: `g-${groupName}`, name: groupName, memberIds: [], inviteCode: '3H7K2NP' }],
+            }))
+          }
+          onRenameGroup={(groupId, next) =>
+            setEvent((current) => ({
+              ...current,
+              groups: current.groups.map((group) => (group.id === groupId ? { ...group, name: next } : group)),
+            }))
+          }
+          onDeleteGroup={(groupId) =>
+            setEvent((current) => ({ ...current, groups: current.groups.filter((group) => group.id !== groupId) }))
+          }
+          onRotateGroup={() => undefined}
+        />
+      </Shell>
+    )
+  }
+  return (
+    <Shell>
+      <OrganizerPortal
+        lang={lang}
+        isDarkMode
+        campaign={event}
+        canEditEvent
+        canRotateEvent
+        initialTab={tab}
+        onBack={() => undefined}
+        onSchedule={() => undefined}
+        onCopy={() => undefined}
+        onSave={() => undefined}
+        onCreateGroup={(groupName) =>
+          setEvent((current) => ({
+            ...current,
+            groups: [...current.groups, { id: `g-${groupName}`, name: groupName, memberIds: [], inviteCode: '3H7K2NP' }],
+          }))
+        }
+        onRenameGroup={(groupId, next) =>
+          setEvent((current) => ({
+            ...current,
+            groups: current.groups.map((group) => (group.id === groupId ? { ...group, name: next } : group)),
+          }))
+        }
+        onDeleteGroup={(groupId) =>
+          setEvent((current) => ({ ...current, groups: current.groups.filter((group) => group.id !== groupId) }))
+        }
+        onToggleMember={(groupId, personId, included) =>
+          setEvent((current) => ({
+            ...current,
+            groups: current.groups.map((group) =>
+              group.id === groupId
+                ? {
+                    ...group,
+                    memberIds: included ? [...group.memberIds, personId] : group.memberIds.filter((id) => id !== personId),
+                  }
+                : group,
+            ),
+          }))
+        }
+        onRotateAdmin={() => undefined}
+        onRotateOrganizer={() => undefined}
+        onRotateParticipant={() => undefined}
+        onRotateGroup={() => undefined}
+      />
+    </Shell>
+  )
+}
+
 function Preview({ name }: { name: string }) {
   if (name === 'login') {
     return (
@@ -213,6 +307,7 @@ function Preview({ name }: { name: string }) {
           onDancers={() => undefined}
           onResults={() => undefined}
           onPortal={() => undefined}
+          onHub={() => undefined}
           onCopy={() => undefined}
           onJoinAdmin={() => undefined}
         />
@@ -238,6 +333,9 @@ function Preview({ name }: { name: string }) {
         />
       </Shell>
     )
+  }
+  if (name === 'hub' || name === 'hub-stats' || name === 'hub-settings' || name === 'setup-event') {
+    return <LivePreview name={name} />
   }
   if (name === 'portal') {
     return (

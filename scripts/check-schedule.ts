@@ -3,6 +3,7 @@ import { getDaysArray, groupByMonth, parseISODate, setTime, toISODateString } fr
 import { availabilityHeatmap, calculateBestSlots, coveredMs, freeIntervals, markedBlockCount, markedHours, normalizeDurationHours, plannedSessionHours, responseCount, shortlistSessionHours, uncoveredDays } from '../src/lib/schedule.ts'
 import { analyzeEvent } from '../src/lib/analysis.ts'
 import { devResultsAllowed, isDevResultsPath } from '../src/lib/devPreview.ts'
+import { SHORT_CODE_ALPHABET, normalizeLongCode, normalizeShortCode, parseInviteInput, shortCodeFromPath } from '../src/lib/invites.ts'
 import { buildCampaign, sampleShortlist } from '../src/dev/resultsPreview.tsx'
 import { commitSessions, pinsToSave, type SessionRange } from '../src/lib/sessions.ts'
 import {
@@ -311,5 +312,36 @@ const outHours = attended.dancers.find((person) => person.id === 'out')?.attende
 assert(freeHours === 2, `a fully free dancer attends the whole shortlist (${freeHours})`)
 assert(lateHours === 1, `partial overlap counts only the free part (${lateHours})`)
 assert(outHours === 0, `a dancer who is NA for the session attends 0 (${outHours})`)
+
+assert(SHORT_CODE_ALPHABET.length === 32, 'short codes use 32 symbols')
+assert(!/[ILOU]/.test(SHORT_CODE_ALPHABET), 'generated codes omit I, L, O, and U')
+assert(normalizeShortCode('7k2mq9p') === '7K2MQ9P', 'short codes ignore case')
+assert(normalizeShortCode('il0o234') === '1100234', 'a misread I, L, or O still matches')
+assert(normalizeShortCode('7K2MQUP') === null, 'U is not a short-code character')
+const longCode = 'aabbccddeeff00112233445566778899'
+assert(normalizeLongCode(longCode) === longCode, 'an existing 32-hex code still parses')
+assert(normalizeLongCode('aa-bb-cc-dd-ee-ff-00-11-22-33-44-55-66-77-88-99') === longCode, 'dashed 32-hex codes still parse')
+const adminLink = parseInviteInput(`https://syncup-time.com/?admin=${longCode}`)
+const organizerLink = parseInviteInput(`https://syncup-time.com/?organizer=${longCode}`)
+const participantLink = parseInviteInput(`https://syncup-time.com/?participant=${longCode}`)
+assert(adminLink?.kind === 'admin' && adminLink.code === longCode, 'old admin urls keep working')
+assert(organizerLink?.kind === 'organizer' && organizerLink.code === longCode, 'old organizer urls keep working')
+assert(participantLink?.kind === 'participant' && participantLink.code === longCode, 'old participant urls keep working')
+assert(parseInviteInput(longCode)?.kind === 'any', 'a raw 32-hex code can still be pasted')
+assert(parseInviteInput('https://syncup-time.com/i/7k2mq9p')?.code === '7K2MQ9P', 'short links use /i/<code>')
+assert(parseInviteInput('https://syncup-time.com/7K2MQ9P')?.code === '7K2MQ9P', 'a bare short path also joins')
+assert(shortCodeFromPath('/dev/results') === null, 'the results preview path is not an invite')
+assert(shortCodeFromPath('/i/7K2MQ9P/') === '7K2MQ9P', 'the short path ignores a trailing slash')
+assert(parseInviteInput('https://syncup-time.com/logo.png') === null, 'static files are not invite codes')
+
+const shortMigration = readFileSync(new URL('../supabase/migrations/20261113190000_short_invite_codes.sql', import.meta.url), 'utf8')
+const migrationBody = shortMigration.replace(/\$\$[\s\S]*?\$\$/g, '')
+assert(shortMigration.includes('hupaak_group_invites'), 'group invites have their own table')
+assert(shortMigration.includes('add column short_code text'), 'short codes are a new column')
+assert(!/\bdrop\s+table\b/i.test(shortMigration), 'the short-code migration does not drop a table')
+assert(!/\btruncate\b/i.test(shortMigration), 'the short-code migration does not truncate')
+assert(!/\bdelete\s+from\b/i.test(migrationBody), 'applying the migration does not delete rows')
+assert(!/update\s+public\.hupaak_(campaigns|people|blocks|admins|access|groups|group_members)\b/i.test(migrationBody), 'applying the migration does not rewrite events or people')
+assert(!/set\s+code\s*=/i.test(migrationBody), 'applying the migration does not rotate existing long codes')
 
 console.log('schedule checks passed')

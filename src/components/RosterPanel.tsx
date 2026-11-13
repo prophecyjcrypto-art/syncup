@@ -4,9 +4,11 @@ import { MarkFilterControl } from './MarkFilter'
 import { t } from '../i18n'
 import { formatBlockLabel } from '../lib/blocks'
 import { formatDate, formatLongDate, parseISODate } from '../lib/dates'
+import { shortInviteUrl } from '../lib/invites'
 import { uncoveredDays } from '../lib/schedule'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { InfoTip } from './Guide'
+import { InviteCode } from './InviteCode'
 import type { MarkFilter } from '../lib/schedule'
 import type { Campaign, DanceGroup, Language, PersonRole, TimeBlock } from '../types'
 
@@ -23,6 +25,8 @@ export function RosterPanel({
   onRenameGroup,
   onDeleteGroup,
   onToggleMember,
+  onCopy,
+  onRotateGroup,
 }: {
   lang: Language
   isDarkMode: boolean
@@ -36,6 +40,8 @@ export function RosterPanel({
   onRenameGroup?: (groupId: string, name: string) => Promise<boolean>
   onDeleteGroup?: (groupId: string) => Promise<boolean>
   onToggleMember?: (groupId: string, personId: string, included: boolean) => Promise<boolean>
+  onCopy?: (value: string, kind: 'code' | 'link') => void
+  onRotateGroup?: (groupId: string) => Promise<boolean>
 }) {
   const people = variant === 'choreographer' ? campaign.choreographers : campaign.dancers
   const groups = variant === 'dancer' ? campaign.groups : []
@@ -164,6 +170,22 @@ export function RosterPanel({
                 />
               ))}
             </div>
+          ) : null}
+          {groupId && onCopy ? (
+            <InviteCode
+              lang={lang}
+              isDarkMode={isDarkMode}
+              label=""
+              hint={t(lang, 'group_code_hint')}
+              code={groups.find((group) => group.id === groupId)?.inviteCode ?? null}
+              empty={t(lang, 'organizer_after_create')}
+              onCopy={(_value, kind) => {
+                const code = groups.find((group) => group.id === groupId)?.inviteCode
+                if (!code) return
+                onCopy(kind === 'link' ? shortInviteUrl(code) : code, kind)
+              }}
+              onRotate={onRotateGroup ? () => void onRotateGroup(groupId) : undefined}
+            />
           ) : null}
           <MarkFilterControl lang={lang} value={markFilter} onChange={setMarkFilter} />
         </section>
