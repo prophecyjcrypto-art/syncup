@@ -251,6 +251,12 @@ const en = {
   stats_responses: 'Responses',
   heat_na: '{n} of {total} NA',
   heat_ok: '{n} of {total} OK',
+  tab_schedule: 'Schedule',
+  tab_analysis: 'Analysis',
+  analysis_waiting: 'Waiting',
+  analysis_days: 'Days',
+  analysis_none: 'None yet',
+  analysis_ungrouped: 'Ungrouped',
 } as const
 
 const zh: { [K in keyof typeof en]: string } = {
@@ -504,6 +510,12 @@ const zh: { [K in keyof typeof en]: string } = {
   stats_responses: '已回覆',
   heat_na: '{total} 人中有 {n} 人 NA',
   heat_ok: '{total} 人中有 {n} 人 OK',
+  tab_schedule: '時間表',
+  tab_analysis: '分析',
+  analysis_waiting: '未回覆',
+  analysis_days: '日期',
+  analysis_none: '尚無',
+  analysis_ungrouped: '未分組',
 }
 
 export const LANGUAGES: { code: Language; label: string }[] = [

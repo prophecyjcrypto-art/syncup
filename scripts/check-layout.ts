@@ -597,7 +597,34 @@ async function main() {
     assert(devParsed.marks.includes('na') && devParsed.marks.includes('both') && devParsed.marks.includes('ok'), `dev mark filter was ${devParsed.marks.join(', ')}`)
     assert(!devParsed.password && !devParsed.signIn, 'dev results asked for a sign-in')
     assert(!devParsed.google && !devParsed.avail, 'dev results showed calendar or Avail')
-    assert(devParsed.responses && devParsed.hours, 'dev results hid the organizer stats')
+    await cdp.eval(`document.querySelector('[data-results-view="analysis"]')?.click()`)
+    await delay(60)
+    const analysis = await cdp.eval<string>(`(() => {
+      const text = document.body.innerText
+      return JSON.stringify({
+        open: document.querySelector('[data-analysis]') != null,
+        grid: document.querySelector('[data-slot-grid]') != null,
+        responses: text.includes('已回覆'),
+        waiting: text.includes('未回覆'),
+        hours: text.includes('練習時數'),
+        days: text.includes('日期'),
+        google: text.includes('Google'),
+        avail: text.includes('Avail'),
+      })
+    })()`)
+    const analysisParsed = JSON.parse(analysis) as {
+      open: boolean
+      grid: boolean
+      responses: boolean
+      waiting: boolean
+      hours: boolean
+      days: boolean
+      google: boolean
+      avail: boolean
+    }
+    assert(analysisParsed.open && !analysisParsed.grid, 'analysis did not replace the schedule')
+    assert(analysisParsed.responses && analysisParsed.waiting && analysisParsed.hours && analysisParsed.days, `analysis tab was ${analysis}`)
+    assert(!analysisParsed.google && !analysisParsed.avail, 'analysis showed calendar or Avail')
     const devSize = await overflow(cdp)
     assert(devSize.scrollWidth <= devSize.clientWidth + 1, `dev results overflows: ${devSize.scrollWidth}`)
     await cdp.eval(`document.querySelector('[data-dev-lang="en"]')?.click()`)

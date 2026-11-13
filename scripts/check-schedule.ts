@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { getDaysArray, groupByMonth, parseISODate, setTime, toISODateString } from '../src/lib/dates.ts'
 import { availabilityHeatmap, calculateBestSlots, coveredMs, freeIntervals, markedBlockCount, markedHours, normalizeDurationHours, plannedSessionHours, responseCount, uncoveredDays } from '../src/lib/schedule.ts'
+import { analyzeEvent } from '../src/lib/analysis.ts'
 import { devResultsAllowed, isDevResultsPath } from '../src/lib/devPreview.ts'
 import { buildCampaign, sampleShortlist } from '../src/dev/resultsPreview.tsx'
 import { commitSessions, pinsToSave, type SessionRange } from '../src/lib/sessions.ts'
@@ -199,5 +200,76 @@ const mainSource = readFileSync(new URL('../src/main.tsx', import.meta.url), 'ut
 assert(mainSource.includes('__SYNCUP_DEV_RESULTS__') && !/searchParams\.get\(\s*['"]dev['"]\s*\)/.test(mainSource), 'the preview is not unlocked by a public query secret')
 const viteConfig = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8')
 assert(viteConfig.includes('devResultsAllowed'), 'the Vite build uses the same preview gate')
+
+const quiet = analyzeEvent({
+  config,
+  dancers: [],
+  choreographers: [],
+  groups: [],
+  savedSlots: ['leave-this'],
+  sessions: [],
+})
+assert(quiet.naCount === 0 && quiet.okCount === 0 && quiet.responses === 0 && quiet.people === 0, 'an event with no dancers has empty counts')
+assert(quiet.groups.length === 0 && quiet.ungrouped === null && quiet.sessions.length === 0, 'no groups stays an empty analysis')
+assert(quiet.sessionHours === 3, 'a shortlist still counts session hours when duration is set')
+
+const waiting = analyzeEvent({
+  config,
+  dancers: [
+    {
+      id: 'solo',
+      userId: null,
+      name: 'Solo',
+      email: '',
+      role: 'dancer',
+      blocks: [],
+      lastUpdated: null,
+    },
+  ],
+  choreographers: [],
+  groups: [],
+  savedSlots: [],
+  sessions: [{ iso: day, startHour: 12, endHour: 14.5 }],
+})
+assert(waiting.responses === 0 && waiting.waiting.length === 1 && waiting.replied.length === 0, 'a dancer with no marks is waiting')
+assert(waiting.sessionHours === 2.5 && waiting.sessions.length === 1, 'one grid session is enough for the analysis')
+assert(waiting.days.length === 1 && waiting.days[0].freePeak === 1, 'an empty schedule is free across the day')
+
+const markedPerson = {
+  id: 'ada',
+  userId: null,
+  name: 'Ada',
+  email: '',
+  role: 'dancer' as const,
+  blocks: [block(10, 12, 'unavailable'), block(14, 18, 'available')].map((item, index) => ({
+    ...item,
+    id: `ada-${index}`,
+    wholeDay: false,
+  })),
+  lastUpdated: null,
+}
+const grouped = analyzeEvent({
+  config,
+  dancers: [
+    markedPerson,
+    {
+      id: 'solo',
+      userId: null,
+      name: 'Solo',
+      email: '',
+      role: 'dancer' as const,
+      blocks: [],
+      lastUpdated: null,
+    },
+  ],
+  choreographers: [],
+  groups: [{ id: 'main', name: 'Main', memberIds: ['ada'] }],
+  savedSlots: [],
+  sessions: [],
+})
+assert(grouped.naCount === 1 && grouped.okCount === 1, 'NA and OK counts stay the marked blocks')
+assert(grouped.groups.length === 1 && grouped.groups[0].naHours === 2 && grouped.groups[0].okHours === 4, 'group hours follow that dancer')
+assert(grouped.ungrouped?.people === 1, 'dancers outside a group stay visible')
+assert(grouped.responses === 1 && grouped.waiting.length === 1, 'coverage splits replies from people who have not saved')
 
 console.log('schedule checks passed')

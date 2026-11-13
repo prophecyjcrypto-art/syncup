@@ -5,12 +5,13 @@ import { buildIcs, formatSlotText } from '../lib/export'
 import { clearGoogleToken, createCalendarEvents, GOOGLE_CALENDAR_ENABLED, GoogleCalendarError } from '../lib/googleCalendar'
 import { formatLongDate, formatTime, getDaysArray, parseISODate, toISODateString } from '../lib/dates'
 import { durationHours, fitDuration, roundHour, SLOT_STEP } from '../lib/timeRange'
-import { availabilityHeatmap, calculateBestSlots, compulsoryReport, markedBlockCount, markedHours, plannedSessionHours, responseCount, sharedFreeByDay, type MarkFilter } from '../lib/schedule'
+import { availabilityHeatmap, calculateBestSlots, compulsoryReport, sharedFreeByDay, type MarkFilter } from '../lib/schedule'
 import { commitSessions, pinsToSave, toggleSessionDay, type SessionRange } from '../lib/sessions'
 import { cardClass, textMuted, textPrimary } from '../lib/ui'
 import { InfoTip } from './Guide'
 import type { Campaign, Language, TimeSlot } from '../types'
 import { MonthBoards } from './MonthBoards'
+import { AnalysisPanel } from './AnalysisPanel'
 import { HeatBook, slotMatchesSession } from './HeatBook'
 import { MarkFilterControl } from './MarkFilter'
 
@@ -62,6 +63,7 @@ export function ResultsPanel({
   const [focusId, setFocusId] = useState<string | null>(null)
   const [groupId, setGroupId] = useState<string | null>(null)
   const [markFilter, setMarkFilter] = useState<MarkFilter>('both')
+  const [resultsView, setResultsView] = useState<'schedule' | 'analysis'>('schedule')
   const calendar = useCalendar()
   const saveSlotsRef = useRef(onSaveSlots)
   const armPin = useRef(false)
@@ -428,6 +430,33 @@ export function ResultsPanel({
         </div>
       </div>
       {notice && <p className="text-sm font-medium text-[#93ba8c]">{notice}</p>}
+      {canPin ? (
+        <div className="inline-flex rounded-full p-0.5 glass-well" role="tablist" data-results-tab={resultsView}>
+          <button
+            type="button"
+            role="tab"
+            data-results-view="schedule"
+            aria-selected={resultsView === 'schedule'}
+            onClick={() => setResultsView('schedule')}
+            className={`min-h-11 rounded-full px-4 text-xs font-bold ${resultsView === 'schedule' ? 'bg-[#7c7bb9] text-white' : ''}`}
+          >
+            {t(lang, 'tab_schedule')}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            data-results-view="analysis"
+            aria-selected={resultsView === 'analysis'}
+            onClick={() => setResultsView('analysis')}
+            className={`min-h-11 rounded-full px-4 text-xs font-bold ${resultsView === 'analysis' ? 'bg-[#7c7bb9] text-white' : ''}`}
+          >
+            {t(lang, 'tab_analysis')}
+          </button>
+        </div>
+      ) : null}
+      {canPin && resultsView === 'analysis' ? (
+        <AnalysisPanel lang={lang} isDarkMode={isDarkMode} campaign={campaign} sessions={sessions} />
+      ) : (
       <div className="grid gap-4 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] md:items-start">
         <div className="order-2 min-w-0 space-y-3 md:order-1">
           <section className={`${cardClass(isDarkMode)} space-y-3 rounded-[1.5rem] p-4 sm:p-5`}>
@@ -522,7 +551,6 @@ export function ResultsPanel({
           )}
         </div>
         <section className={`${cardClass(isDarkMode)} order-1 min-w-0 rounded-[1.5rem] p-4 sm:p-5 md:order-2`}>
-          {canPin ? <EventStats lang={lang} isDarkMode={isDarkMode} campaign={campaign} sessions={sessions} /> : null}
           <h3 className={`font-serif text-xl sm:text-2xl ${textPrimary(isDarkMode)}`}>
             {selectedDates.size > 0 ? t(lang, 'dates_selected', { n: selectedDates.size }) : t(lang, 'rehearsal_recommendations')}
           </h3>
@@ -691,61 +719,8 @@ export function ResultsPanel({
           </div>
         </section>
       </div>
+      )}
     </div>
-  )
-}
-
-function EventStats({
-  lang,
-  isDarkMode,
-  campaign,
-  sessions,
-}: {
-  lang: Language
-  isDarkMode: boolean
-  campaign: Campaign
-  sessions: SessionRange[]
-}) {
-  const dancers = campaign.dancers
-  const na = markedBlockCount(dancers, 'unavailable')
-  const ok = markedBlockCount(dancers, 'available')
-  const responses = responseCount(dancers)
-  const sessionHours = plannedSessionHours(campaign.config.durationHours, campaign.savedSlots, sessions)
-  const figures = [
-    { label: t(lang, 'mode_unavailable'), value: String(na) },
-    { label: t(lang, 'mode_available'), value: String(ok) },
-    { label: t(lang, 'stats_responses'), value: `${responses}/${dancers.length}` },
-    { label: t(lang, 'stats_session'), value: String(sessionHours) },
-  ]
-  return (
-    <section className="mb-4 space-y-3">
-      <h3 className={`inline-flex items-center gap-2 text-sm font-bold ${textPrimary(isDarkMode)}`}>
-        {t(lang, 'stats_title')}
-        <InfoTip lang={lang} name="stats" text={t(lang, 'guide_stats')} />
-      </h3>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {figures.map((figure) => (
-          <div key={figure.label} className="glass-well min-w-0 rounded-2xl px-3 py-2">
-            <p className="truncate text-[10px] font-bold uppercase tracking-widest text-zinc-400">{figure.label}</p>
-            <p className={`text-lg font-bold tabular-nums ${textPrimary(isDarkMode)}`}>{figure.value}</p>
-          </div>
-        ))}
-      </div>
-      {campaign.groups.length > 0 ? (
-        <div className="space-y-1">
-          {campaign.groups.map((group) => {
-            const members = dancers.filter((person) => group.memberIds.includes(person.id))
-            const okHours = markedHours(campaign.config, members, 'available')
-            const naHours = markedHours(campaign.config, members, 'unavailable')
-            return (
-              <p key={group.id} className={`truncate text-xs ${textMuted(isDarkMode)}`}>
-                {group.name} · {t(lang, 'mode_available')} {okHours} · {t(lang, 'mode_unavailable')} {naHours}
-              </p>
-            )
-          })}
-        </div>
-      ) : null}
-    </section>
   )
 }
 
