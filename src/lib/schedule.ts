@@ -1,5 +1,8 @@
 import type { AppConfig, BlockKind, TimeSlot } from '../types'
 import { getDaysArray, parseISODate, setTime, toISODateString } from './dates'
+import { roundHour, type HourRange } from './timeRange'
+
+export type MarkFilter = 'both' | 'ok' | 'na'
 
 export interface ScheduleBlock {
   start: Date
@@ -211,11 +214,22 @@ export interface OverlapCell {
   freeIds: string[]
 }
 
-/** Half-hour dancer overlap. This does not depend on a chosen session length. */
+function coversMark(person: SchedulePerson, start: number, end: number, mode: MarkFilter): boolean {
+  const span = end - start
+  if (mode === 'both') return coveredMs(freeIntervals(person, start, end)) >= span - 1000
+  const kind: BlockKind = mode === 'ok' ? 'available' : 'unavailable'
+  const ranges = person.blocks
+    .filter((block) => block.kind === kind)
+    .map((block) => ({ start: block.start.getTime(), end: block.end.getTime() }))
+  return coveredMs(clipRanges(ranges, start, end)) >= span - 1000
+}
+
+/** Half-hour dancer overlap. `both` is the usual schedule. OK and NA count only marked time. */
 export function availabilityHeatmap(
   config: AppConfig,
   dancers: SchedulePerson[],
   dates: string[],
+  mode: MarkFilter = 'both',
 ): { iso: string; cells: OverlapCell[] }[] {
   const stepMs = 30 * 60 * 1000
   return dates.map((iso) => {
@@ -223,13 +237,49 @@ export function availabilityHeatmap(
     const cells: OverlapCell[] = []
     for (let cursor = start; cursor + stepMs <= end; cursor += stepMs) {
       const cellEnd = cursor + stepMs
-      const freeIds = dancers
-        .filter((person) => coveredMs(freeIntervals(person, cursor, cellEnd)) >= stepMs - 1000)
-        .map((person) => person.id)
+      const freeIds = dancers.filter((person) => coversMark(person, cursor, cellEnd, mode)).map((person) => person.id)
       cells.push({ start: new Date(cursor), end: new Date(cellEnd), freeIds })
     }
     return { iso, cells }
   })
+}
+
+export function markedBlockCount(people: SchedulePerson[], kind: BlockKind): number {
+  return people.reduce((sum, person) => sum + person.blocks.filter((block) => block.kind === kind).length, 0)
+}
+
+export function responseCount(people: SchedulePerson[]): number {
+  return people.filter((person) => person.blocks.length > 0).length
+}
+
+/** Marked hours inside the event's daily windows. Overlapping marks on one person are merged. */
+export function markedHours(config: AppConfig, people: SchedulePerson[], kind: BlockKind): number {
+  const days = getDaysArray(parseISODate(config.startDate), parseISODate(config.endDate))
+  let ms = 0
+  for (const person of people) {
+    const ranges = person.blocks
+      .filter((block) => block.kind === kind)
+      .map((block) => ({ start: block.start.getTime(), end: block.end.getTime() }))
+    for (const day of days) {
+      const { start, end } = dayWindow(config, toISODateString(day))
+      ms += coveredMs(clipRanges(ranges, start, end))
+    }
+  }
+  return Math.round((ms / 3600000) * 10) / 10
+}
+
+/** Hours of the saved shortlist. Null when there is no shortlist or no session length. Does not write. */
+export function shortlistSessionHours(duration: number | null, savedSlots: string[]): number | null {
+  const saved = new Set(savedSlots).size
+  if (saved === 0 || duration == null || duration <= 0) return null
+  return roundHour(saved * duration)
+}
+
+/** Shortlisted hours when any exist. Otherwise the sessions currently on the grid. Does not write. */
+export function plannedSessionHours(duration: number | null, savedSlots: string[], sessions: HourRange[]): number {
+  const listed = shortlistSessionHours(duration, savedSlots)
+  if (listed != null) return listed
+  return roundHour(sessions.reduce((sum, session) => sum + (session.endHour - session.startHour), 0))
 }
 
 export function sharedFreeByDay(

@@ -225,6 +225,7 @@ async function dragHours(cdp: Cdp, fromHour: string, toHour: string, pointerType
       return 'offscreen ' + JSON.stringify({ start, end, innerWidth: window.innerWidth, innerHeight: window.innerHeight, sameRow: startEl.parentElement === endEl.parentElement })
     }
     fire('pointerdown', start, startEl)
+    if ('${pointerType}' === 'touch') await new Promise((resolve) => setTimeout(resolve, 400))
     fire('pointermove', end, endEl)
     if (${release}) fire('pointerup', end, endEl)
     await new Promise((resolve) => setTimeout(resolve, 50))
@@ -429,6 +430,32 @@ async function main() {
     const phone = await overflow(cdp)
     assert(phone.scrollWidth <= phone.clientWidth + 1, `results still overflows after drag: ${phone.scrollWidth}`)
 
+    await openPage(cdp, '/?preview=results&lang=zh', 390, 844)
+    const aligned = await cdp.eval<number>(`(() => {
+      const label = document.querySelector('.heat-time')
+      const cell = document.querySelector('[data-slot="0"]')
+      if (!(label instanceof HTMLElement) || !(cell instanceof HTMLElement)) return 999
+      return Math.abs(label.getBoundingClientRect().top - cell.getBoundingClientRect().top)
+    })()`)
+    assert(aligned <= 4, `time label sits ${aligned}px off the grid line`)
+    const firstSlot = await dragHours(cdp, '9', '10', 'mouse', true)
+    assert(firstSlot.includes('09:00') && firstSlot.includes('10:30'), `first session was "${firstSlot}"`)
+    const secondSlot = await dragHours(cdp, '19', '21', 'mouse', true)
+    assert(secondSlot.includes('19:00') && secondSlot.includes('21:30'), `second session was "${secondSlot}"`)
+    const sameDay = await cdp.eval<string>(`(() => {
+      const blocks = [...document.querySelectorAll('[data-booked]')]
+      const days = blocks.map((el) => el.getAttribute('data-booked-iso'))
+      return JSON.stringify({ count: blocks.length, same: days.length === 2 && days[0] === days[1] })
+    })()`)
+    const sameParsed = JSON.parse(sameDay) as { count: number; same: boolean }
+    assert(sameParsed.count === 2 && sameParsed.same, `a day did not keep two sessions (${sameDay})`)
+    await cdp.eval(`document.querySelector('[data-remove-session]')?.click()`)
+    await delay(40)
+    const remaining = await cdp.eval<number>(`document.querySelectorAll('[data-booked]').length`)
+    assert(remaining === 1, `removing the focused session left ${remaining}`)
+    const multiOverflow = await overflow(cdp)
+    assert(multiOverflow.scrollWidth <= multiOverflow.clientWidth + 1, `two sessions overflow: ${multiOverflow.scrollWidth}`)
+
     await openPage(cdp, '/?preview=results&lang=zh', 1280, 800)
     const desktopBooked = await dragHours(cdp, '19', '21', 'mouse', true)
     assert(desktopBooked.includes('19:00') && desktopBooked.includes('2.5'), `desktop block was "${desktopBooked}"`)
@@ -536,6 +563,142 @@ async function main() {
     const hovered = await cdp.eval<string>(`document.querySelector('[role="tooltip"]')?.textContent ?? ''`)
     assert(hovered.includes('取消勾選就不會計算此人的時間'), `organizer hover tip was "${hovered}"`)
     assert(hovered.includes('尚未設定時長'), `organizer hover tip dropped the duration note: "${hovered}"`)
+
+    await openPage(cdp, '/dev/results', 390, 844)
+    const devPreview = await cdp.eval<string>(`(() => {
+      const banner = document.querySelector('[data-dev-banner]')?.textContent ?? ''
+      const groups = [...document.querySelectorAll('[data-group-id]')].map((node) => node.textContent?.trim() ?? '').filter((name) => name && name !== '全部')
+      const marks = [...document.querySelectorAll('[data-mark]')].map((node) => node.getAttribute('data-mark'))
+      const text = document.body.innerText
+      return JSON.stringify({
+        banner,
+        groups,
+        marks,
+        password: document.querySelector('input[type="password"]') != null,
+        signIn: text.includes('登入'),
+        google: text.includes('Google'),
+        responses: text.includes('已回覆'),
+        hours: text.includes('練習時數'),
+        avail: text.includes('Avail'),
+      })
+    })()`)
+    const devParsed = JSON.parse(devPreview) as {
+      banner: string
+      groups: string[]
+      marks: string[]
+      password: boolean
+      signIn: boolean
+      google: boolean
+      responses: boolean
+      hours: boolean
+      avail: boolean
+    }
+    assert(devParsed.banner.includes('示範彩排') && devParsed.banner.includes('不會寫入任何真實活動'), `dev banner was "${devParsed.banner}"`)
+    assert(devParsed.groups.includes('主力') && devParsed.groups.includes('後備'), `dev groups were ${devParsed.groups.join(', ')}`)
+    assert(devParsed.marks.includes('na') && devParsed.marks.includes('both') && devParsed.marks.includes('ok'), `dev mark filter was ${devParsed.marks.join(', ')}`)
+    assert(!devParsed.password && !devParsed.signIn, 'dev results asked for a sign-in')
+    assert(!devParsed.google && !devParsed.avail, 'dev results showed calendar or Avail')
+    const scheduleHours = await cdp.eval<string>(`document.querySelector('[data-shortlist-hours]')?.textContent ?? ''`)
+    assert(scheduleHours.includes('練習時數') && scheduleHours.includes('4'), `schedule shortlist hours were "${scheduleHours}"`)
+    const pan = await cdp.eval<string>(`(async () => {
+      const cell = document.querySelector('.heat-cell')
+      const touchAction = cell ? getComputedStyle(cell).touchAction : ''
+      const startEl = document.querySelector('[data-slot-grid] [data-hour="14"]')
+      const endEl = document.querySelector('[data-slot-grid] [data-hour="16"]')
+      if (!(startEl instanceof HTMLElement) || !(endEl instanceof HTMLElement)) return 'missing ' + touchAction
+      const point = (el) => {
+        const rect = el.getBoundingClientRect()
+        return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+      }
+      const fire = (type, el) => {
+        const at = point(el)
+        el.dispatchEvent(new PointerEvent(type, {
+          bubbles: true, cancelable: true, clientX: at.x, clientY: at.y,
+          pointerId: 7, pointerType: 'touch', button: 0, buttons: type === 'pointerup' ? 0 : 1, isPrimary: true,
+        }))
+      }
+      const before = document.querySelector('[data-range-summary]')?.textContent ?? ''
+      fire('pointerdown', startEl)
+      fire('pointermove', endEl)
+      fire('pointerup', endEl)
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      const after = document.querySelector('[data-range-summary]')?.textContent ?? ''
+      return JSON.stringify({ touchAction, same: before === after, after })
+    })()`)
+    const panParsed = JSON.parse(pan) as { touchAction: string; same: boolean; after: string }
+    assert(panParsed.touchAction.includes('pan'), `grid cells do not pan (${panParsed.touchAction})`)
+    assert(panParsed.same, `a quick touch drag booked a session (${panParsed.after})`)
+    const zoomed = await cdp.eval<string>(`(async () => {
+      const grid = document.querySelector('[data-slot-grid]')
+      const cell = document.querySelector('.heat-cell')
+      if (!(grid instanceof HTMLElement) || !(cell instanceof HTMLElement) || typeof Touch !== 'function') return 'skip'
+      const before = cell.getBoundingClientRect().height
+      const rect = grid.getBoundingClientRect()
+      const finger = (id, y) => new Touch({ identifier: id, target: grid, clientX: rect.left + 48, clientY: y })
+      grid.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [finger(1, rect.top + 120), finger(2, rect.top + 200)] }))
+      grid.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [finger(1, rect.top + 40), finger(2, rect.top + 320)] }))
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const after = document.querySelector('.heat-cell')?.getBoundingClientRect().height ?? before
+      return JSON.stringify({ before, after })
+    })()`)
+    if (zoomed !== 'skip') {
+      const zoomParsed = JSON.parse(zoomed) as { before: number; after: number }
+      assert(zoomParsed.after > zoomParsed.before + 2, `pinch did not enlarge the grid (${zoomed})`)
+    }
+    await cdp.eval(`document.querySelector('[data-grid-expand]')?.click()`)
+    await delay(40)
+    const expanded = await cdp.eval<string>(`JSON.stringify({
+      full: document.querySelector('[data-grid-full]') != null,
+      sheet: document.querySelector('[data-grid-sheet]')?.textContent ?? '',
+    })`)
+    const expandedParsed = JSON.parse(expanded) as { full: boolean; sheet: string }
+    assert(expandedParsed.full && expandedParsed.sheet.includes('候選'), `full calendar was ${expanded}`)
+    await cdp.eval(`document.querySelector('[data-grid-expand]')?.click()`)
+    await delay(40)
+    const closed = await cdp.eval<boolean>(`document.querySelector('[data-grid-full]') == null`)
+    assert(closed, 'full calendar stayed open')
+    await cdp.eval(`document.querySelector('[data-results-view="analysis"]')?.click()`)
+    await delay(60)
+    const analysis = await cdp.eval<string>(`(() => {
+      const text = document.body.innerText
+      return JSON.stringify({
+        open: document.querySelector('[data-analysis]') != null,
+        grid: document.querySelector('[data-slot-grid]') != null,
+        responses: text.includes('已回覆'),
+        waiting: text.includes('未回覆'),
+        hours: text.includes('練習時數'),
+        attended: text.includes('出席時數'),
+        days: text.includes('日期'),
+        google: text.includes('Google'),
+        avail: text.includes('Avail'),
+      })
+    })()`)
+    const analysisParsed = JSON.parse(analysis) as {
+      open: boolean
+      grid: boolean
+      responses: boolean
+      waiting: boolean
+      hours: boolean
+      attended: boolean
+      days: boolean
+      google: boolean
+      avail: boolean
+    }
+    assert(analysisParsed.open && !analysisParsed.grid, 'analysis did not replace the schedule')
+    assert(analysisParsed.responses && analysisParsed.waiting && analysisParsed.hours && analysisParsed.attended && analysisParsed.days, `analysis tab was ${analysis}`)
+    const attendedRows = await cdp.eval<string>(`JSON.stringify([...document.querySelectorAll('[data-attended-hours]')].map((node) => Number(node.getAttribute('data-attended-hours'))))`)
+    const attendedHours = JSON.parse(attendedRows) as number[]
+    assert(attendedHours.length === 6 && attendedHours.some((hours) => hours > 0), `attended hours were ${attendedRows}`)
+    assert(!analysisParsed.google && !analysisParsed.avail, 'analysis showed calendar or Avail')
+    const devSize = await overflow(cdp)
+    assert(devSize.scrollWidth <= devSize.clientWidth + 1, `dev results overflows: ${devSize.scrollWidth}`)
+    await cdp.eval(`document.querySelector('[data-dev-lang="en"]')?.click()`)
+    await delay(40)
+    const english = await cdp.eval<string>(`document.querySelector('[data-dev-banner]')?.textContent ?? ''`)
+    assert(english.includes('Sample rehearsal') && english.includes('Nothing is saved'), `english banner was "${english}"`)
+    const englishGroups = await cdp.eval<string>(`[...document.querySelectorAll('[data-group-id]')].map((node) => node.textContent?.trim() ?? '').join('|')`)
+    assert(englishGroups.includes('Main') && englishGroups.includes('Reserve'), `english groups were "${englishGroups}"`)
+
     cdp.close()
     console.log('layout checks passed')
   } finally {

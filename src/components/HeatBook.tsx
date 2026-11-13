@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { t } from '../i18n'
 import { formatLongDate, formatTime, parseISODate, toISODateString } from '../lib/dates'
+import { rangesOverlap, type SessionRange } from '../lib/sessions'
 import {
   SLOT_STEP,
   durationHours,
@@ -17,14 +18,12 @@ import {
 import { textMuted, textPrimary } from '../lib/ui'
 import { InfoTip } from './Guide'
 import type { Language, TimeSlot } from '../types'
-import type { OverlapCell } from '../lib/schedule'
+import type { MarkFilter, OverlapCell } from '../lib/schedule'
 
-export interface SessionRange extends HourRange {
-  iso: string
-}
+export type { SessionRange }
 
 type HeatDrag =
-  | { kind: 'create'; iso: string; origin: number }
+  | { kind: 'create'; id: string; iso: string; origin: number }
   | { kind: 'move'; origin: number; range: SessionRange }
   | { kind: 'resize-start'; range: SessionRange }
   | { kind: 'resize-end'; range: SessionRange }
@@ -34,25 +33,37 @@ interface HeatDay {
   cells: OverlapCell[]
 }
 
-function cellAt(x: number, y: number, root: HTMLElement): { iso: string; index: number } | null {
-  const direct = document.elementFromPoint(x, y)?.closest('[data-slot]')
-  if (direct instanceof HTMLElement && root.contains(direct) && direct.dataset.day) {
-    return { iso: direct.dataset.day, index: Number(direct.dataset.slot) }
-  }
+interface Preview {
+  block: SessionRange
+  sourceId: string | null
+}
+
+/** Measure day columns, not every cell. A block covers the cells underneath, and reading each cell forced a layout on every move. */
+function cellFromPoint(x: number, y: number, root: HTMLElement): { iso: string; index: number } | null {
+  const columns = [...root.querySelectorAll<HTMLElement>('.heat-col')]
+  if (columns.length === 0) return null
+  const sample = columns[0].querySelector<HTMLElement>('[data-slot="0"]')
+  const next = columns[0].querySelector<HTMLElement>('[data-slot="1"]')
+  if (!sample) return null
+  const sampleRect = sample.getBoundingClientRect()
+  const pitch = next ? next.getBoundingClientRect().top - sampleRect.top : sampleRect.height
+  if (pitch <= 0) return null
+  const count = columns[0].querySelectorAll('[data-slot]').length
   let best: { iso: string; index: number } | null = null
   let bestDist = 64 ** 2
-  for (const cell of root.querySelectorAll<HTMLElement>('[data-slot]')) {
-    if (!cell.dataset.day) continue
-    const rect = cell.getBoundingClientRect()
-    const cx = Math.max(rect.left, Math.min(x, rect.right))
-    const cy = Math.max(rect.top, Math.min(y, rect.bottom))
-    const dist = (cx - x) ** 2 + (cy - y) ** 2
-    if (dist <= bestDist) {
-      bestDist = dist
-      best = { iso: cell.dataset.day, index: Number(cell.dataset.slot) }
-    }
+  for (const column of columns) {
+    const rect = column.getBoundingClientRect()
+    const dx = x < rect.left ? rect.left - x : x > rect.right ? x - rect.right : 0
+    const dy = y < rect.top ? rect.top - y : y > rect.bottom ? y - rect.bottom : 0
+    const dist = dx * dx + dy * dy
+    if (dist > bestDist) continue
+    let index = Math.floor((y - sampleRect.top) / pitch)
+    if (index < 0) index = 0
+    if (count > 0 && index > count - 1) index = count - 1
+    bestDist = dist
+    best = { iso: column.dataset.day ?? '', index }
   }
-  return best
+  return best?.iso ? best : null
 }
 
 function fallbackCell(drag: HeatDrag, windowStart: number): { iso: string; index: number } {
@@ -62,13 +73,7 @@ function fallbackCell(drag: HeatDrag, windowStart: number): { iso: string; index
   return { iso: drag.range.iso, index: indexForHour(drag.range.startHour, windowStart) }
 }
 
-function placedBlock(drag: HeatDrag, block: SessionRange, sessions: SessionRange[]): SessionRange {
-  if (drag.kind !== 'move' || block.iso === drag.range.iso) return block
-  const taken = sessions.some((item) => item.iso === block.iso && item.iso !== drag.range.iso)
-  return taken ? { ...block, iso: drag.range.iso } : block
-}
-
-function sessionFromDrag(
+function blockFromDrag(
   drag: HeatDrag,
   index: number,
   iso: string,
@@ -78,14 +83,16 @@ function sessionFromDrag(
 ): SessionRange {
   if (drag.kind === 'create' && index === drag.origin && duration != null && duration > SLOT_STEP) {
     const start = roundHour(windowStart + drag.origin * SLOT_STEP)
-    return { iso: drag.iso, ...fitDuration({ startHour: start, endHour: start }, duration, windowStart, windowEnd) }
+    return { id: drag.id, iso: drag.iso, ...fitDuration({ startHour: start, endHour: start }, duration, windowStart, windowEnd) }
   }
-  if (drag.kind === 'create') return { iso: drag.iso, ...rangeFromCellIndexes(windowStart, drag.origin, index) }
-  if (drag.kind === 'move') {
-    return { iso, ...moveHourRange(drag.range, index - drag.origin, windowStart, windowEnd) }
-  }
-  if (drag.kind === 'resize-end') return { iso: drag.range.iso, ...resizeToCell('end', index, drag.range, windowStart, windowEnd) }
-  return { iso: drag.range.iso, ...resizeToCell('start', index, drag.range, windowStart, windowEnd) }
+  if (drag.kind === 'create') return { id: drag.id, iso: drag.iso, ...rangeFromCellIndexes(windowStart, drag.origin, index) }
+  if (drag.kind === 'move') return { ...drag.range, iso, ...moveHourRange(drag.range, index - drag.origin, windowStart, windowEnd) }
+  if (drag.kind === 'resize-end') return { ...drag.range, ...resizeToCell('end', index, drag.range, windowStart, windowEnd) }
+  return { ...drag.range, ...resizeToCell('start', index, drag.range, windowStart, windowEnd) }
+}
+
+function sourceIdOf(drag: HeatDrag): string | null {
+  return drag.kind === 'create' ? null : drag.range.id
 }
 
 export function sessionSummary(range: HourRange | null, lang: Language): string {
@@ -102,7 +109,13 @@ export function slotMatchesSession(slot: TimeSlot, session: SessionRange): boole
   return startHour === session.startHour && endHour === session.endHour
 }
 
-function scoreTone(score: number, isDarkMode: boolean): string {
+function scoreTone(score: number, isDarkMode: boolean, mode: MarkFilter): string {
+  if (mode === 'na') {
+    if (score >= 70) return 'bg-[#f19ba8] text-white'
+    if (score >= 40) return isDarkMode ? 'bg-[#f19ba8]/40 text-white' : 'bg-[#f19ba8]/30 text-zinc-800'
+    if (score > 0) return isDarkMode ? 'bg-white/10 text-zinc-200' : 'bg-white text-zinc-600'
+    return isDarkMode ? 'bg-black/30 text-zinc-500' : 'bg-zinc-100 text-zinc-400'
+  }
   if (score >= 90) return 'bg-[#7c7bb9] text-white'
   if (score >= 70) return 'bg-[#93ba8c] text-white'
   if (score >= 50) return 'bg-[#f6cf7a] text-zinc-900'
@@ -110,8 +123,19 @@ function scoreTone(score: number, isDarkMode: boolean): string {
   return isDarkMode ? 'bg-black/30 text-zinc-500' : 'bg-zinc-100 text-zinc-400'
 }
 
+const HOLD_MS = 340
+const PAN_SLOP = 12
+const ZOOM_MIN = 0.7
+const ZOOM_MAX = 1.65
+
 function hourAttr(windowStart: number, index: number): string {
   return String(roundHour(windowStart + index * SLOT_STEP))
+}
+
+function hiddenSession(item: SessionRange, preview: Preview | null): boolean {
+  if (!preview) return false
+  if (preview.sourceId) return item.id === preview.sourceId
+  return item.iso === preview.block.iso && rangesOverlap(item, preview.block)
 }
 
 export function HeatBook({
@@ -122,7 +146,8 @@ export function HeatBook({
   slots,
   savedSlots,
   sessions,
-  focusIso,
+  focusId,
+  markFilter,
   durationHours: chosenHours,
   editable,
   canPin,
@@ -135,6 +160,7 @@ export function HeatBook({
   onRemove,
   onClearAll,
   onToggleSaved,
+  sheet,
 }: {
   lang: Language
   isDarkMode: boolean
@@ -143,25 +169,32 @@ export function HeatBook({
   slots: TimeSlot[]
   savedSlots: string[]
   sessions: SessionRange[]
-  focusIso: string | null
+  focusId: string | null
+  markFilter: MarkFilter
   durationHours: number | null
   editable: boolean
   canPin: boolean
   windowStart: number
   windowEnd: number
   nameOf: (id: string) => string
-  onCommit: (block: SessionRange, fromIso: string) => void
-  onFocus: (iso: string) => void
+  onCommit: (block: SessionRange, sourceId: string | null) => void
+  onFocus: (id: string) => void
   onToggleDay: (iso: string) => void
-  onRemove: (iso: string) => void
+  onRemove: (id: string) => void
   onClearAll: () => void
   onToggleSaved: (keys: string[]) => void
+  sheet?: ReactNode
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<HeatDrag | null>(null)
-  const [preview, setPreview] = useState<{ block: SessionRange; fromIso: string } | null>(null)
-  const focused = sessions.find((item) => item.iso === focusIso) ?? sessions[0] ?? null
+  const holdRef = useRef<number>(0)
+  const pendingRef = useRef<{ pointerId: number; x: number; y: number; hit: { iso: string; index: number } } | null>(null)
+  const zoomRef = useRef(1)
+  const [preview, setPreview] = useState<Preview | null>(null)
+  const [zoom, setZoom] = useState(1)
+  const [full, setFull] = useState(false)
+  const focused = sessions.find((item) => item.id === focusId) ?? sessions[0] ?? null
   const shown = preview?.block ?? focused
 
   useEffect(() => {
@@ -174,11 +207,13 @@ export function HeatBook({
     else if (b.right > s.right - 8) scroller.scrollLeft += b.right - (s.right - 8)
     if (b.top < s.top) scroller.scrollTop -= s.top - b.top
     else if (b.bottom > s.bottom) scroller.scrollTop += b.bottom - s.bottom
-  }, [focused?.iso, focused?.startHour, focused?.endHour])
+  }, [focused?.id, focused?.iso, focused?.startHour, focused?.endHour])
+
   const summary = sessionSummary(shown, lang)
   const heatHelp = [
     t(lang, 'heat_hint'),
     t(lang, 'drag_hint').replace(/^[^。.]*[。.]\s*/, '').trim(),
+    t(lang, 'grid_gesture'),
     sessions.length > 0 ? t(lang, 'multi_day_hint') : '',
   ]
     .filter(Boolean)
@@ -190,6 +225,64 @@ export function HeatBook({
     .filter((slot): slot is TimeSlot => slot != null)
   const matching = !preview && focused ? slots.find((slot) => slotMatchesSession(slot, focused)) ?? null : null
   const saved = chosenSlots.length > 0 && chosenSlots.every((slot) => savedSlots.includes(slot.start.toISOString()))
+  const countLabel = markFilter === 'na' ? 'heat_na' : markFilter === 'ok' ? 'heat_ok' : 'heat_free'
+
+  useEffect(() => {
+    document.body.style.overflow = full ? 'hidden' : ''
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [full])
+
+  useEffect(() => {
+    const node = scrollRef.current
+    if (!node) return
+    const scroller: HTMLDivElement = node
+    const distance = (touches: TouchList) => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY)
+    let pinch: { dist: number; zoom: number } | null = null
+    function onTouchStart(event: TouchEvent) {
+      if (event.touches.length >= 2) {
+        window.clearTimeout(holdRef.current)
+        pendingRef.current = null
+        dragRef.current = null
+        pinch = { dist: distance(event.touches), zoom: zoomRef.current }
+      }
+    }
+    function onTouchMove(event: TouchEvent) {
+      if (dragRef.current && event.touches.length === 1) event.preventDefault()
+      if (!pinch || event.touches.length < 2) return
+      event.preventDefault()
+      const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, pinch.zoom * (distance(event.touches) / pinch.dist)))
+      const prev = zoomRef.current
+      if (Math.abs(next - prev) < 0.01) return
+      const rect = scroller.getBoundingClientRect()
+      const midX = (event.touches[0].clientX + event.touches[1].clientX) / 2 - rect.left
+      const midY = (event.touches[0].clientY + event.touches[1].clientY) / 2 - rect.top
+      const ratio = next / prev
+      const left = scroller.scrollLeft
+      const top = scroller.scrollTop
+      zoomRef.current = next
+      setZoom(next)
+      requestAnimationFrame(() => {
+        scroller.scrollLeft = (left + midX) * ratio - midX
+        scroller.scrollTop = (top + midY) * ratio - midY
+      })
+    }
+    function onTouchEnd(event: TouchEvent) {
+      if (event.touches.length < 2) pinch = null
+    }
+    scroller.addEventListener('touchstart', onTouchStart, { passive: true })
+    scroller.addEventListener('touchmove', onTouchMove, { passive: false })
+    scroller.addEventListener('touchend', onTouchEnd)
+    scroller.addEventListener('touchcancel', onTouchEnd)
+    return () => {
+      window.clearTimeout(holdRef.current)
+      scroller.removeEventListener('touchstart', onTouchStart)
+      scroller.removeEventListener('touchmove', onTouchMove)
+      scroller.removeEventListener('touchend', onTouchEnd)
+      scroller.removeEventListener('touchcancel', onTouchEnd)
+    }
+  }, [cols, heat.length])
 
   function maybeScroll(clientX: number, clientY: number) {
     const scroller = scrollRef.current
@@ -201,62 +294,117 @@ export function HeatBook({
     else if (clientX > rect.right - 28) scroller.scrollLeft += 16
   }
 
-  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!editable || event.button !== 0 || !gridRef.current) return
-    const target = event.target as Element
-    if (target.closest('[data-day-label], [data-time-label]')) return
-    const hit = cellAt(event.clientX, event.clientY, gridRef.current)
-    const edge = target.closest('[data-edge]')
-    const edgeName = edge instanceof HTMLElement ? edge.dataset.edge : null
-    const booked = target.closest('[data-booked]')
-    const bookedIso = booked instanceof HTMLElement ? booked.dataset.bookedIso : null
-    const grabbed = sessions.find((item) => item.iso === bookedIso) ?? null
-    let drag: HeatDrag | null = null
-    if (focused && edgeName === 'start') drag = { kind: 'resize-start', range: focused }
-    else if (focused && edgeName === 'end') drag = { kind: 'resize-end', range: focused }
-    else if (grabbed && hit) drag = { kind: 'move', origin: hit.index, range: grabbed }
-    else if (hit) drag = { kind: 'create', iso: hit.iso, origin: hit.index }
-    if (!drag) return
+  function publish(drag: HeatDrag, iso: string, index: number, duration: number | null) {
+    const block = blockFromDrag(drag, index, iso, windowStart, windowEnd, duration)
+    const sourceId = sourceIdOf(drag)
+    setPreview((current) => {
+      if (
+        current &&
+        current.sourceId === sourceId &&
+        current.block.id === block.id &&
+        current.block.iso === block.iso &&
+        current.block.startHour === block.startHour &&
+        current.block.endHour === block.endHour
+      ) {
+        return current
+      }
+      return { block, sourceId }
+    })
+  }
+
+  function startDrag(event: ReactPointerEvent<HTMLDivElement>, drag: HeatDrag, hit: { iso: string; index: number } | null) {
     event.preventDefault()
+    scrollRef.current?.classList.add('heat-scroll-lock')
     try {
-      gridRef.current.setPointerCapture(event.pointerId)
+      gridRef.current?.setPointerCapture(event.pointerId)
     } catch {
       // Synthetic pointers cannot be captured. Later moves still update the block.
     }
     dragRef.current = drag
     const seed = hit ?? fallbackCell(drag, windowStart)
-    const block = placedBlock(drag, sessionFromDrag(drag, seed.index, seed.iso, windowStart, windowEnd, null), sessions)
-    setPreview({ block, fromIso: drag.kind === 'create' ? drag.iso : drag.range.iso })
+    publish(drag, seed.iso, seed.index, null)
+  }
+
+  function clearHold() {
+    window.clearTimeout(holdRef.current)
+    pendingRef.current = null
+  }
+
+  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!editable || event.button !== 0 || !gridRef.current) return
+    const target = event.target as Element
+    if (target.closest('[data-day-label], [data-time-label]')) return
+    const hit = cellFromPoint(event.clientX, event.clientY, gridRef.current)
+    const edge = target.closest('[data-edge]')
+    const edgeName = edge instanceof HTMLElement ? edge.dataset.edge : null
+    const booked = target.closest('[data-booked]')
+    const bookedId = booked instanceof HTMLElement ? booked.dataset.sessionId : null
+    const grabbed = sessions.find((item) => item.id === bookedId) ?? null
+    let drag: HeatDrag | null = null
+    if (focused && edgeName === 'start') drag = { kind: 'resize-start', range: focused }
+    else if (focused && edgeName === 'end') drag = { kind: 'resize-end', range: focused }
+    else if (grabbed && hit) drag = { kind: 'move', origin: hit.index, range: grabbed }
+    if (drag) {
+      clearHold()
+      startDrag(event, drag, hit)
+      return
+    }
+    if (!hit) return
+    if (event.pointerType !== 'touch') {
+      startDrag(event, { kind: 'create', id: crypto.randomUUID(), iso: hit.iso, origin: hit.index }, hit)
+      return
+    }
+    clearHold()
+    pendingRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, hit }
+    holdRef.current = window.setTimeout(() => {
+      const pending = pendingRef.current
+      if (!pending || pending.pointerId !== event.pointerId || !gridRef.current) return
+      pendingRef.current = null
+      const created: HeatDrag = { kind: 'create', id: crypto.randomUUID(), iso: pending.hit.iso, origin: pending.hit.index }
+      scrollRef.current?.classList.add('heat-scroll-lock')
+      try {
+        gridRef.current.setPointerCapture(pending.pointerId)
+      } catch {
+        // The hold can outlive a synthetic pointer. Moves still update the block.
+      }
+      dragRef.current = created
+      publish(created, pending.hit.iso, pending.hit.index, null)
+    }, HOLD_MS)
   }
 
   function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const pending = pendingRef.current
+    if (pending && pending.pointerId === event.pointerId) {
+      const moved = (event.clientX - pending.x) ** 2 + (event.clientY - pending.y) ** 2
+      if (moved > PAN_SLOP ** 2) clearHold()
+      return
+    }
     const drag = dragRef.current
     if (!drag || !gridRef.current) return
     maybeScroll(event.clientX, event.clientY)
-    const hit = cellAt(event.clientX, event.clientY, gridRef.current)
+    const hit = cellFromPoint(event.clientX, event.clientY, gridRef.current)
     if (!hit) return
-    const block = placedBlock(drag, sessionFromDrag(drag, hit.index, hit.iso, windowStart, windowEnd, null), sessions)
-    setPreview({ block, fromIso: drag.kind === 'create' ? drag.iso : drag.range.iso })
+    publish(drag, hit.iso, hit.index, null)
   }
 
   function finish(event: ReactPointerEvent<HTMLDivElement>) {
+    if (pendingRef.current?.pointerId === event.pointerId) clearHold()
     const drag = dragRef.current
     dragRef.current = null
+    scrollRef.current?.classList.remove('heat-scroll-lock')
     if (!drag || !gridRef.current) return
-    const hit = cellAt(event.clientX, event.clientY, gridRef.current) ?? fallbackCell(drag, windowStart)
-    const raw = sessionFromDrag(drag, hit.index, hit.iso, windowStart, windowEnd, chosenHours)
-    const block = placedBlock(drag, raw, sessions)
-    const fromIso = drag.kind === 'create' ? drag.iso : drag.range.iso
+    const hit = cellFromPoint(event.clientX, event.clientY, gridRef.current) ?? fallbackCell(drag, windowStart)
+    const block = blockFromDrag(drag, hit.index, hit.iso, windowStart, windowEnd, chosenHours)
     setPreview(null)
     if (
-      drag.kind === 'move' &&
+      drag.kind !== 'create' &&
       block.iso === drag.range.iso &&
       block.startHour === drag.range.startHour &&
       block.endHour === drag.range.endHour
     ) {
-      onFocus(drag.range.iso)
+      onFocus(drag.range.id)
     } else {
-      onCommit(block, fromIso)
+      onCommit(block, sourceIdOf(drag))
     }
     scrollRef.current?.focus()
   }
@@ -265,7 +413,7 @@ export function HeatBook({
     if (!editable) return
     if (event.key === 'Backspace' || event.key === 'Delete') {
       event.preventDefault()
-      if (focused) onRemove(focused.iso)
+      if (focused) onRemove(focused.id)
       return
     }
     const plainDayMove = (event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !event.shiftKey && !event.altKey
@@ -275,8 +423,8 @@ export function HeatBook({
       const dir = event.key === 'ArrowRight' ? 1 : -1
       const index = heat.findIndex((day) => day.iso === focused.iso)
       const next = heat[index + dir]
-      if (!next || sessions.some((item) => item.iso === next.iso)) return
-      onCommit({ ...focused, iso: next.iso }, focused.iso)
+      if (!next) return
+      onCommit({ ...focused, iso: next.iso }, focused.id)
       return
     }
     const forward = event.key === 'ArrowDown' || event.key === 'ArrowRight'
@@ -286,10 +434,10 @@ export function HeatBook({
     if (!focused) {
       const iso = heat[0]?.iso
       if (!iso) return
-      onCommit({ iso, ...rangeFromCellIndexes(windowStart, 0, 0) }, iso)
+      onCommit({ id: crypto.randomUUID(), iso, ...rangeFromCellIndexes(windowStart, 0, 0) }, null)
       return
     }
-    const write = (block: HourRange) => onCommit({ ...block, iso: focused.iso }, focused.iso)
+    const write = (block: HourRange) => onCommit({ ...focused, ...block }, focused.id)
     if (event.key === 'Home') {
       write(moveHourRange(focused, -999, windowStart, windowEnd))
       return
@@ -334,8 +482,10 @@ export function HeatBook({
     )
   }
 
+  const cell = `${(2.25 * zoom).toFixed(3)}rem`
+  const column = `${Math.max(3.2, 5.1 * zoom).toFixed(3)}rem`
   return (
-    <div className="mt-4 space-y-3">
+    <div className={full ? 'heat-full' : 'mt-4 space-y-3'} data-grid-full={full ? '' : undefined}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h4 className={`inline-flex items-center gap-2 font-bold ${textPrimary(isDarkMode)}`}>
@@ -343,6 +493,18 @@ export function HeatBook({
             <InfoTip lang={lang} name="heat" text={heatHelp} />
           </h4>
         </div>
+        {dancers.length > 0 && cols > 0 ? (
+          <button
+            type="button"
+            data-grid-expand=""
+            aria-pressed={full}
+            aria-label={t(lang, full ? 'grid_collapse' : 'grid_expand')}
+            onClick={() => setFull((value) => !value)}
+            className="glass-well flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+          >
+            {full ? '↓' : '↗'}
+          </button>
+        ) : null}
       </div>
       {dancers.length === 0 ? (
         <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>
@@ -351,11 +513,11 @@ export function HeatBook({
           <div className="flex items-center justify-between gap-3">
             <p className={`text-sm font-semibold tabular-nums ${textPrimary(isDarkMode)}`} data-range-summary="" aria-live="polite">
               {summary}
-              {sessions.length > 1 ? ` · ${t(lang, 'days_picked', { n: sessions.length })}` : ''}
+              {sessions.length > 1 ? ` · ${t(lang, 'slots_picked', { n: sessions.length })}` : ''}
             </p>
             {editable && focused ? (
               <div className="flex shrink-0 gap-2">
-                <button type="button" onClick={() => onRemove(focused.iso)} className={`min-h-11 text-xs font-bold ${textMuted(isDarkMode)}`}>
+                <button type="button" data-remove-session="" onClick={() => onRemove(focused.id)} className={`min-h-11 text-xs font-bold ${textMuted(isDarkMode)}`}>
                   {t(lang, 'clear_range')}
                 </button>
                 {sessions.length > 1 ? (
@@ -370,15 +532,17 @@ export function HeatBook({
             ref={scrollRef}
             className="heat-scroll custom-scrollbar focus-visible:ring-2 focus-visible:ring-[#7c7bb9]"
             data-slot-grid=""
+            data-heat-zoom={zoom}
             role="grid"
             tabIndex={editable ? 0 : -1}
             aria-label={t(lang, 'heat_title')}
             onKeyDown={onKeyDown}
+            style={{ ['--heat-cell' as string]: cell, ['--heat-col' as string]: column, ['--heat-gap' as string]: '2px' }}
           >
             <div
               ref={gridRef}
               className="heat-sheet"
-              style={{ gridTemplateColumns: `3.35rem repeat(${heat.length}, minmax(5.1rem, 1fr))`, gridTemplateRows: `auto repeat(${cols}, 2.25rem)` }}
+              style={{ gridTemplateColumns: `3.35rem repeat(${heat.length}, minmax(var(--heat-col), 1fr))`, gridTemplateRows: `auto repeat(${cols}, var(--heat-cell))` }}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={finish}
@@ -416,9 +580,8 @@ export function HeatBook({
                 </span>
               ))}
               {heat.map((day, dayIndex) => {
-                const hidden = preview != null && (preview.fromIso === day.iso || preview.block.iso === day.iso)
                 const blocks = [
-                  ...sessions.filter((item) => item.iso === day.iso && !hidden),
+                  ...sessions.filter((item) => item.iso === day.iso && !hiddenSession(item, preview)),
                   ...(preview?.block.iso === day.iso ? [preview.block] : []),
                 ]
                 return (
@@ -436,9 +599,9 @@ export function HeatBook({
                             data-slot={index}
                             data-day={day.iso}
                             data-hour={hourAttr(windowStart, index)}
-                            title={`${formatTime(cell.start, lang)} · ${t(lang, 'heat_free', { n: cell.freeIds.length, total: dancers.length })}`}
-                            aria-label={`${formatLongDate(cell.start, lang)} ${formatTime(cell.start, lang)} ${t(lang, 'heat_free', { n: cell.freeIds.length, total: dancers.length })}`}
-                            className={`heat-cell ${scoreTone(ratio, isDarkMode)} ${pinned ? 'heat-cell-pinned' : ''}`}
+                            title={`${formatTime(cell.start, lang)} · ${t(lang, countLabel, { n: cell.freeIds.length, total: dancers.length })}`}
+                            aria-label={`${formatLongDate(cell.start, lang)} ${formatTime(cell.start, lang)} ${t(lang, countLabel, { n: cell.freeIds.length, total: dancers.length })}`}
+                            className={`heat-cell ${scoreTone(ratio, isDarkMode, markFilter)} ${pinned ? 'heat-cell-pinned' : ''}`}
                           >
                             {cell.freeIds.length}
                           </div>
@@ -449,18 +612,20 @@ export function HeatBook({
                         const endIndex = indexForHour(block.endHour, windowStart)
                         const span = endIndex - startIndex
                         if (span <= 0) return null
-                        const isFocus = block.iso === (preview ? preview.block.iso : focused?.iso)
+                        const isFocus = preview ? block.id === preview.block.id : block.id === focused?.id
                         return (
                           <div
-                            key={block.iso}
+                            key={block.id}
                             data-booked=""
+                            data-session-id={block.id}
                             data-booked-iso={block.iso}
                             data-day={block.iso}
                             data-focused={isFocus ? '' : undefined}
                             className={`heat-block ${isFocus ? 'heat-block-focus' : ''}`}
                             style={{
-                              top: `calc(${startIndex} * (2.25rem + 2px))`,
-                              height: `calc(${span} * 2.25rem + ${Math.max(span - 1, 0) * 2}px)`,
+                              top: `calc(${startIndex} * (var(--heat-cell) + var(--heat-gap)))`,
+                              height: `calc(${span} * var(--heat-cell) + ${Math.max(span - 1, 0)} * var(--heat-gap))`,
+                              zIndex: isFocus ? 3 : 2,
                             }}
                           >
                             {isFocus ? <span data-edge="start" className="heat-edge heat-edge-start" aria-label={t(lang, 'drag_hint')} /> : null}
@@ -481,6 +646,11 @@ export function HeatBook({
         </>
       )}
       {detail}
+      {full ? (
+        <div className="heat-full-sheet" data-grid-sheet="">
+          {sheet}
+        </div>
+      ) : null}
     </div>
   )
 }

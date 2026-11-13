@@ -1,16 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { t } from '../i18n'
 import { useCalendar } from '../lib/calendarContext'
 import { buildIcs, formatSlotText } from '../lib/export'
 import { clearGoogleToken, createCalendarEvents, GOOGLE_CALENDAR_ENABLED, GoogleCalendarError } from '../lib/googleCalendar'
 import { formatLongDate, formatTime, getDaysArray, parseISODate, toISODateString } from '../lib/dates'
 import { durationHours, fitDuration, roundHour, SLOT_STEP } from '../lib/timeRange'
-import { availabilityHeatmap, calculateBestSlots, compulsoryReport, sharedFreeByDay } from '../lib/schedule'
+import { availabilityHeatmap, calculateBestSlots, compulsoryReport, sharedFreeByDay, shortlistSessionHours, type MarkFilter } from '../lib/schedule'
+import { commitSessions, pinsToSave, toggleSessionDay, type SessionRange } from '../lib/sessions'
 import { cardClass, textMuted, textPrimary } from '../lib/ui'
 import { InfoTip } from './Guide'
 import type { Campaign, Language, TimeSlot } from '../types'
 import { MonthBoards } from './MonthBoards'
-import { HeatBook, slotMatchesSession, type SessionRange } from './HeatBook'
+import { AnalysisPanel } from './AnalysisPanel'
+import { HeatBook, slotMatchesSession } from './HeatBook'
+import { MarkFilterControl } from './MarkFilter'
 
 function slotKey(slot: TimeSlot): string {
   return slot.start.toISOString()
@@ -57,8 +60,14 @@ export function ResultsPanel({
   const [notice, setNotice] = useState('')
   const [draftHours, setDraftHours] = useState<number | null>(campaign.config.durationHours)
   const [sessions, setSessions] = useState<SessionRange[]>([])
-  const [focusIso, setFocusIso] = useState<string | null>(null)
+  const [focusId, setFocusId] = useState<string | null>(null)
+  const [groupId, setGroupId] = useState<string | null>(null)
+  const [markFilter, setMarkFilter] = useState<MarkFilter>('both')
+  const [resultsView, setResultsView] = useState<'schedule' | 'analysis'>('schedule')
   const calendar = useCalendar()
+  const saveSlotsRef = useRef(onSaveSlots)
+  const armPin = useRef(false)
+  saveSlotsRef.current = onSaveSlots
 
   useEffect(() => {
     setRequiredIds(choreoKey ? choreoKey.split('|') : [])
@@ -75,8 +84,9 @@ export function ResultsPanel({
     [campaign.config.startDate, campaign.config.endDate],
   )
   const required = campaign.choreographers.filter((person) => requiredIds.includes(person.id))
-  const dancers =
-    dancerFilter.length === 0 ? campaign.dancers : campaign.dancers.filter((person) => dancerFilter.includes(person.id))
+  const activeGroup = campaign.groups.find((group) => group.id === groupId) ?? null
+  const population = activeGroup ? campaign.dancers.filter((person) => activeGroup.memberIds.includes(person.id)) : campaign.dancers
+  const dancers = dancerFilter.length === 0 ? population : population.filter((person) => dancerFilter.includes(person.id))
   const everyone = [...campaign.choreographers, ...campaign.dancers]
   const durationUnset = draftHours == null
   const slotConfig = { ...campaign.config, durationHours: draftHours }
@@ -105,8 +115,25 @@ export function ResultsPanel({
       ? campaign.onDays
       : days.map((day) => toISODateString(day))
   ).sort()
+  const listedHours = shortlistSessionHours(campaign.config.durationHours, campaign.savedSlots)
   const overlap = sharedFreeByDay(campaign.config, required, overlapDates)
-  const heat = availabilityHeatmap(campaign.config, dancers, overlapDates)
+  const heat = availabilityHeatmap(campaign.config, dancers, overlapDates, markFilter)
+  const pinKeys = sessions.flatMap((session) => {
+    const slot = slots.find((item) => slotMatchesSession(item, session))
+    return slot ? [slotKey(slot)] : []
+  })
+  const pinKey = pinKeys.join('|')
+
+  useEffect(() => {
+    if (groupId && !campaign.groups.some((group) => group.id === groupId)) setGroupId(null)
+  }, [campaign.groups, groupId])
+
+  useEffect(() => {
+    if (!armPin.current) return
+    armPin.current = false
+    const next = pinsToSave(canPin, campaign.savedSlots, pinKeys)
+    if (next) saveSlotsRef.current(next)
+  }, [canPin, pinKey, campaign.savedSlots])
   const openDays = overlap.filter((day) => day.windows.length > 0)
   const closedDays = overlap.length - openDays.length
   const report = compulsoryReport(campaign.config, everyone, campaign.compulsoryDays)
@@ -152,41 +179,49 @@ export function ResultsPanel({
     if (hours !== campaign.config.durationHours) onSaveDuration?.(hours)
   }
 
-  function commitSession(block: SessionRange, fromIso: string) {
-    const taken = block.iso !== fromIso && sessions.some((item) => item.iso === block.iso)
-    const placed = taken ? { ...block, iso: fromIso } : block
-    setSessions((current) => [...current.filter((item) => item.iso !== fromIso && item.iso !== placed.iso), placed])
-    setFocusIso(placed.iso)
-    syncDuration(placed)
+  function commitSession(block: SessionRange, sourceId: string | null) {
+    armPin.current = true
+    const result = commitSessions(sessions, block, sourceId)
+    setSessions(result.sessions)
+    setFocusId(result.focusId)
+    const placed = result.sessions.find((item) => item.id === result.focusId)
+    if (placed) syncDuration(placed)
   }
 
-  function focusSession(iso: string) {
-    const block = sessions.find((item) => item.iso === iso)
+  function focusSession(id: string) {
+    const block = sessions.find((item) => item.id === id)
     if (!block) return
-    setFocusIso(iso)
+    setFocusId(id)
     syncDuration(block)
   }
 
   function toggleDay(iso: string) {
-    const existing = sessions.find((item) => item.iso === iso)
-    if (existing) {
-      const next = sessions.filter((item) => item.iso !== iso)
-      setSessions(next)
-      if (focusIso === iso) {
-        setFocusIso(next[0]?.iso ?? null)
-        if (next[0]) syncDuration(next[0])
+    const source = sessions.find((item) => item.id === focusId) ?? sessions[0]
+    if (!source) return
+    const exact = sessions.find((item) => item.iso === iso && item.startHour === source.startHour && item.endHour === source.endHour)
+    if (exact) {
+      setSessions((current) => current.filter((item) => item.id !== exact.id && !(item.iso === iso && item.startHour === source.startHour && item.endHour === source.endHour)))
+      if (focusId === exact.id) {
+        const rest = sessions.filter((item) => item.id !== exact.id)
+        setFocusId(rest[0]?.id ?? null)
+        if (rest[0]) syncDuration(rest[0])
       }
       return
     }
-    const source = sessions.find((item) => item.iso === focusIso) ?? sessions[0]
-    if (!source) return
-    setSessions((current) => [...current.filter((item) => item.iso !== iso), { ...source, iso }])
+    const addedId = crypto.randomUUID()
+    armPin.current = true
+    setSessions((current) => {
+      const base = current.find((item) => item.id === source.id) ?? source
+      return toggleSessionDay(current, iso, base, addedId).sessions
+    })
+    setFocusId(addedId)
+    syncDuration({ ...source, id: addedId, iso })
   }
 
-  function removeSession(iso: string) {
-    const next = sessions.filter((item) => item.iso !== iso)
+  function removeSession(id: string) {
+    const next = sessions.filter((item) => item.id !== id)
     setSessions(next)
-    if (focusIso === iso) setFocusIso(next[0]?.iso ?? null)
+    if (focusId === id) setFocusId(next[0]?.id ?? null)
   }
 
   function setLength(hours: number | null) {
@@ -194,15 +229,15 @@ export function ResultsPanel({
     if (hours == null || !Number.isFinite(hours) || hours <= 0) {
       setDraftHours(null)
       setSessions([])
-      setFocusIso(null)
+      setFocusId(null)
       return
     }
     const fitted = Math.min(Math.max(roundHour(hours), SLOT_STEP), maxHours)
     setDraftHours(fitted)
-    if (focusIso) {
+    if (focusId) {
       setSessions((current) =>
         current.map((item) =>
-          item.iso === focusIso ? { ...item, ...fitDuration(item, fitted, campaign.config.dayStartHour, campaign.config.dayEndHour) } : item,
+          item.id === focusId ? { ...item, ...fitDuration(item, fitted, campaign.config.dayStartHour, campaign.config.dayEndHour) } : item,
         ),
       )
     }
@@ -236,8 +271,12 @@ export function ResultsPanel({
 
   function selectSlot(slot: TimeSlot) {
     const hours = windowHours(slot)
-    const iso = focusIso ?? hours.iso
-    commitSession({ iso, startHour: hours.startHour, endHour: hours.endHour }, focusIso ?? iso)
+    const current = sessions.find((item) => item.id === focusId) ?? sessions[0]
+    if (!current) {
+      commitSession({ id: crypto.randomUUID(), ...hours }, null)
+      return
+    }
+    commitSession({ ...current, iso: hours.iso, startHour: hours.startHour, endHour: hours.endHour }, current.id)
   }
 
   function targets(): TimeSlot[] {
@@ -381,6 +420,11 @@ export function ResultsPanel({
           <InfoTip lang={lang} name="results" text={t(lang, 'guide_results')} />
         </div>
         <div className="chip-row">
+          {listedHours != null ? (
+            <p data-shortlist-hours="" className={`shrink-0 self-center text-xs font-bold tabular-nums ${textMuted(isDarkMode)}`}>
+              {t(lang, 'stats_session')} {listedHours}
+            </p>
+          ) : null}
           <button type="button" onClick={() => void copy(false)} className="glass-well min-h-11 shrink-0 whitespace-nowrap rounded-full px-4 text-xs font-bold">{t(lang, 'copy_basic')}</button>
           <button type="button" onClick={() => void copy(true)} className="min-h-11 shrink-0 whitespace-nowrap rounded-full btn-glow bg-[#7c7bb9] px-4 text-xs font-bold text-white">{t(lang, 'copy_full')}</button>
           <button type="button" onClick={exportCalendar} className="min-h-11 shrink-0 whitespace-nowrap rounded-full border border-[#f6cf7a] px-4 text-xs font-bold text-[#f6cf7a]">{t(lang, 'export_calendar')}</button>
@@ -392,6 +436,33 @@ export function ResultsPanel({
         </div>
       </div>
       {notice && <p className="text-sm font-medium text-[#93ba8c]">{notice}</p>}
+      {canPin ? (
+        <div className="inline-flex rounded-full p-0.5 glass-well" role="tablist" data-results-tab={resultsView}>
+          <button
+            type="button"
+            role="tab"
+            data-results-view="schedule"
+            aria-selected={resultsView === 'schedule'}
+            onClick={() => setResultsView('schedule')}
+            className={`min-h-11 rounded-full px-4 text-xs font-bold ${resultsView === 'schedule' ? 'bg-[#7c7bb9] text-white' : ''}`}
+          >
+            {t(lang, 'tab_schedule')}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            data-results-view="analysis"
+            aria-selected={resultsView === 'analysis'}
+            onClick={() => setResultsView('analysis')}
+            className={`min-h-11 rounded-full px-4 text-xs font-bold ${resultsView === 'analysis' ? 'bg-[#7c7bb9] text-white' : ''}`}
+          >
+            {t(lang, 'tab_analysis')}
+          </button>
+        </div>
+      ) : null}
+      {canPin && resultsView === 'analysis' ? (
+        <AnalysisPanel lang={lang} isDarkMode={isDarkMode} campaign={campaign} sessions={sessions} />
+      ) : (
       <div className="grid gap-4 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] md:items-start">
         <div className="order-2 min-w-0 space-y-3 md:order-1">
           <section className={`${cardClass(isDarkMode)} space-y-3 rounded-[1.5rem] p-4 sm:p-5`}>
@@ -519,6 +590,38 @@ export function ResultsPanel({
             </div>
           </div>
           <div className="mt-4 space-y-2">
+            <MarkFilterControl lang={lang} value={markFilter} onChange={setMarkFilter} />
+            {campaign.groups.length > 0 ? (
+              <div className="chip-row py-1">
+                <button
+                  type="button"
+                  data-group-id="all"
+                  aria-pressed={groupId === null}
+                  onClick={() => setGroupId(null)}
+                  className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${groupId === null ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
+                >
+                  {t(lang, 'filter_all')}
+                </button>
+                {campaign.groups.map((group) => {
+                  const on = groupId === group.id
+                  return (
+                    <button
+                      key={group.id}
+                      type="button"
+                      data-group-id={group.id}
+                      aria-pressed={on}
+                      onClick={() => {
+                        setGroupId(group.id)
+                        setDancerFilter([])
+                      }}
+                      className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
+                    >
+                      {group.name}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
             <p className={`inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>
               {t(lang, 'filter_dancers')}
               <InfoTip lang={lang} name="dancers" text={t(lang, dancerFilter.length === 0 ? 'filter_hint' : 'filter_active')} />
@@ -533,7 +636,7 @@ export function ResultsPanel({
               >
                 {t(lang, 'filter_all')}
               </button>
-              {campaign.dancers.map((person) => {
+              {population.map((person) => {
                 const on = dancerFilter.includes(person.id)
                 return (
                   <button
@@ -558,7 +661,8 @@ export function ResultsPanel({
             slots={slots}
             savedSlots={campaign.savedSlots}
             sessions={sessions}
-            focusIso={focusIso}
+            focusId={focusId}
+            markFilter={markFilter}
             durationHours={draftHours}
             editable={canSetDuration}
             canPin={canPin}
@@ -571,9 +675,25 @@ export function ResultsPanel({
             onRemove={removeSession}
             onClearAll={() => {
               setSessions([])
-              setFocusIso(null)
+              setFocusId(null)
             }}
             onToggleSaved={toggleSavedMany}
+            sheet={
+              <div className="space-y-1">
+                <p className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'shortlist_title')}</p>
+                {campaign.savedSlots.length === 0 ? (
+                  <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'analysis_none')}</p>
+                ) : (
+                  slots
+                    .filter((slot) => campaign.savedSlots.includes(slotKey(slot)))
+                    .map((slot) => (
+                      <p key={slotKey(slot)} className={`text-sm font-medium ${textPrimary(isDarkMode)}`}>
+                        {formatLongDate(slot.start, lang)} · {formatTime(slot.start, lang)} – {formatTime(slot.end, lang)}
+                      </p>
+                    ))
+                )}
+              </div>
+            }
           />
           <div className="mt-4 max-h-48 space-y-2 overflow-y-auto custom-scrollbar">
             <p className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'choreographer_overlap')}</p>
@@ -600,7 +720,12 @@ export function ResultsPanel({
           <div className="mt-6 space-y-4">
             {pinned.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'shortlist_title')} ({pinned.length})</h4>
+                <div className="flex items-baseline justify-between gap-3">
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'shortlist_title')} ({pinned.length})</h4>
+                  {listedHours != null ? (
+                    <p className="shrink-0 text-xs font-bold tabular-nums text-[#f6cf7a]">{t(lang, 'stats_session')} {listedHours}</p>
+                  ) : null}
+                </div>
                 {pinned.map(renderSlot)}
               </div>
             )}
@@ -621,6 +746,7 @@ export function ResultsPanel({
           </div>
         </section>
       </div>
+      )}
     </div>
   )
 }
