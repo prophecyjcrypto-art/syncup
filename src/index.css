@@ -142,19 +142,42 @@
   transform: translateY(-2px);
 }
 
-.guide-note {
-  max-width: 42rem;
-  font-size: 0.95rem;
-  font-weight: 400;
-  line-height: 1.55;
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  vertical-align: middle;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.info-tip > button {
+  position: relative;
+}
+
+.info-tip > button::after {
+  content: '';
+  position: absolute;
+  inset: -12px;
 }
 
 .tip-bubble {
   position: absolute;
   z-index: 40;
-  top: calc(100% + 8px);
+  top: 100%;
   left: 0;
   width: min(16.5rem, calc(100vw - 1.5rem));
+  padding-top: 8px;
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+}
+
+.tip-bubble-body {
+  display: block;
+  max-height: min(16rem, 60vh);
+  overflow: auto;
   padding: 0.75rem 0.9rem;
   border-radius: 1rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -164,13 +187,11 @@
   font-size: 0.75rem;
   font-weight: 500;
   line-height: 1.5;
-  letter-spacing: 0;
-  text-align: left;
-  text-transform: none;
+  white-space: pre-line;
   backdrop-filter: blur(16px);
 }
 
-.theme-light .tip-bubble {
+.theme-light .tip-bubble-body {
   border-color: rgba(0, 0, 0, 0.06);
   background: rgba(255, 255, 255, 0.96);
   color: #1d1d1f;

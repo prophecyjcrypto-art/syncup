@@ -1,9 +1,12 @@
 import { StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AvailabilityEditor } from '../components/AvailabilityEditor'
+import { CampaignList } from '../components/CampaignList'
+import { DancerPortal } from '../components/DancerPortal'
 import { FlowSteps } from '../components/Guide'
 import { Landing } from '../components/Landing'
 import { ResultsPanel } from '../components/ResultsPanel'
+import { RosterPanel } from '../components/RosterPanel'
 import { SetupPanel } from '../components/SetupPanel'
 import { CalendarProvider } from '../lib/calendarContext'
 import { parseISODate, setTime } from '../lib/dates'
@@ -190,6 +193,60 @@ function Preview({ name }: { name: string }) {
     return (
       <Shell>
         <SetupPanel lang={lang} isDarkMode readOnly={false} onCancel={() => undefined} onConfirm={() => undefined} />
+      </Shell>
+    )
+  }
+  if (name === 'events') {
+    return (
+      <Shell>
+        <CampaignList
+          lang={lang}
+          isDarkMode
+          campaigns={[campaign]}
+          userId="owner"
+          email="owner@example.com"
+          onCreate={() => undefined}
+          onOpen={() => undefined}
+          onDelete={() => undefined}
+          onChoreographers={() => undefined}
+          onDancers={() => undefined}
+          onResults={() => undefined}
+          onPortal={() => undefined}
+          onCopy={() => undefined}
+          onJoinAdmin={() => undefined}
+        />
+      </Shell>
+    )
+  }
+  if (name === 'roster' || name === 'members') {
+    return (
+      <Shell flow>
+        <RosterPanel
+          lang={lang}
+          isDarkMode
+          campaign={name === 'members' ? { ...campaign, dancers: [] } : campaign}
+          variant={name === 'members' ? 'dancer' : 'choreographer'}
+          onBack={() => undefined}
+          onNext={() => undefined}
+          onSave={async () => true}
+          onDelete={async () => undefined}
+        />
+      </Shell>
+    )
+  }
+  if (name === 'portal') {
+    return (
+      <Shell>
+        <DancerPortal
+          lang={lang}
+          isDarkMode
+          campaign={campaign}
+          userId="guest"
+          email="guest@example.com"
+          linkRole="dancer"
+          onBack={() => undefined}
+          onSave={async () => true}
+        />
       </Shell>
     )
   }

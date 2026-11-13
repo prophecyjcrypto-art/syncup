@@ -7,7 +7,7 @@ import { formatLongDate, formatTime, getDaysArray, parseISODate, toISODateString
 import { durationHours, fitDuration, roundHour, SLOT_STEP } from '../lib/timeRange'
 import { availabilityHeatmap, calculateBestSlots, compulsoryReport, sharedFreeByDay } from '../lib/schedule'
 import { cardClass, textMuted, textPrimary } from '../lib/ui'
-import { GuideNote, InfoTip } from './Guide'
+import { InfoTip } from './Guide'
 import type { Campaign, Language, TimeSlot } from '../types'
 import { MonthBoards } from './MonthBoards'
 import { HeatBook, slotMatchesSession, type SessionRange } from './HeatBook'
@@ -374,9 +374,12 @@ export function ResultsPanel({
   return (
     <div className="mx-auto w-full max-w-7xl space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <button type="button" onClick={onBack} className={`min-h-11 self-start text-xs font-bold uppercase ${textMuted(isDarkMode)}`}>
-          ← {t(lang, 'roster')}
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={onBack} className={`min-h-11 self-start text-xs font-bold uppercase ${textMuted(isDarkMode)}`}>
+            ← {t(lang, 'roster')}
+          </button>
+          <InfoTip lang={lang} name="results" text={t(lang, 'guide_results')} />
+        </div>
         <div className="chip-row">
           <button type="button" onClick={() => void copy(false)} className="glass-well min-h-11 shrink-0 whitespace-nowrap rounded-full px-4 text-xs font-bold">{t(lang, 'copy_basic')}</button>
           <button type="button" onClick={() => void copy(true)} className="min-h-11 shrink-0 whitespace-nowrap rounded-full btn-glow bg-[#7c7bb9] px-4 text-xs font-bold text-white">{t(lang, 'copy_full')}</button>
@@ -388,16 +391,18 @@ export function ResultsPanel({
           )}
         </div>
       </div>
-      <GuideNote>{t(lang, 'guide_results')}</GuideNote>
       {notice && <p className="text-sm font-medium text-[#93ba8c]">{notice}</p>}
       <div className="grid gap-4 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] md:items-start">
         <div className="order-2 min-w-0 space-y-3 md:order-1">
           <section className={`${cardClass(isDarkMode)} space-y-3 rounded-[1.5rem] p-4 sm:p-5`}>
             <h3 className={`inline-flex items-center gap-2 font-medium ${textPrimary(isDarkMode)}`}>
               {t(lang, 'choreographer_filter')}
-              <InfoTip lang={lang} text={t(lang, durationUnset ? 'duration_not_set' : 'slots_rule')} />
+              <InfoTip
+                lang={lang}
+                name="organizers"
+                text={`${t(lang, 'choreographer_filter_hint')}\n${t(lang, durationUnset ? 'duration_not_set' : 'slots_rule')}`}
+              />
             </h3>
-            <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'choreographer_filter_hint')}</p>
             {campaign.choreographers.length === 0 && <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>}
             {campaign.choreographers.map((person) => (
               <label key={person.id} className="flex min-h-11 items-center gap-2 text-sm font-bold">
@@ -410,7 +415,6 @@ export function ResultsPanel({
               </label>
             ))}
             {requiredIds.length === 0 && <p className="text-xs text-[#f6cf7a]">{t(lang, 'none_required')}</p>}
-            <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, durationUnset ? 'duration_not_set' : 'slots_rule')}</p>
             <label className="flex min-h-11 items-center gap-2 text-sm font-bold">
               <input type="checkbox" checked={onDaysOnly} onChange={(event) => setOnDaysOnly(event.target.checked)} disabled={campaign.onDays.length === 0} />
               {t(lang, 'on_days_only')}
@@ -418,7 +422,10 @@ export function ResultsPanel({
           </section>
           <section className={`${cardClass(isDarkMode)} rounded-[1.5rem] p-4 sm:p-5`}>
             <div className="mb-3 flex items-center justify-between">
-              <h3 className={`font-bold ${textPrimary(isDarkMode)}`}>{t(lang, 'availability_map')}</h3>
+              <h3 className={`inline-flex items-center gap-2 font-bold ${textPrimary(isDarkMode)}`}>
+                {t(lang, 'availability_map')}
+                <InfoTip lang={lang} name="dates" text={t(lang, 'tip_click_dates')} />
+              </h3>
               {(selectedDates.size > 0 || minAttendance !== 70 || onDaysOnly) && (
                 <button
                   type="button"
@@ -433,7 +440,6 @@ export function ResultsPanel({
                 </button>
               )}
             </div>
-            <p className={`mb-3 text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'tip_click_dates')}</p>
             <MonthBoards
               days={days}
               lang={lang}
@@ -513,8 +519,10 @@ export function ResultsPanel({
             </div>
           </div>
           <div className="mt-4 space-y-2">
-            <p className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'filter_dancers')}</p>
-            <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, dancerFilter.length === 0 ? 'filter_hint' : 'filter_active')}</p>
+            <p className={`inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>
+              {t(lang, 'filter_dancers')}
+              <InfoTip lang={lang} name="dancers" text={t(lang, dancerFilter.length === 0 ? 'filter_hint' : 'filter_active')} />
+            </p>
             <div className="chip-row py-1">
               <button
                 type="button"

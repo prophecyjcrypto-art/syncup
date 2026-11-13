@@ -5,7 +5,7 @@ import { formatBlockLabel } from '../lib/blocks'
 import { formatDate, formatLongDate, parseISODate } from '../lib/dates'
 import { uncoveredDays } from '../lib/schedule'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
-import { GuideNote } from './Guide'
+import { InfoTip } from './Guide'
 import type { Campaign, Language, PersonRole, TimeBlock } from '../types'
 
 export function RosterPanel({
@@ -61,10 +61,10 @@ export function RosterPanel({
       </button>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className={`font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
+          <h2 className={`inline-flex flex-wrap items-center gap-2 font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
             {variant === 'choreographer' ? t(lang, 'roster_header_leadership') : t(lang, 'roster_header_members')}
+            <InfoTip lang={lang} name="roster" text={variant === 'choreographer' ? t(lang, 'guide_choreo') : t(lang, 'guide_dancers')} />
           </h2>
-          <GuideNote>{variant === 'choreographer' ? t(lang, 'guide_choreo') : t(lang, 'guide_dancers')}</GuideNote>
         </div>
         <button type="button" onClick={onNext} className={`min-h-11 w-full rounded-full px-6 py-3 text-sm font-bold sm:w-auto ${accent}`}>
           {variant === 'choreographer' ? t(lang, 'next_dancers') : t(lang, 'view_results')}
@@ -98,7 +98,7 @@ export function RosterPanel({
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         {people.length === 0 ? (
-          <p className={`md:col-span-2 py-10 text-center text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'empty_people')}</p>
+          <p className={`md:col-span-2 py-10 text-center text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'list_empty')}</p>
         ) : (
           people.map((person) => (
             <article key={person.id} className={`${cardClass(isDarkMode)} rounded-[1.5rem] p-5`}>

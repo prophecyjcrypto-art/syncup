@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { t } from '../i18n'
 import { formatLongDate, formatTime, parseISODate, toISODateString } from '../lib/dates'
 import {
@@ -15,6 +15,7 @@ import {
   type HourRange,
 } from '../lib/timeRange'
 import { textMuted, textPrimary } from '../lib/ui'
+import { InfoTip } from './Guide'
 import type { Language, TimeSlot } from '../types'
 import type { OverlapCell } from '../lib/schedule'
 
@@ -156,7 +157,6 @@ export function HeatBook({
   onClearAll: () => void
   onToggleSaved: (keys: string[]) => void
 }) {
-  const helpId = useId()
   const scrollRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<HeatDrag | null>(null)
@@ -176,6 +176,13 @@ export function HeatBook({
     else if (b.bottom > s.bottom) scroller.scrollTop += b.bottom - s.bottom
   }, [focused?.iso, focused?.startHour, focused?.endHour])
   const summary = sessionSummary(shown, lang)
+  const heatHelp = [
+    t(lang, 'heat_hint'),
+    t(lang, 'drag_hint').replace(/^[^。.]*[。.]\s*/, '').trim(),
+    sessions.length > 0 ? t(lang, 'multi_day_hint') : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
   const header = heat[0]?.cells ?? []
   const cols = header.length
   const chosenSlots = sessions
@@ -331,8 +338,10 @@ export function HeatBook({
     <div className="mt-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h4 className={`font-bold ${textPrimary(isDarkMode)}`}>{t(lang, 'heat_title')}</h4>
-          <p className={`mt-1 text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'heat_hint')}</p>
+          <h4 className={`inline-flex items-center gap-2 font-bold ${textPrimary(isDarkMode)}`}>
+            {t(lang, 'heat_title')}
+            <InfoTip lang={lang} name="heat" text={heatHelp} />
+          </h4>
         </div>
       </div>
       {dancers.length === 0 ? (
@@ -342,6 +351,7 @@ export function HeatBook({
           <div className="flex items-center justify-between gap-3">
             <p className={`text-sm font-semibold tabular-nums ${textPrimary(isDarkMode)}`} data-range-summary="" aria-live="polite">
               {summary}
+              {sessions.length > 1 ? ` · ${t(lang, 'days_picked', { n: sessions.length })}` : ''}
             </p>
             {editable && focused ? (
               <div className="flex shrink-0 gap-2">
@@ -363,7 +373,6 @@ export function HeatBook({
             role="grid"
             tabIndex={editable ? 0 : -1}
             aria-label={t(lang, 'heat_title')}
-            aria-describedby={helpId}
             onKeyDown={onKeyDown}
           >
             <div
@@ -469,11 +478,6 @@ export function HeatBook({
               })}
             </div>
           </div>
-          <p id={helpId} className={`text-xs leading-relaxed ${textMuted(isDarkMode)}`}>
-            {t(lang, 'drag_hint')}
-            {sessions.length > 0 ? ` ${t(lang, 'multi_day_hint')}` : ''}
-            {sessions.length > 1 ? ` ${t(lang, 'days_picked', { n: sessions.length })}` : ''}
-          </p>
         </>
       )}
       {detail}
