@@ -562,6 +562,51 @@ async function main() {
     const hovered = await cdp.eval<string>(`document.querySelector('[role="tooltip"]')?.textContent ?? ''`)
     assert(hovered.includes('取消勾選就不會計算此人的時間'), `organizer hover tip was "${hovered}"`)
     assert(hovered.includes('尚未設定時長'), `organizer hover tip dropped the duration note: "${hovered}"`)
+
+    await openPage(cdp, '/dev/results', 390, 844)
+    const devPreview = await cdp.eval<string>(`(() => {
+      const banner = document.querySelector('[data-dev-banner]')?.textContent ?? ''
+      const groups = [...document.querySelectorAll('[data-group-id]')].map((node) => node.textContent?.trim() ?? '').filter((name) => name && name !== '全部')
+      const marks = [...document.querySelectorAll('[data-mark]')].map((node) => node.getAttribute('data-mark'))
+      const text = document.body.innerText
+      return JSON.stringify({
+        banner,
+        groups,
+        marks,
+        password: document.querySelector('input[type="password"]') != null,
+        signIn: text.includes('登入'),
+        google: text.includes('Google'),
+        responses: text.includes('已回覆'),
+        hours: text.includes('練習時數'),
+        avail: text.includes('Avail'),
+      })
+    })()`)
+    const devParsed = JSON.parse(devPreview) as {
+      banner: string
+      groups: string[]
+      marks: string[]
+      password: boolean
+      signIn: boolean
+      google: boolean
+      responses: boolean
+      hours: boolean
+      avail: boolean
+    }
+    assert(devParsed.banner.includes('示範彩排') && devParsed.banner.includes('不會寫入任何真實活動'), `dev banner was "${devParsed.banner}"`)
+    assert(devParsed.groups.includes('主力') && devParsed.groups.includes('後備'), `dev groups were ${devParsed.groups.join(', ')}`)
+    assert(devParsed.marks.includes('na') && devParsed.marks.includes('both') && devParsed.marks.includes('ok'), `dev mark filter was ${devParsed.marks.join(', ')}`)
+    assert(!devParsed.password && !devParsed.signIn, 'dev results asked for a sign-in')
+    assert(!devParsed.google && !devParsed.avail, 'dev results showed calendar or Avail')
+    assert(devParsed.responses && devParsed.hours, 'dev results hid the organizer stats')
+    const devSize = await overflow(cdp)
+    assert(devSize.scrollWidth <= devSize.clientWidth + 1, `dev results overflows: ${devSize.scrollWidth}`)
+    await cdp.eval(`document.querySelector('[data-dev-lang="en"]')?.click()`)
+    await delay(40)
+    const english = await cdp.eval<string>(`document.querySelector('[data-dev-banner]')?.textContent ?? ''`)
+    assert(english.includes('Sample rehearsal') && english.includes('Nothing is saved'), `english banner was "${english}"`)
+    const englishGroups = await cdp.eval<string>(`[...document.querySelectorAll('[data-group-id]')].map((node) => node.textContent?.trim() ?? '').join('|')`)
+    assert(englishGroups.includes('Main') && englishGroups.includes('Reserve'), `english groups were "${englishGroups}"`)
+
     cdp.close()
     console.log('layout checks passed')
   } finally {

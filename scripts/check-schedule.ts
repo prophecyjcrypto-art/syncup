@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { getDaysArray, groupByMonth, parseISODate, setTime, toISODateString } from '../src/lib/dates.ts'
 import { availabilityHeatmap, calculateBestSlots, coveredMs, freeIntervals, markedBlockCount, markedHours, normalizeDurationHours, plannedSessionHours, responseCount, uncoveredDays } from '../src/lib/schedule.ts'
+import { devResultsAllowed, isDevResultsPath } from '../src/lib/devPreview.ts'
+import { buildCampaign, sampleShortlist } from '../src/dev/resultsPreview.tsx'
 import { commitSessions, pinsToSave, type SessionRange } from '../src/lib/sessions.ts'
 import {
   durationFromCellCount,
@@ -173,5 +175,29 @@ assert(campaignSelect != null && !campaignSelect[1].includes('hupaak_groups'), '
 const groupWrites = dbSource.slice(dbSource.indexOf('export async function createDanceGroup'))
 assert(groupWrites.includes('hupaak_groups') && !groupWrites.includes('hupaak_people'), 'group edits do not rewrite people')
 assert(!groupWrites.includes('hupaak_blocks') && !groupWrites.includes('hupaak_campaigns'), 'group edits do not rewrite blocks or events')
+
+assert(devResultsAllowed(true, undefined) === true, 'local dev can open the results preview')
+assert(devResultsAllowed(false, 'preview') === true, 'a Vercel preview build can open the results preview')
+assert(devResultsAllowed(false, 'production') === false, 'production cannot open the results preview')
+assert(devResultsAllowed(false, undefined) === false, 'a build without Vercel preview cannot open the results preview')
+assert(isDevResultsPath('/dev/results') && isDevResultsPath('/dev/results/'), 'the preview lives at /dev/results')
+assert(!isDevResultsPath('/') && !isDevResultsPath('/dev/results/extra'), 'other paths are not the preview')
+
+const sample = buildCampaign('zh', sampleShortlist(), 2)
+assert(sample.groups.map((group) => group.name).join() === '主力,後備', 'the sample has a main group and a reserve group')
+assert(sample.savedSlots.length === 2, 'the sample shortlist has two times on one day')
+assert(new Set(sample.savedSlots.map((key) => toISODateString(new Date(key)))).size === 1, 'those two saved times are on the same day')
+assert(sample.dancers.some((dancer) => dancer.blocks.length === 0), 'one dancer has not responded')
+assert(sample.dancers.some((dancer) => dancer.blocks.some((block) => block.kind === 'unavailable')), 'the sample includes NA')
+assert(sample.dancers.some((dancer) => dancer.blocks.some((block) => block.kind === 'available')), 'the sample includes OK')
+
+const previewSource = readFileSync(new URL('../src/dev/resultsPreview.tsx', import.meta.url), 'utf8')
+assert(!previewSource.includes('lib/db') && !previewSource.includes('lib/supabase') && !previewSource.includes('fetchCampaigns'), 'the preview cannot read or write live events')
+const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
+assert(!appSource.includes('/dev/results'), 'the signed-in app does not link to the preview')
+const mainSource = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8')
+assert(mainSource.includes('__SYNCUP_DEV_RESULTS__') && !/searchParams\.get\(\s*['"]dev['"]\s*\)/.test(mainSource), 'the preview is not unlocked by a public query secret')
+const viteConfig = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8')
+assert(viteConfig.includes('devResultsAllowed'), 'the Vite build uses the same preview gate')
 
 console.log('schedule checks passed')
