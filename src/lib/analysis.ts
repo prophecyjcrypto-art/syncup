@@ -7,6 +7,7 @@ import {
   freeIntervals,
   markedBlockCount,
   markedHours,
+  classifySessionWindow,
   mergeRanges,
   plannedSessionHours,
   responseCount,
@@ -92,12 +93,13 @@ function attendedHours(person: Person, sessions: PlannedSession[]): number {
   return Math.round((coveredMs(mergeRanges(pieces)) / 3600000) * 10) / 10
 }
 
-function freeDuring(people: Person[], start: Date, end: Date): string[] {
-  const span = end.getTime() - start.getTime()
-  if (span <= 0) return []
-  return people
-    .filter((person) => coveredMs(freeIntervals(person, start.getTime(), end.getTime())) >= span - 1000)
-    .map((person) => person.id)
+function attendingIds(slot: TimeSlot): string[] {
+  return [...slot.availableMembers, ...slot.partialMembers.map((member) => member.id)]
+}
+
+/** Anyone with some free time in the window, using the same OK / partial / NA rule as the session card. */
+function freeDuring(people: Person[], start: Date, end: Date, toleranceHours: number): string[] {
+  return attendingIds(classifySessionWindow(people, start, end, toleranceHours))
 }
 
 interface PlannedSession {
@@ -123,17 +125,22 @@ export function analyzeEvent(input: {
   const chosen: PlannedSession[] = useSaved
     ? saved.flatMap((key) => {
         const match = slots.find((slot) => slot.start.toISOString() === key)
-        if (match) return [{ id: key, start: match.start, end: match.end, freeIds: match.availableMembers }]
+        if (match) return [{ id: key, start: match.start, end: match.end, freeIds: attendingIds(match) }]
         const start = new Date(key)
         if (Number.isNaN(start.getTime())) return []
         const end = new Date(start.getTime() + (input.config.durationHours ?? 0) * 3600000)
-        return [{ id: key, start, end, freeIds: freeDuring(dancers, start, end) }]
+        return [{ id: key, start, end, freeIds: freeDuring(dancers, start, end, input.config.attendanceTolerance) }]
       })
     : input.sessions.map((session) => {
         const start = setTime(parseISODate(session.iso), session.startHour)
         const end = setTime(parseISODate(session.iso), session.endHour)
         const match = slots.find((slot) => matchesSession(slot, session))
-        return { id: `${session.iso}-${session.startHour}`, start, end, freeIds: match ? match.availableMembers : freeDuring(dancers, start, end) }
+        return {
+          id: `${session.iso}-${session.startHour}`,
+          start,
+          end,
+          freeIds: match ? attendingIds(match) : freeDuring(dancers, start, end, input.config.attendanceTolerance),
+        }
       })
 
   const people = dancers.map((person) => ({

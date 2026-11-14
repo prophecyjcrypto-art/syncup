@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { getDaysArray, groupByMonth, parseISODate, setTime, toISODateString } from '../src/lib/dates.ts'
-import { availabilityHeatmap, calculateBestSlots, coveredMs, freeIntervals, markedBlockCount, markedHours, normalizeDurationHours, plannedSessionHours, responseCount, shortlistSessionHours, uncoveredDays } from '../src/lib/schedule.ts'
+import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, coveredMs, freeIntervals, markedBlockCount, markedHours, normalizeDurationHours, plannedSessionHours, responseCount, shortlistSessionHours, uncoveredDays } from '../src/lib/schedule.ts'
 import { analyzeEvent } from '../src/lib/analysis.ts'
 import { devResultsAllowed, isDevResultsPath } from '../src/lib/devPreview.ts'
 import { SHORT_CODE_ALPHABET, normalizeLongCode, normalizeShortCode, parseInviteInput, shortCodeFromPath } from '../src/lib/invites.ts'
@@ -41,8 +41,117 @@ const naOnly = { id: 'd1', blocks: [block(10, 12, 'unavailable' as const)] }
 const slots = calculateBestSlots(config, [], [naOnly])
 const nine = slots.find((slot) => slot.start.getHours() === 9 && slot.start.getMinutes() === 0)
 const noon = slots.find((slot) => slot.start.getHours() === 12 && slot.start.getMinutes() === 0)
-assert(Boolean(nine?.unavailableMembers.some((member) => member.id === 'd1')), 'NA overlap should block the morning slot')
+assert(
+  Boolean(nine?.partialMembers.some((member) => member.id === 'd1' && member.earlyMins === 120)),
+  'a morning overlap that misses more than the buffer is partial, not NA',
+)
+assert(!nine?.unavailableMembers.some((member) => member.id === 'd1'), 'partial overlap is not filed under NA')
+assert(nine?.score === 1, 'partial overlap still counts as able to attend')
 assert(Boolean(noon?.availableMembers.includes('d1')), 'time after NA should stay free')
+
+const dec8 = '2026-12-08'
+function onDay(iso: string, start: number, end: number, kind: 'available' | 'unavailable') {
+  const date = parseISODate(iso)
+  return { start: setTime(date, start), end: setTime(date, end), kind }
+}
+const chelsea = { id: 'chelsea', blocks: [onDay(dec8, 15, 17, 'unavailable')] }
+const noOverlap = { id: 'absent', blocks: [onDay(dec8, 10, 17, 'unavailable')] }
+const fullyFree = { id: 'free', blocks: [] as typeof chelsea.blocks }
+const startsLater = { id: 'late-start', blocks: [onDay(dec8, 10, 11, 'unavailable')] }
+const shortlistStart = setTime(parseISODate(dec8), 10)
+const shortlistEnd = setTime(parseISODate(dec8), 16.5)
+const chelseaWindow = classifySessionWindow([chelsea, noOverlap, fullyFree], shortlistStart, shortlistEnd, 0)
+const chelseaPartial = chelseaWindow.partialMembers.find((member) => member.id === 'chelsea')
+assert(
+  chelseaPartial?.earlyMins === 90 && chelseaPartial.lateMins === 0,
+  '10:00–16:30 with buffer 0 and free until 15:00 is partial, early 90m',
+)
+assert(!chelseaWindow.unavailableMembers.some((member) => member.id === 'chelsea'), 'Chelsea is not NA')
+assert(!chelseaWindow.availableMembers.includes('chelsea'), 'Chelsea is not fully OK')
+assert(chelseaWindow.unavailableMembers.some((member) => member.id === 'absent'), 'no overlap on that session is NA')
+assert(
+  !chelseaWindow.availableMembers.includes('absent') && !chelseaWindow.partialMembers.some((member) => member.id === 'absent'),
+  'no overlap is never OK or partial',
+)
+assert(chelseaWindow.availableMembers.includes('free'), 'someone free for the whole session is OK')
+assert(chelseaWindow.score === 2, 'the session score counts OK and partial')
+
+const suggestedHour = {
+  startDate: dec8,
+  endDate: dec8,
+  durationHours: 1,
+  dayStartHour: 10,
+  dayEndHour: 17,
+  attendanceTolerance: 0,
+}
+const longCards = calculateBestSlots({ ...suggestedHour, durationHours: 6.5 }, [], [chelsea, noOverlap, fullyFree])
+const longCard = longCards.find((slot) => slot.start.getHours() === 10 && slot.start.getMinutes() === 0)
+assert(longCard?.end.getHours() === 16 && longCard.end.getMinutes() === 30, 'a 6.5 hour length produces the 10:00–16:30 card')
+assert(
+  Boolean(longCard?.partialMembers.some((member) => member.id === 'chelsea' && member.earlyMins === 90)),
+  'the 6.5 hour card keeps Chelsea under partial',
+)
+const hourSlot = calculateBestSlots(suggestedHour, [], [startsLater]).find(
+  (slot) => slot.start.getHours() === 10 && slot.start.getMinutes() === 0,
+)
+assert(hourSlot?.unavailableMembers.some((member) => member.id === 'late-start'), 'the 1 hour suggestion still marks 10:00–11:00 as NA')
+const customShortlist = analyzeEvent({
+  config: suggestedHour,
+  dancers: [chelsea, noOverlap, fullyFree, startsLater].map((person) => ({
+    id: person.id,
+    userId: null,
+    name: person.id,
+    email: '',
+    role: 'dancer' as const,
+    blocks: person.blocks.map((item, index) => ({ ...item, id: `${person.id}-${index}`, wholeDay: false })),
+    lastUpdated: null,
+  })),
+  choreographers: [],
+  groups: [{ id: 'main', name: 'Main', memberIds: ['chelsea', 'absent', 'free', 'late-start'] }],
+  savedSlots: [],
+  sessions: [{ iso: dec8, startHour: 10, endHour: 16.5 }],
+})
+const customFree = customShortlist.sessions[0]?.groups[0]?.free
+assert(
+  customFree === 3,
+  `a 6.5 hour shortlist on a 1 hour event uses the long window, not the 1 hour slot (${customFree})`,
+)
+
+const fifteenLate = classifySessionWindow(
+  [{ id: 'late15', blocks: [block(10, 10.25, 'unavailable')] }],
+  setTime(parseISODate(day), 10),
+  setTime(parseISODate(day), 13),
+  1,
+)
+assert(fifteenLate.availableMembers.includes('late15'), '15 minutes late inside a 1 hour buffer is OK')
+assert(
+  !fifteenLate.partialMembers.some((member) => member.id === 'late15') &&
+    !fifteenLate.unavailableMembers.some((member) => member.id === 'late15'),
+  'that late arrival is not partial or NA',
+)
+
+const wideBuffer = classifySessionWindow(
+  [{ id: 'gone', blocks: [block(9, 12, 'unavailable')] }],
+  setTime(parseISODate(day), 9),
+  setTime(parseISODate(day), 11),
+  5,
+)
+assert(!wideBuffer.availableMembers.includes('gone'), 'a buffer longer than the session does not make a fully absent person OK')
+assert(!wideBuffer.partialMembers.some((member) => member.id === 'gone'), 'a fully absent person is not partial')
+assert(wideBuffer.unavailableMembers.some((member) => member.id === 'gone'), 'a fully absent person stays NA')
+
+const midGap = classifySessionWindow(
+  [{ id: 'gap', blocks: [block(11, 12, 'unavailable')] }],
+  setTime(parseISODate(day), 10),
+  setTime(parseISODate(day), 13),
+  0,
+)
+const gapRow = midGap.partialMembers.find((member) => member.id === 'gap')
+assert(
+  gapRow?.missingMins === 60 && gapRow.lateMins === 0 && gapRow.earlyMins === 0,
+  'a mid-session gap stays partial and reports the missing minutes',
+)
+assert(!midGap.unavailableMembers.some((member) => member.id === 'gap'), 'a gap with some free time is not NA')
 
 const bothStart = setTime(parseISODate(day), 9).getTime()
 const bothEnd = setTime(parseISODate(day), 12).getTime()

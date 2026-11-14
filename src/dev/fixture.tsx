@@ -353,6 +353,69 @@ function Preview({ name }: { name: string }) {
       </Shell>
     )
   }
+  if (name === 'slot') {
+    const iso = '2026-12-08'
+    const start = setTime(parseISODate(iso), 10)
+    const chelseaEnd = setTime(parseISODate(iso), 15)
+    const sessionEnd = setTime(parseISODate(iso), 16.5)
+    const mark = (id: string, from: Date, to: Date): TimeBlock => ({
+      id,
+      kind: 'unavailable',
+      start: from,
+      end: to,
+      wholeDay: false,
+    })
+    const dancer = (id: string, personName: string, blocks: TimeBlock[]) => ({
+      id,
+      userId: null,
+      name: personName,
+      email: '',
+      role: 'dancer' as const,
+      blocks,
+      lastUpdated: null,
+    })
+    const rehearsal: Campaign = {
+      ...campaign,
+      name: 'Tuesday rehearsal',
+      config: {
+        ...campaign.config,
+        startDate: iso,
+        endDate: iso,
+        durationHours: 6.5,
+        dayStartHour: 10,
+        dayEndHour: 17,
+        attendanceTolerance: 0,
+      },
+      onDays: [iso],
+      compulsoryDays: [],
+      savedSlots: [start.toISOString()],
+      choreographers: [],
+      groups: [],
+      dancers: [
+        dancer('chelsea', 'Chelsea', [mark('chelsea-na', chelseaEnd, sessionEnd)]),
+        dancer('wing', 'Wing', []),
+        dancer('lok', 'Lok', []),
+        dancer('hoi', 'Hoi', []),
+        dancer('ren', 'Ren', [mark('ren-na', start, sessionEnd)]),
+      ],
+    }
+    return (
+      <CalendarProvider value={{ token: null, note: '', setNote: () => undefined, connect: () => undefined, disconnect: () => undefined }}>
+        <Shell>
+          <ResultsPanel
+            lang={lang}
+            isDarkMode
+            campaign={rehearsal}
+            onBack={() => undefined}
+            onSaveSlots={() => undefined}
+            canPin
+            canSetDuration
+            onSaveDuration={() => undefined}
+          />
+        </Shell>
+      </CalendarProvider>
+    )
+  }
   if (name === 'availability') {
     return (
       <Shell>

@@ -128,7 +128,9 @@ const existing = renderToStaticMarkup(
     }),
   ),
 )
-assert(existing.includes('Invite codes'), 'organizer and participant codes stay on the event editor')
+assert(existing.includes('Groups and codes'), 'groups and invite codes share one section')
+assert(!existing.includes('text-[1.65rem]'), 'invite codes are not poster-sized')
+assert((existing.match(/data-codes-section/g) ?? []).length === 1, 'codes are not split into a second section')
 assert(existing.includes('7K2MQ9P'), 'organizer invite shows the short code')
 assert(existing.includes('9RWT3MD'), 'participant invite shows the short code')
 assert(existing.includes('4H8K2MQ'), 'admin invite shows the short code')
