@@ -2,6 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --logo-sage: #92ba8c;
+  --logo-sage-ink: #16301a;
+  --logo-gold: #f5ce7b;
+  --logo-gold-ink: #2a2416;
+  --logo-pink: #f19ba8;
+  --logo-pink-ink: #6e2433;
+  --logo-purple: #7c7bba;
+  --logo-purple-ink: #2e2d55;
+}
+
 @layer base {
   html,
   body,
@@ -120,12 +131,118 @@
 }
 
 .glass-input:focus {
-  border-color: rgba(124, 123, 185, 0.8);
-  box-shadow: 0 0 0 4px rgba(124, 123, 185, 0.16);
+  border-color: var(--logo-purple);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--logo-purple) 22%, transparent);
+  outline: 2px solid var(--logo-gold);
+  outline-offset: 1px;
+}
+
+.btn-primary {
+  background: color-mix(in srgb, var(--logo-purple) 82%, var(--logo-purple-ink));
+  color: #fff;
+}
+
+.btn-primary:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--logo-gold);
+  outline-offset: 2px;
+}
+
+.tone-fill-purple {
+  background: color-mix(in srgb, var(--logo-purple) 82%, var(--logo-purple-ink));
+  color: #fff;
+}
+
+.tone-fill-gold {
+  background: var(--logo-gold);
+  color: var(--logo-gold-ink);
+}
+
+.tone-fill-sage {
+  background: var(--logo-sage);
+  color: var(--logo-sage-ink);
+}
+
+.tone-fill-pink {
+  background: var(--logo-pink);
+  color: var(--logo-pink-ink);
+}
+
+.tone-danger {
+  color: var(--logo-pink-ink);
+}
+
+.theme-dark .tone-danger {
+  color: var(--logo-pink);
+}
+
+.role-card {
+  border-radius: 1.15rem;
+  padding: 0.9rem 0.95rem;
+}
+
+.role-sage {
+  background: color-mix(in srgb, var(--logo-sage) 16%, transparent);
+}
+
+.role-gold {
+  background: color-mix(in srgb, var(--logo-gold) 18%, transparent);
+}
+
+.role-purple {
+  background: color-mix(in srgb, var(--logo-purple) 16%, transparent);
+}
+
+.assign-target.assign-armed {
+  border: 1px dashed color-mix(in srgb, var(--logo-purple) 75%, transparent);
+}
+
+.assign-target.assign-hot {
+  border-style: solid;
+  background: color-mix(in srgb, var(--logo-purple) 22%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--logo-purple) 45%, transparent);
+}
+
+.assign-target[data-drop-role='organizer'].assign-armed {
+  border-color: color-mix(in srgb, var(--logo-gold) 90%, var(--logo-gold-ink));
+}
+
+.assign-target[data-drop-role='organizer'].assign-hot {
+  background: color-mix(in srgb, var(--logo-gold) 28%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--logo-gold) 70%, transparent);
+}
+
+.assign-target[data-drop-role='admin'].assign-armed {
+  border-color: color-mix(in srgb, var(--logo-sage) 90%, var(--logo-sage-ink));
+}
+
+.assign-target[data-drop-role='admin'].assign-hot {
+  background: color-mix(in srgb, var(--logo-sage) 24%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--logo-sage) 65%, transparent);
+}
+
+.avail-sheet {
+  touch-action: none;
+}
+
+.avail-cell-na {
+  background: color-mix(in srgb, var(--logo-pink) 78%, var(--logo-pink-ink));
+  color: #fff;
+}
+
+.avail-cell-ok {
+  background: var(--logo-sage);
+  color: var(--logo-sage-ink);
+}
+
+.avail-cell-preview {
+  outline: 2px solid var(--logo-gold);
+  outline-offset: -2px;
 }
 
 .btn-glow {
-  box-shadow: 0 8px 22px rgba(124, 123, 185, 0.28);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--logo-purple) 32%, transparent);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 

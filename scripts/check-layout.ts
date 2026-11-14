@@ -274,6 +274,7 @@ async function main() {
       { name: 'login phone', path: '/?preview=login&lang=zh', width: 390, height: 844, shot: '/opt/cursor/artifacts/login-mobile.png' },
       { name: 'setup phone', path: '/?preview=setup&lang=zh', width: 390, height: 844, shot: '/opt/cursor/artifacts/setup-mobile.png' },
       { name: 'availability phone', path: '/?preview=availability&lang=zh', width: 390, height: 844 },
+      { name: 'availability desktop', path: '/?preview=availability&lang=en', width: 1280, height: 800 },
       { name: 'events phone', path: '/?preview=events&lang=zh', width: 390, height: 844 },
       { name: 'events desktop', path: '/?preview=events&lang=zh', width: 1280, height: 800 },
       { name: 'roster phone', path: '/?preview=roster&lang=zh', width: 390, height: 844 },
@@ -287,11 +288,14 @@ async function main() {
       await assertCopyHidden(cdp, item.name, item.path)
       const calendarText = await cdp.eval<string>(`document.body.innerText.includes('Google 日曆') || document.body.innerText.includes('Google Calendar') ? document.body.innerText.slice(0, 500) : ''`)
       assert(calendarText === '', `${item.name} shows Google Calendar: ${calendarText}`)
-      if (item.path.includes('results') || item.path.includes('availability') || item.path.includes('setup')) {
+      if (item.path.includes('availability')) {
+        const height = await cdp.eval<number | null>(`document.querySelector('[data-avail-cell]')?.getBoundingClientRect().height ?? null`)
+        assert(height != null && height > 0 && height <= 44, `${item.name} calendar cells are ${height}px tall`)
+        const grids = await cdp.eval<number>(`document.querySelectorAll('[data-avail-grid]').length`)
+        assert(grids === 1, `${item.name} is missing the availability grid`)
+      } else if (item.path.includes('results') || item.path.includes('setup')) {
         const height = await cdp.eval<number | null>(`document.querySelector('.cal-day')?.getBoundingClientRect().height ?? null`)
-        if (item.path.includes('setup') || item.path.includes('results') || item.path.includes('availability')) {
-          assert(height != null && height <= 44, `${item.name} calendar cells are ${height}px tall`)
-        }
+        assert(height != null && height <= 44, `${item.name} calendar cells are ${height}px tall`)
       }
       if (item.path.includes('availability') || item.path.includes('setup')) {
         const grids = await cdp.eval<number>(`document.querySelectorAll('[data-slot-grid]').length`)
@@ -510,12 +514,31 @@ async function main() {
     assert(desktopOverflow.scrollWidth <= desktopOverflow.clientWidth + 1, `desktop block overflows: ${desktopOverflow.scrollWidth}`)
 
     await openPage(cdp, '/?preview=availability&lang=zh', 390, 844)
-    const hourSelects = await cdp.eval<number>(`document.querySelectorAll('select').length`)
-    assert(hourSelects >= 2, 'availability is missing the hour dropdowns')
-    await cdp.eval(`document.querySelector('select')?.scrollIntoView({ block: 'center' })`)
-    await delay(100)
-    const restored = await cdp.eval<boolean>(`document.body.innerText.includes('從') && document.body.innerText.includes('到') && !document.body.innerText.includes('提早')`)
-    assert(restored, 'availability time entry was not restored')
+    const painted = await cdp.eval<string>(`(async () => {
+      const grid = document.querySelector('[data-avail-grid]')
+      const start = document.querySelector('[data-avail-cell][data-slot="2"]')
+      const end = document.querySelector('[data-avail-cell][data-slot="5"]')
+      if (!(grid instanceof HTMLElement) || !(start instanceof HTMLElement) || !(end instanceof HTMLElement)) return 'missing'
+      end.scrollIntoView({ block: 'center', inline: 'center' })
+      const point = (el) => {
+        const rect = el.getBoundingClientRect()
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+      }
+      const from = point(start)
+      const to = point(end)
+      const fire = (type, pos, buttons) => {
+        grid.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: pos.x, clientY: pos.y, pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, buttons }))
+      }
+      const hit = document.elementFromPoint(from.x, from.y)
+      fire('pointerdown', from, 1)
+      fire('pointermove', to, 1)
+      fire('pointerup', to, 0)
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      const marked = document.querySelectorAll('[data-mark="na"]').length
+      if (marked >= 4 && !document.body.innerText.includes('提早')) return 'painted'
+      return 'empty ' + marked + ' hit ' + (hit instanceof HTMLElement ? hit.getAttribute('data-slot') ?? hit.className : 'none')
+    })()`)
+    assert(painted === 'painted', `availability drag did not paint NA (${painted})`)
     await shot(cdp, '/opt/cursor/artifacts/availability-mobile.png')
     const availOverflow = await overflow(cdp)
     assert(availOverflow.scrollWidth <= availOverflow.clientWidth + 1, `availability overflows: ${availOverflow.scrollWidth}`)
@@ -698,6 +721,45 @@ async function main() {
     assert(english.includes('Sample rehearsal') && english.includes('Nothing is saved'), `english banner was "${english}"`)
     const englishGroups = await cdp.eval<string>(`[...document.querySelectorAll('[data-group-id]')].map((node) => node.textContent?.trim() ?? '').join('|')`)
     assert(englishGroups.includes('Main') && englishGroups.includes('Reserve'), `english groups were "${englishGroups}"`)
+
+    await openPage(cdp, '/?preview=hub&lang=zh', 390, 844)
+    const hubPhone = await overflow(cdp)
+    assert(hubPhone.scrollWidth <= hubPhone.clientWidth + 1, `hub phone overflows: ${hubPhone.scrollWidth}`)
+    const hubText = await cdp.eval<string>(`document.body.innerText`)
+    assert(hubText.includes('活動') && hubText.includes('主辦人') && hubText.includes('參加者') && hubText.includes('結果'), `hub steps were missing in "${hubText.slice(0, 180)}"`)
+    assert(!hubText.includes('時間表') && !hubText.includes('編輯活動'), 'hub still uses the old schedule or edit label')
+    assert((await cdp.eval<number>(`document.querySelectorAll('[data-drop-role="organizer"], [data-drop-role="admin"]').length`)) === 2, 'hub is missing organizer or admin drop targets')
+    const granted = await cdp.eval<string>(`(async () => {
+      const person = document.querySelector('[data-person-id]')
+      const target = document.querySelector('[data-drop-role="organizer"]')
+      if (!(person instanceof HTMLElement) || !(target instanceof HTMLElement)) return 'missing'
+      const id = person.getAttribute('data-person-id')
+      target.scrollIntoView({ block: 'center' })
+      const from = person.getBoundingClientRect()
+      const to = target.getBoundingClientRect()
+      const fire = (type, x, y) => {
+        window.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 3, pointerType: 'mouse', isPrimary: true, button: 0, buttons: type === 'pointerup' ? 0 : 1 }))
+      }
+      person.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: from.left + 8, clientY: from.top + 8, pointerId: 3, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 1 }))
+      fire('pointermove', from.left + 40, from.top + 40)
+      fire('pointerup', to.left + to.width / 2, to.top + 24)
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const stillGrouped = document.querySelector('[data-person-id="' + id + '"]') != null
+      const organizer = document.querySelector('[data-organizer-person="' + id + '"]') != null
+      return stillGrouped && organizer ? 'kept' : 'lost grouped=' + stillGrouped + ' organizer=' + organizer
+    })()`)
+    assert(granted === 'kept', `dragging onto organizer did not keep the group (${granted})`)
+    await openPage(cdp, '/?preview=hub-settings&lang=zh', 1280, 900)
+    const hubDesktop = await overflow(cdp)
+    assert(hubDesktop.scrollWidth <= hubDesktop.clientWidth + 1, `hub desktop overflows: ${hubDesktop.scrollWidth}`)
+    assert(await cdp.eval<boolean>(`document.querySelector('[data-setup-section="timing"]') != null`), 'event settings are not in the hub')
+    await openPage(cdp, '/?preview=events&lang=zh&detail=1', 390, 844)
+    const detailText = await cdp.eval<string>(`document.querySelector('[data-card-detail]')?.innerText ?? ''`)
+    assert(detailText.includes('管理主辦人') && detailText.includes('管理參加者') && detailText.includes('主辦人時間') && detailText.includes('管理員時間'), `detail actions were "${detailText}"`)
+    assert(!detailText.includes('填寫我的時間') && !detailText.includes('編輯活動') && !detailText.includes('查看結果'), `detail still has a generic or results action: "${detailText}"`)
+    await openPage(cdp, '/?preview=events&lang=zh&as=member', 390, 844)
+    const memberText = await cdp.eval<string>(`document.body.innerText`)
+    assert(memberText.includes('填寫我的時間') && !memberText.includes('查看結果'), `member card was "${memberText.slice(0, 240)}"`)
 
     cdp.close()
     console.log('layout checks passed')

@@ -5,6 +5,9 @@ import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, covered
 import { analyzeEvent } from '../src/lib/analysis.ts'
 import { devResultsAllowed, isDevResultsPath } from '../src/lib/devPreview.ts'
 import { membershipChanges } from '../src/lib/groups.ts'
+import { canSeeResults } from '../src/lib/access.ts'
+import { grantRole } from '../src/lib/roles.ts'
+import { paintBlocks, spansFromDrag } from '../src/lib/paint.ts'
 import { SHORT_CODE_ALPHABET, normalizeLongCode, normalizeShortCode, parseInviteInput, shortCodeFromPath } from '../src/lib/invites.ts'
 import { buildCampaign, sampleShortlist } from '../src/dev/resultsPreview.tsx'
 import { commitSessions, pinsToSave, type SessionRange } from '../src/lib/sessions.ts'
@@ -493,5 +496,123 @@ assert(membershipChanges(pairGroups, 'cy', null, 'b').map((change) => `${change.
 assert(membershipChanges(pairGroups, 'ada', 'a', 'a').length === 0, 'dropping onto the current group writes nothing')
 assert(membershipChanges(pairGroups, 'cy', null, null).length === 0, 'an ungrouped dancer dropped on all participants writes nothing')
 assert(!membershipChanges(pairGroups, 'ada', 'a', 'b').some((change) => change.groupId === 'b' && !change.included), 'a move does not remove the destination group')
+
+const roleGroups = [{ id: 'main', memberIds: ['ada'] }]
+const grantedOrganizer = grantRole({
+  person: { id: 'ada', role: 'dancer', email: 'ada@example.com' },
+  groups: roleGroups,
+  admins: [],
+  grant: 'organizer',
+})
+assert(grantedOrganizer.person.role === 'dancer' && grantedOrganizer.person.isOrganizer, 'an organizer grant keeps participant status')
+assert(grantedOrganizer.groups[0]?.memberIds.join() === 'ada', 'an organizer grant keeps the group')
+assert(roleGroups[0]?.memberIds.join() === 'ada', 'granting a role does not rewrite the original groups')
+const grantedAdmin = grantRole({
+  person: { id: 'ada', role: 'dancer', isOrganizer: true, email: 'ada@example.com' },
+  groups: grantedOrganizer.groups,
+  admins: grantedOrganizer.admins,
+  grant: 'admin',
+})
+assert(grantedAdmin.person.role === 'dancer' && grantedAdmin.person.isOrganizer, 'an admin grant keeps participant and organizer status')
+assert(grantedAdmin.groups[0]?.memberIds.join() === 'ada', 'an admin grant keeps the group')
+assert(grantedAdmin.admins.map((admin) => admin.email).join() === 'ada@example.com', 'an admin grant records the email')
+
+const paintDay = '2026-11-12'
+const painted = paintBlocks([], [{ iso: paintDay, startHour: 10, endHour: 12, kind: 'unavailable' }], 9, 22)
+assert(painted.length === 1 && painted[0]?.kind === 'unavailable', 'a drag paints one NA block')
+const otherDay = {
+  id: 'keep',
+  kind: 'available' as const,
+  start: setTime(parseISODate('2026-11-13'), 10),
+  end: setTime(parseISODate('2026-11-13'), 12),
+  wholeDay: false,
+}
+const replaced = paintBlocks([otherDay, ...painted], [{ iso: paintDay, startHour: 11, endHour: 12, kind: 'available' }], 9, 22)
+const sameDay = replaced.filter((block) => toISODateString(block.start) === paintDay)
+assert(replaced.some((block) => block.id === 'keep'), 'painting one person does not rewrite another day')
+assert(sameDay.some((block) => block.kind === 'unavailable' && block.start.getHours() === 10), 'NA before the new OK stays')
+assert(sameDay.some((block) => block.kind === 'available' && block.start.getHours() === 11), 'OK replaces only the painted slice')
+const dragSpans = spansFromDrag(
+  { iso: paintDay, index: 2, header: false },
+  { iso: '2026-11-13', index: 4, header: false },
+  [paintDay, '2026-11-13'],
+  9,
+  22,
+  'available',
+)
+assert(dragSpans.length === 2 && dragSpans.every((span) => span.startHour === 10 && span.endHour === 11.5), 'a drag across dates paints the same hours on each day')
+const headerSpans = spansFromDrag(
+  { iso: paintDay, index: 0, header: true },
+  { iso: paintDay, index: 0, header: true },
+  [paintDay],
+  9,
+  12,
+  'unavailable',
+)
+assert(headerSpans[0]?.startHour === 9 && headerSpans[0]?.endHour === 12, 'dragging a date paints that whole day')
+
+const viewerCampaign = {
+  id: 'event',
+  ownerId: 'owner',
+  name: 'Demo',
+  remarks: '',
+  config,
+  expiryDate: day,
+  onDays: [],
+  compulsoryDays: [],
+  savedSlots: ['secret'],
+  createdAt: day,
+  adminCode: null,
+  adminShort: null,
+  organizerCode: null,
+  organizerShort: null,
+  participantCode: null,
+  participantShort: null,
+  admins: [] as { id: string; userId: string | null; email: string }[],
+  choreographers: [] as { id: string; userId: string | null; name: string; email: string; role: 'choreographer'; blocks: []; lastUpdated: null }[],
+  dancers: [
+    { id: 'ada', userId: 'ada', name: 'Ada', email: 'ada@example.com', role: 'dancer' as const, blocks: [], lastUpdated: null },
+  ],
+  groups: [],
+}
+assert(!canSeeResults(viewerCampaign, 'ada', 'ada@example.com'), 'a participant cannot see results')
+assert(canSeeResults(viewerCampaign, 'owner', 'owner@example.com'), 'the owner can see results')
+assert(
+  canSeeResults(
+    { ...viewerCampaign, dancers: [{ ...viewerCampaign.dancers[0], isOrganizer: true }] },
+    'ada',
+    'ada@example.com',
+  ),
+  'a participant who is also an organizer can see results',
+)
+assert(
+  canSeeResults(
+    { ...viewerCampaign, admins: [{ id: 'ad', userId: 'ada', email: 'ada@example.com' }] },
+    'ada',
+    'ada@example.com',
+  ),
+  'an admin can see results',
+)
+
+const privacyMigration = readFileSync(new URL('../supabase/migrations/20261114180000_role_grants_and_results_privacy.sql', import.meta.url), 'utf8')
+assert(privacyMigration.includes('is_organizer'), 'organizer grants are an added column')
+assert(privacyMigration.includes('can_read_blocks'), 'availability reads are tightened')
+assert(privacyMigration.includes('hupaak_my_saved_slots'), 'shortlist slots move behind a roster check')
+assert(privacyMigration.includes('revoke select (saved_slots)'), 'participants cannot select saved slots')
+assert(privacyMigration.includes('p.user_id = (select hupaak_private.current_user_id())'), 'organizer checks keep the live text user id')
+assert(!privacyMigration.includes('auth.uid()'), 'the privacy migration does not switch identity checks to auth.uid()')
+assert(!/policy hupaak_campaigns_delete/i.test(privacyMigration), 'the privacy migration does not touch admin delete')
+assert(!/\bdrop\s+table\b/i.test(privacyMigration), 'the privacy migration does not drop a table')
+assert(!/\btruncate\b/i.test(privacyMigration), 'the privacy migration does not truncate')
+assert(!/\bdelete\s+from\b/i.test(privacyMigration), 'the privacy migration does not delete rows')
+assert(!/update\s+public\.hupaak_/i.test(privacyMigration), 'the privacy migration does not rewrite existing rows')
+
+const palette = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')
+assert(palette.includes('--logo-sage: #92ba8c'), 'sage comes from the logo')
+assert(palette.includes('--logo-gold: #f5ce7b'), 'gold comes from the logo')
+assert(palette.includes('--logo-pink: #f19ba8'), 'pink comes from the logo')
+assert(palette.includes('--logo-purple: #7c7bba'), 'purple comes from the logo')
+const buttons = readFileSync(new URL('../src/lib/ui.ts', import.meta.url), 'utf8')
+assert(buttons.includes('btn-primary') && !/bg-blue-|bg-\[#0|007aff|2563eb/i.test(buttons), 'primary buttons use the logo token, not a lone blue')
 
 console.log('schedule checks passed')

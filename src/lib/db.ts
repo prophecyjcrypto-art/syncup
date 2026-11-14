@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AppConfig, BlockKind, Campaign, CampaignInput, DanceGroup, Person, PersonRole, TimeBlock } from '../types'
+import { canSeeResults } from './access'
 import type { InviteKind } from './invites'
 import { sortBlocks } from './blocks'
 import { todayISO } from './dates'
@@ -29,6 +30,7 @@ interface PersonRow {
   name: string
   email: string | null
   role: string
+  is_organizer?: boolean | null
   last_updated: string | null
   blocks: BlockRow[] | null
 }
@@ -55,7 +57,16 @@ interface CampaignRow {
 }
 
 const campaignSelect = `
-  id, owner_id, name, remarks, config, expiry_date, on_days, compulsory_days, saved_slots, created_at,
+  id, owner_id, name, remarks, config, expiry_date, on_days, compulsory_days, created_at,
+  admins:hupaak_admins(id, user_id, email),
+  people:hupaak_people(
+    id, user_id, name, email, role, is_organizer, last_updated,
+    blocks:hupaak_blocks(id, kind, starts_at, ends_at, whole_day)
+  )
+`
+
+const campaignSelectLegacy = `
+  id, owner_id, name, remarks, config, expiry_date, on_days, compulsory_days, created_at,
   admins:hupaak_admins(id, user_id, email),
   people:hupaak_people(
     id, user_id, name, email, role, last_updated,
@@ -97,6 +108,7 @@ function mapPerson(row: PersonRow): Person {
     name: row.name,
     email: row.email ?? '',
     role,
+    isOrganizer: role === 'choreographer' || row.is_organizer === true,
     blocks: sortBlocks((row.blocks ?? []).map(mapBlock)),
     lastUpdated: row.last_updated,
   }
@@ -123,7 +135,7 @@ function mapCampaign(
     expiryDate: row.expiry_date,
     onDays: asDates(row.on_days),
     compulsoryDays: asDates(row.compulsory_days),
-    savedSlots: row.saved_slots ?? [],
+    savedSlots: [],
     createdAt: row.created_at,
     adminCode: adminInvite?.code ?? null,
     adminShort: adminInvite?.short ?? null,
@@ -233,14 +245,49 @@ async function fetchGroups(campaignIds: string[]): Promise<Map<string, DanceGrou
   return grouped
 }
 
-export async function fetchCampaigns(): Promise<Campaign[]> {
+function redactResults(campaign: Campaign, userId: string): Campaign {
+  const own = (person: Person): Person =>
+    person.userId === userId ? person : { ...person, blocks: [], lastUpdated: null }
+  return {
+    ...campaign,
+    savedSlots: [],
+    choreographers: campaign.choreographers.map(own),
+    dancers: campaign.dancers.map(own),
+  }
+}
+
+async function fetchSavedSlots(): Promise<Map<string, string[]>> {
   const db = client()
-  const { data, error } = await db.from('hupaak_campaigns').select(campaignSelect).order('created_at', { ascending: false })
-  fail(error)
+  const rpc = await db.rpc('hupaak_my_saved_slots')
+  if (!rpc.error) {
+    const slots = new Map<string, string[]>()
+    for (const row of (rpc.data ?? []) as { campaign_id: string; saved_slots: string[] | null }[]) {
+      slots.set(row.campaign_id, row.saved_slots ?? [])
+    }
+    return slots
+  }
+  if (!missingRpc(rpc.error, 'hupaak_my_saved_slots')) {
+    if (/permission denied|42501/i.test(rpc.error.message)) return new Map()
+    fail(rpc.error)
+  }
+  const direct = await db.from('hupaak_campaigns').select('id, saved_slots')
+  if (direct.error) return new Map()
+  return new Map(
+    ((direct.data ?? []) as { id: string; saved_slots: string[] | null }[]).map((row) => [row.id, row.saved_slots ?? []]),
+  )
+}
+
+export async function fetchCampaigns(viewer?: { id: string; email: string }): Promise<Campaign[]> {
+  const db = client()
+  const withFlag = await db.from('hupaak_campaigns').select(campaignSelect).order('created_at', { ascending: false })
+  const loaded = missingColumn(withFlag.error, 'is_organizer')
+    ? await db.from('hupaak_campaigns').select(campaignSelectLegacy).order('created_at', { ascending: false })
+    : withFlag
+  fail(loaded.error)
   const codes = await inviteCodes('hupaak_admin_invites')
   const organizerCodes = await inviteCodes('hupaak_organizer_invites')
   const participantCodes = await inviteCodes('hupaak_participant_invites')
-  const campaigns = ((data ?? []) as CampaignRow[]).map((row) =>
+  const campaigns = ((loaded.data ?? []) as CampaignRow[]).map((row) =>
     mapCampaign(row, codes.get(row.id) ?? null, organizerCodes.get(row.id) ?? null, participantCodes.get(row.id) ?? null),
   )
   let groups = new Map<string, DanceGroup[]>()
@@ -249,7 +296,14 @@ export async function fetchCampaigns(): Promise<Campaign[]> {
   } catch {
     groups = new Map()
   }
-  return campaigns.map((campaign) => ({ ...campaign, groups: groups.get(campaign.id) ?? [] }))
+  const slots = await fetchSavedSlots()
+  const rows = campaigns.map((campaign) => ({
+    ...campaign,
+    groups: groups.get(campaign.id) ?? [],
+    savedSlots: slots.get(campaign.id) ?? [],
+  }))
+  if (!viewer) return rows
+  return rows.map((campaign) => (canSeeResults(campaign, viewer.id, viewer.email) ? campaign : redactResults(campaign, viewer.id)))
 }
 
 export async function campaignVisible(campaignId: string): Promise<boolean> {
@@ -385,6 +439,24 @@ export async function rotateGroupInvite(groupId: string): Promise<void> {
 
 export async function removeAdmin(adminId: string): Promise<void> {
   const { error } = await client().from('hupaak_admins').delete().eq('id', adminId)
+  fail(error)
+}
+
+/** Marks a participant as an organizer. Does not change their role, groups, or blocks. */
+export async function setPersonOrganizer(personId: string, isOrganizer: boolean): Promise<void> {
+  const { error } = await client().from('hupaak_people').update({ is_organizer: isOrganizer }).eq('id', personId)
+  fail(error)
+}
+
+/** Adds an admin row for someone who already has an email. Does not change groups or availability. */
+export async function grantAdmin(campaignId: string, email: string, userId: string | null): Promise<void> {
+  const { error } = await client().from('hupaak_admins').insert({
+    campaign_id: campaignId,
+    email: email.toLowerCase(),
+    user_id: userId,
+    role: 'admin',
+  })
+  if (error && /duplicate|unique|23505/i.test(`${error.message} ${error.code ?? ''}`)) return
   fail(error)
 }
 

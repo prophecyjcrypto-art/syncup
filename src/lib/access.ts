@@ -13,9 +13,16 @@ export function isAdmin(campaign: Campaign, userId: string, email: string): bool
 }
 
 export function isChoreographer(campaign: Campaign, userId: string): boolean {
-  return campaign.choreographers.some((person) => person.userId === userId)
+  return [...campaign.choreographers, ...campaign.dancers].some(
+    (person) => person.userId === userId && (person.role === 'choreographer' || person.isOrganizer === true),
+  )
 }
 
 export function canManageRoster(campaign: Campaign, userId: string, email: string): boolean {
   return isAdmin(campaign, userId, email) || isChoreographer(campaign, userId)
+}
+
+/** Results, shortlists, and organizer stats. Participants who are not organizers or admins cannot see them. */
+export function canSeeResults(campaign: Campaign, userId: string, email: string): boolean {
+  return canManageRoster(campaign, userId, email)
 }

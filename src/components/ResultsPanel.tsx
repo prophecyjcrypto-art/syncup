@@ -7,6 +7,7 @@ import { formatLongDate, formatTime, getDaysArray, parseISODate, setTime, toISOD
 import { durationHours, fitDuration, roundHour, SLOT_STEP } from '../lib/timeRange'
 import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, compulsoryReport, sharedFreeByDay, shortlistSessionHours, type MarkFilter } from '../lib/schedule'
 import { commitSessions, pinsToSave, toggleSessionDay, type SessionRange } from '../lib/sessions'
+import { organizersOf } from '../lib/roles'
 import { cardClass, textMuted, textPrimary } from '../lib/ui'
 import { InfoTip } from './Guide'
 import type { Campaign, Language, TimeSlot } from '../types'
@@ -48,9 +49,10 @@ export function ResultsPanel({
   canSetDuration?: boolean
   onSaveDuration?: (hours: number) => void
 }) {
-  const choreoKey = campaign.choreographers.map((person) => person.id).join('|')
+  const organizers = organizersOf(campaign)
+  const choreoKey = organizers.map((person) => person.id).join('|')
   const dancerKey = campaign.dancers.map((person) => person.id).join('|')
-  const [requiredIds, setRequiredIds] = useState<string[]>(() => campaign.choreographers.map((person) => person.id))
+  const [requiredIds, setRequiredIds] = useState<string[]>(() => organizersOf(campaign).map((person) => person.id))
   const [dancerFilter, setDancerFilter] = useState<string[]>([])
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set())
   const [onDaysOnly, setOnDaysOnly] = useState(false)
@@ -83,7 +85,7 @@ export function ResultsPanel({
     () => getDaysArray(parseISODate(campaign.config.startDate), parseISODate(campaign.config.endDate)),
     [campaign.config.startDate, campaign.config.endDate],
   )
-  const required = campaign.choreographers.filter((person) => requiredIds.includes(person.id))
+  const required = organizers.filter((person) => requiredIds.includes(person.id))
   const activeGroup = campaign.groups.find((group) => group.id === groupId) ?? null
   const population = activeGroup ? campaign.dancers.filter((person) => activeGroup.memberIds.includes(person.id)) : campaign.dancers
   const dancers = dancerFilter.length === 0 ? population : population.filter((person) => dancerFilter.includes(person.id))
@@ -484,8 +486,8 @@ export function ResultsPanel({
                 text={`${t(lang, 'choreographer_filter_hint')}\n${t(lang, durationUnset ? 'duration_not_set' : 'slots_rule')}`}
               />
             </h3>
-            {campaign.choreographers.length === 0 && <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>}
-            {campaign.choreographers.map((person) => (
+            {organizers.length === 0 && <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>}
+            {organizers.map((person) => (
               <label key={person.id} className="flex min-h-11 items-center gap-2 text-sm font-bold">
                 <input
                   type="checkbox"
