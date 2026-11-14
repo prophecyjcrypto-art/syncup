@@ -212,6 +212,29 @@ export function classifySessionWindow(
   }
 }
 
+/** Copy and calendar export rows for the official final times. Known slots win. A missing key uses `hoursForKey`, then `fallbackHours`. */
+export function finalCopySlots(
+  keys: readonly string[],
+  known: readonly TimeSlot[],
+  people: readonly SchedulePerson[],
+  fallbackHours: number | null,
+  toleranceHours: number,
+  hoursForKey?: (key: string) => number | null,
+): TimeSlot[] {
+  const byStart = new Map(known.map((slot) => [slot.start.toISOString(), slot]))
+  return keys.flatMap((key) => {
+    const found = byStart.get(key)
+    if (found) return [found]
+    const start = new Date(key)
+    const custom = hoursForKey?.(key)
+    const hours = custom != null && custom > 0 ? custom : fallbackHours
+    if (Number.isNaN(start.getTime()) || hours == null || hours <= 0) return []
+    const end = new Date(start.getTime() + hours * 3600000)
+    if (end.getTime() <= start.getTime()) return []
+    return [classifySessionWindow([...people], start, end, toleranceHours)]
+  }).sort((left, right) => left.start.getTime() - right.start.getTime())
+}
+
 export function calculateBestSlots(
   config: AppConfig,
   choreographers: SchedulePerson[],

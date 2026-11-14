@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { formatHourCount, formatPeopleCount } from '../src/i18n.ts'
 import { getDaysArray, groupByMonth, parseISODate, setTime, toISODateString } from '../src/lib/dates.ts'
-import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, coveredMs, freeIntervals, markedBlockCount, markedHours, normalizeDurationHours, plannedSessionHours, responseCount, shortlistSessionHours, uncoveredDays } from '../src/lib/schedule.ts'
+import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, coveredMs, finalCopySlots, freeIntervals, markedBlockCount, markedHours, normalizeDurationHours, plannedSessionHours, responseCount, shortlistSessionHours, uncoveredDays } from '../src/lib/schedule.ts'
 import { analyzeEvent } from '../src/lib/analysis.ts'
 import { devResultsAllowed, isDevHubPath, isDevResultsPath } from '../src/lib/devPreview.ts'
 import { membershipChanges } from '../src/lib/groups.ts'
@@ -330,6 +330,20 @@ assert(new Set(sample.savedSlots.map((key) => toISODateString(new Date(key)))).s
 assert(sample.dancers.some((dancer) => dancer.blocks.length === 0), 'one dancer has not responded')
 assert(sample.dancers.some((dancer) => dancer.blocks.some((block) => block.kind === 'unavailable')), 'the sample includes NA')
 assert(sample.dancers.some((dancer) => dancer.blocks.some((block) => block.kind === 'available')), 'the sample includes OK')
+const suggestionList = calculateBestSlots(sample.config, sample.choreographers, sample.dancers)
+const copiedFinals = finalCopySlots(sample.savedSlots, suggestionList, sample.dancers, sample.config.durationHours, sample.config.attendanceTolerance)
+assert(suggestionList.length > sample.savedSlots.length, 'the demo has more suggestions than final cards')
+assert(copiedFinals.length === sample.savedSlots.length, 'copy and export use only the final cards when the shortlist is empty')
+assert(
+  copiedFinals.map((slot) => slot.start.toISOString()).join('|') === [...sample.savedSlots].sort().join('|'),
+  'those copy rows are the saved final sessions',
+)
+const outside = setTime(parseISODate('2026-11-12'), 14).toISOString()
+const built = finalCopySlots([outside], suggestionList.filter((slot) => slot.start.toISOString() !== outside), [], 2, 0)
+assert(built.length === 1 && built[0].end.getTime() - built[0].start.getTime() === 2 * 3600000, 'a final time missing from the suggestions is built from the session length')
+const resultsPanel = readFileSync(new URL('../src/components/ResultsPanel.tsx', import.meta.url), 'utf8')
+assert(resultsPanel.includes('finalCopySlots(\n      cardKeys,'), 'copy and calendar export read the final cards')
+assert(!resultsPanel.includes('pinned.length > 0 ? pinned : listed'), 'copy does not fall through to every suggestion')
 
 const previewSource = readFileSync(new URL('../src/dev/resultsPreview.tsx', import.meta.url), 'utf8')
 assert(!previewSource.includes('lib/db') && !previewSource.includes('lib/supabase') && !previewSource.includes('fetchCampaigns'), 'the preview cannot read or write live events')

@@ -6,7 +6,7 @@ import { buildIcs, formatSlotText } from '../lib/export'
 import { clearGoogleToken, createCalendarEvents, GOOGLE_CALENDAR_ENABLED, GoogleCalendarError } from '../lib/googleCalendar'
 import { formatHourOption, formatLongDate, formatTime, getDaysArray, parseISODate, rangeOptions, setTime, toISODateString } from '../lib/dates'
 import { durationHours, fitDuration, roundHour, SLOT_STEP } from '../lib/timeRange'
-import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, compulsoryReport, sharedFreeByDay, shortlistSessionHours, startsAtOrAfter, type MarkFilter } from '../lib/schedule'
+import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, compulsoryReport, finalCopySlots, sharedFreeByDay, shortlistSessionHours, startsAtOrAfter, type MarkFilter } from '../lib/schedule'
 import { consumeDayClick } from '../lib/dayDrag'
 import { commitSessions, toggleSessionDay, type SessionRange } from '../lib/sessions'
 import { organizersOf } from '../lib/roles'
@@ -332,9 +332,17 @@ export function ResultsPanel({
   }
 
   function targets(): TimeSlot[] {
-    const chosen = listed.filter((slot) => picked.has(slotKey(slot)))
-    const source = chosen.length > 0 ? chosen : pinned.length > 0 ? pinned : listed
-    return [...source].sort((left, right) => left.start.getTime() - right.start.getTime())
+    return finalCopySlots(
+      cardKeys,
+      shownSlots,
+      dancers,
+      draftHours ?? campaign.config.durationHours,
+      campaign.config.attendanceTolerance,
+      (key) => {
+        const painted = sessions.find((session) => setTime(parseISODate(session.iso), session.startHour).toISOString() === key)
+        return painted ? durationHours(painted) : null
+      },
+    )
   }
 
   async function copy(detailed: boolean) {
