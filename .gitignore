@@ -5,3 +5,6 @@ dist
 .DS_Store
 *.local
 .vercel
+
+.taste-skill/
+.taste-skill-deal.txt

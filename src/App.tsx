@@ -481,13 +481,13 @@ export default function App() {
     <CalendarProvider value={calendarApi}>
     <div className={`${isDarkMode ? 'theme-dark' : 'theme-light'} min-h-dvh`}>
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        <div className={`absolute -left-32 top-[-8rem] h-[26rem] w-[26rem] animate-blob rounded-full bg-[#7c7bb9] blur-3xl ${isDarkMode ? 'opacity-40' : 'opacity-25'}`} />
-        <div className={`absolute bottom-[-10rem] right-[-4rem] h-[22rem] w-[22rem] animate-blob rounded-full bg-[#93ba8c] blur-3xl [animation-delay:6s] ${isDarkMode ? 'opacity-25' : 'opacity-20'}`} />
+        <div className={`absolute -left-24 top-[-6rem] h-[22rem] w-[22rem] animate-blob rounded-full bg-[color:var(--p-accent)] blur-3xl ${isDarkMode ? 'opacity-[0.08]' : 'opacity-20'}`} />
+        <div className={`absolute bottom-[-8rem] right-[-3rem] h-[18rem] w-[18rem] animate-blob rounded-full bg-white blur-3xl [animation-delay:6s] ${isDarkMode ? 'opacity-[0.04]' : 'opacity-15'}`} />
       </div>
 
       <div className="relative z-10">
       <header className="glass-bar sticky top-0 z-30 pt-[env(safe-area-inset-top)]">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-3 sm:h-16 sm:px-6">
+        <div className="mx-auto flex h-14 max-w-[var(--shell-max)] items-center justify-between gap-3 px-[var(--shell-gutter)] sm:h-16">
           <button type="button" onClick={() => (user ? goHome() : focusAuth('signin'))} className="flex min-w-0 items-center gap-2.5 text-left">
             <img src="/logo.png" alt="" className="h-8 w-8 shrink-0 object-contain" />
             <span className="min-w-0">
@@ -518,7 +518,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl px-3 py-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-8">
+      <main className="shell-main">
         {banner && <p className="glass mb-4 rounded-2xl px-4 py-3 text-sm font-bold text-[#f19ba8]">{banner}</p>}
         {linkMissing && step === 'campaigns' && (
           <p className="glass mb-4 rounded-2xl px-4 py-3 text-sm font-bold text-[#c9a227]">{t(lang, 'not_found')}</p>
@@ -772,6 +772,17 @@ export default function App() {
             onRenameGroup={(groupId, name) => void run(() => renameDanceGroup(groupId, name))}
             onDeleteGroup={(groupId) => void run(() => deleteDanceGroup(groupId))}
             onToggleMember={(groupId, personId, included) => run(() => setDanceGroupMember(groupId, personId, included))}
+            onSavePersonTimes={(input) =>
+              run(() =>
+                saveRosterPerson({
+                  campaignId: active.id,
+                  personId: input.personId,
+                  name: input.name,
+                  role: 'dancer',
+                  blocks: input.blocks,
+                }),
+              )
+            }
             onRemoveAdmin={(adminId) => void run(() => removeAdmin(adminId))}
             onGrantRole={(personId, role) => {
               const person = [...active.dancers, ...active.choreographers].find((item) => item.id === personId)

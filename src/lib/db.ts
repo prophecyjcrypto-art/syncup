@@ -652,9 +652,8 @@ export async function setDanceGroupMember(groupId: string, personId: string, inc
     fail(error)
     return
   }
-  const { error } = await db.from('hupaak_group_members').upsert(
-    { group_id: groupId, person_id: personId },
-    { onConflict: 'group_id,person_id' },
-  )
+  // Insert only — this table has no UPDATE grant/policy, so upsert fails on live.
+  const { error } = await db.from('hupaak_group_members').insert({ group_id: groupId, person_id: personId })
+  if (error && /duplicate|unique|23505/i.test(`${error.message} ${error.code ?? ''}`)) return
   fail(error)
 }

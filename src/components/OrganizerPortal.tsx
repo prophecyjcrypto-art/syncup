@@ -1,12 +1,15 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { t } from '../i18n'
 import { analyzeEvent } from '../lib/analysis'
+import { formatLongDate, parseISODate } from '../lib/dates'
 import { membershipChanges, peopleForTray } from '../lib/groups'
 import { preferredInviteCode, preferredInviteLink, shortInviteUrl } from '../lib/invites'
+import { uncoveredDays } from '../lib/schedule'
 import { groupSurface, inputClass, textMuted, textPrimary } from '../lib/ui'
-import type { Campaign, CampaignInput, Language, SessionNote } from '../types'
+import type { Campaign, CampaignInput, Language, SessionNote, TimeBlock } from '../types'
 import { AssignBoard, AssignChips, AssignRoleTarget, AssignTarget, AssignTray, useAssigning } from './GroupAssign'
 import { organizersOf, type RoleGrantKind } from '../lib/roles'
+import { AvailabilityEditor } from './AvailabilityEditor'
 import { InfoTip } from './Guide'
 import { InviteCode } from './InviteCode'
 import { ChangeRequestList } from './ChangeRequests'
@@ -15,11 +18,11 @@ import { SetupPanel } from './SetupPanel'
 
 export type HubTab = 'event' | 'organizers' | 'participants' | 'results'
 
-const TABS: { id: HubTab; accent: string; tone: 'purple' | 'gold' | 'sage' }[] = [
+const TABS: { id: HubTab; accent: string; tone: 'purple' | 'gold' | 'sage' | 'pink' }[] = [
   { id: 'event', accent: 'tone-fill-purple', tone: 'purple' },
   { id: 'organizers', accent: 'tone-fill-gold', tone: 'gold' },
   { id: 'participants', accent: 'tone-fill-sage', tone: 'sage' },
-  { id: 'results', accent: 'tone-fill-gold', tone: 'gold' },
+  { id: 'results', accent: 'tone-fill-pink', tone: 'pink' },
 ]
 
 export function OrganizerPortal({
@@ -40,6 +43,7 @@ export function OrganizerPortal({
   onGrantRole,
   onOrganizerTime,
   onAdminTime,
+  onSavePersonTimes,
   onSaveSlots,
   onSaveDuration,
   onPublish,
@@ -64,6 +68,7 @@ export function OrganizerPortal({
   onGrantRole?: (personId: string, role: RoleGrantKind) => void | Promise<unknown>
   onOrganizerTime?: () => void
   onAdminTime?: () => void
+  onSavePersonTimes?: (input: { personId: string; name: string; blocks: TimeBlock[] }) => void | Promise<unknown>
   onSaveSlots?: (slots: string[]) => void
   onSaveDuration?: (hours: number) => void
   onPublish?: (slots: string[], notes: Record<string, SessionNote>) => void
@@ -74,6 +79,9 @@ export function OrganizerPortal({
   const [tab, setTab] = useState<HubTab>(initialTab)
   const [groupName, setGroupName] = useState('')
   const [composing, setComposing] = useState(false)
+  const [editingPersonId, setEditingPersonId] = useState<string | null>(null)
+  const [editBlocks, setEditBlocks] = useState<TimeBlock[]>([])
+  const [editBusy, setEditBusy] = useState(false)
   const report = useMemo(
     () =>
       analyzeEvent({
@@ -132,6 +140,38 @@ export function OrganizerPortal({
   function grantRole(personId: string, role: RoleGrantKind) {
     if (!onGrantRole) return
     void onGrantRole(personId, role)
+  }
+
+  const editingPerson = editingPersonId ? dancerById.get(editingPersonId) ?? null : null
+
+  function openPersonTimes(personId: string) {
+    const person = dancerById.get(personId)
+    if (!person || !onSavePersonTimes) return
+    setEditingPersonId(personId)
+    setEditBlocks(person.blocks)
+  }
+
+  function closePersonTimes() {
+    setEditingPersonId(null)
+    setEditBlocks([])
+  }
+
+  async function savePersonTimes() {
+    if (!editingPerson || !onSavePersonTimes) return
+    const missing = uncoveredDays(campaign.config, editBlocks)
+    if (missing.length) {
+      const days = missing.map((iso) => formatLongDate(parseISODate(iso), lang)).join(', ')
+      window.alert(t(lang, 'mixed_incomplete', { days }))
+      return
+    }
+    setEditBusy(true)
+    try {
+      const result = await onSavePersonTimes({ personId: editingPerson.id, name: editingPerson.name, blocks: editBlocks })
+      if (result === false) return
+      closePersonTimes()
+    } finally {
+      setEditBusy(false)
+    }
   }
 
   function roleCards() {
@@ -228,7 +268,7 @@ export function OrganizerPortal({
             aria-label={t(lang, 'group_placeholder')}
             className={`min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
           />
-          <button type="submit" disabled={!groupName.trim()} className="tone-fill-sage min-h-11 shrink-0 rounded-full px-4 text-sm font-bold disabled:opacity-40">
+          <button type="submit" disabled={!groupName.trim()} className="tone-fill-purple min-h-11 shrink-0 rounded-full px-4 text-sm font-bold disabled:opacity-40">
             {t(lang, 'add_group')}
           </button>
         </form>
@@ -262,7 +302,7 @@ export function OrganizerPortal({
           {t(lang, 'stats_responses')} {report.responses}/{report.people}
         </p>
       </div>
-      <div data-hub-tabs="" role="tablist" aria-label={t(lang, 'hub_open')} className="grid w-full grid-cols-4 gap-1 rounded-full p-1 glass-well">
+      <div data-hub-tabs="" role="tablist" aria-label={t(lang, 'hub_open')} className="grid w-full grid-cols-4 gap-0.5 rounded-full p-0.5 glass-well">
         {TABS.map((item) => {
           const active = tab === item.id
           return (
@@ -276,7 +316,9 @@ export function OrganizerPortal({
               data-hub-step={item.id}
               data-accent={item.tone}
               onClick={() => select(item.id)}
-              className={`flex min-h-11 min-w-0 items-center justify-center overflow-hidden rounded-full px-0.5 text-center text-[11px] font-semibold leading-tight tracking-tight sm:text-sm sm:tracking-normal ${active ? item.accent : ''}`}
+              className={`flex min-h-9 min-w-0 items-center justify-center overflow-hidden rounded-full px-0.5 text-center text-[11px] font-semibold leading-tight tracking-tight sm:min-h-10 sm:text-sm sm:tracking-normal ${
+                active ? item.accent : textMuted(isDarkMode)
+              }`}
             >
               {labels[item.id]}
             </button>
@@ -284,15 +326,43 @@ export function OrganizerPortal({
         })}
       </div>
 
-      <div role="tabpanel" id={`hub-panel-${tab}`} aria-labelledby={`hub-tab-${tab}`} className="space-y-4">
+      <div role="tabpanel" id={`hub-panel-${tab}`} aria-labelledby={`hub-tab-${tab}`} className="stack-section">
         {tab === 'participants' ? (
           <AssignBoard onMove={(personId, fromGroupId, toGroupId) => void moveDancer(personId, fromGroupId, toGroupId)}>
-            <div className="space-y-3" data-participants-block="" data-manage="participants">
+            <div className="space-y-5" data-participants-block="" data-manage="participants">
               <h3 className={`inline-flex items-center gap-2 px-1 text-base font-semibold ${textPrimary(isDarkMode)}`}>
                 {t(lang, 'manage_participants')}
                 <InfoTip lang={lang} name="participants" text={t(lang, 'participants_hint')} />
               </h3>
-              <div className={groupSurface('space-y-3')}>
+              {editingPerson && onSavePersonTimes ? (
+                <section className={groupSurface('space-y-4')} data-edit-person-times={editingPerson.id}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className={`text-sm font-bold ${textPrimary(isDarkMode)}`}>{t(lang, 'editing_for', { name: editingPerson.name })}</p>
+                    <button type="button" onClick={closePersonTimes} className={`text-xs font-bold ${textMuted(isDarkMode)}`}>
+                      {t(lang, 'cancel')}
+                    </button>
+                  </div>
+                  <AvailabilityEditor
+                    lang={lang}
+                    isDarkMode={isDarkMode}
+                    config={campaign.config}
+                    onDays={campaign.onDays}
+                    compulsoryDays={campaign.compulsoryDays}
+                    blocks={editBlocks}
+                    onChange={setEditBlocks}
+                  />
+                  <button
+                    type="button"
+                    data-save-person-times=""
+                    disabled={editBusy}
+                    onClick={() => void savePersonTimes()}
+                    className="btn-glow btn-primary min-h-11 w-full rounded-full px-6 text-sm font-bold disabled:opacity-40 sm:w-auto"
+                  >
+                    {editBusy ? t(lang, 'loading') : t(lang, 'save_member')}
+                  </button>
+                </section>
+              ) : null}
+              <div className={groupSurface('space-y-4')}>
                 <InviteCode
                   lang={lang}
                   isDarkMode={isDarkMode}
@@ -313,14 +383,16 @@ export function OrganizerPortal({
                     people={peopleForTray(campaign.dancers, campaign.groups, null)}
                     isDarkMode={isDarkMode}
                     ariaLabel={t(lang, 'all_participants')}
+                    onEditTime={onSavePersonTimes ? openPersonTimes : undefined}
+                    editLabel={t(lang, 'edit_times')}
                   />
                 ) : null}
               </div>
               {campaign.groups.length > 0 ? (
-                <div className="ml-3 space-y-3 sm:ml-5">
+                <div className="ml-3 space-y-5 sm:ml-5">
                   <p className={`px-1 text-[13px] font-medium ${textMuted(isDarkMode)}`}>{t(lang, 'groups_label')}</p>
                   {campaign.groups.map((danceGroup) => (
-                    <div key={danceGroup.id} className={groupSurface('space-y-1.5')} data-group-id={danceGroup.id}>
+                    <div key={danceGroup.id} className={groupSurface()} data-group-id={danceGroup.id}>
                       <AssignTarget targetId={danceGroup.id} ariaLabel={danceGroup.name}>
                         <div className="flex min-h-11 items-center justify-between gap-3">
                           <GroupName lang={lang} isDarkMode={isDarkMode} name={danceGroup.name} onRename={(name) => onRenameGroup(danceGroup.id, name)} />
@@ -347,6 +419,8 @@ export function OrganizerPortal({
                             people={peopleForTray(campaign.dancers, campaign.groups, danceGroup.id)}
                             fromGroupId={danceGroup.id}
                             isDarkMode={isDarkMode}
+                            onEditTime={onSavePersonTimes ? openPersonTimes : undefined}
+                            editLabel={t(lang, 'edit_times')}
                           />
                         ) : null}
                       </AssignTarget>

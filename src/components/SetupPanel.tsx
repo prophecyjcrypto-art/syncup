@@ -344,7 +344,7 @@ export function SetupPanel({
                       aria-label={t(lang, 'group_placeholder')}
                       className={`min-w-0 flex-1 ${fieldClass}`}
                     />
-                    <button type="submit" disabled={!draftGroup.trim()} className="tone-fill-sage min-h-11 shrink-0 rounded-full px-4 text-sm font-medium disabled:opacity-40">
+                    <button type="submit" disabled={!draftGroup.trim()} className="tone-fill-purple min-h-11 shrink-0 rounded-full px-4 text-sm font-medium disabled:opacity-40">
                       {t(lang, 'add_group')}
                     </button>
                   </form>

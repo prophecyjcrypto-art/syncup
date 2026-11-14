@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { t } from '../i18n'
 import { useCalendar } from '../lib/calendarContext'
@@ -7,10 +7,10 @@ import { clearGoogleToken, createCalendarEvents, GOOGLE_CALENDAR_ENABLED, Google
 import { formatHourOption, formatLongDate, formatTime, getDaysArray, parseISODate, rangeOptions, setTime, toISODateString } from '../lib/dates'
 import { durationHours, fitDuration, roundHour, SLOT_STEP } from '../lib/timeRange'
 import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, compulsoryReport, finalCopySlots, sharedFreeByDay, shortlistSessionHours, startsAtOrAfter, type MarkFilter } from '../lib/schedule'
-import { consumeDayClick } from '../lib/dayDrag'
+import { beginListRangeDrag, consumeDayClick } from '../lib/dayDrag'
 import { commitSessions, toggleSessionDay, type SessionRange } from '../lib/sessions'
 import { organizersOf } from '../lib/roles'
-import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
+import { cardClass, inputClass, quietButton, textMuted, textPrimary } from '../lib/ui'
 import { InfoTip } from './Guide'
 import type { Campaign, Language, SessionNote, TimeSlot } from '../types'
 import { MonthBoards } from './MonthBoards'
@@ -69,7 +69,6 @@ export function ResultsPanel({
   const [onDaysOnly, setOnDaysOnly] = useState(false)
   const [minAttendance, setMinAttendance] = useState(70)
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [picked, setPicked] = useState<Set<string>>(new Set())
   const [notice, setNotice] = useState('')
   const [draftHours, setDraftHours] = useState<number | null>(campaign.config.durationHours)
   const [sessions, setSessions] = useState<SessionRange[]>([])
@@ -215,11 +214,24 @@ export function ResultsPanel({
     if (hours !== campaign.config.durationHours) onSaveDuration?.(hours)
   }
 
-  function commitSession(block: SessionRange, sourceId: string | null) {
+  function commitSession(block: SessionRange, sourceId: string | null, spanIsos?: string[]) {
     const result = commitSessions(sessions, block, sourceId)
-    setSessions(result.sessions)
-    setFocusId(result.focusId)
-    const placed = result.sessions.find((item) => item.id === result.focusId)
+    let next = result.sessions
+    let focusIdNext = result.focusId
+    if (spanIsos && spanIsos.length > 1) {
+      const source = next.find((item) => item.id === focusIdNext) ?? block
+      const wanted = new Set(spanIsos)
+      const others = next.filter((item) => item.startHour !== source.startHour || item.endHour !== source.endHour)
+      const kept = next.filter((item) => item.startHour === source.startHour && item.endHour === source.endHour && wanted.has(item.iso))
+      const have = new Set(kept.map((item) => item.iso))
+      const added = [...wanted].filter((iso) => !have.has(iso)).map((iso) => ({ ...source, id: crypto.randomUUID(), iso }))
+      next = [...others, ...kept, ...added]
+      const preferred = next.find((item) => item.iso === block.iso && item.startHour === source.startHour && item.endHour === source.endHour)
+      focusIdNext = preferred?.id ?? focusIdNext
+    }
+    setSessions(next)
+    setFocusId(focusIdNext)
+    const placed = next.find((item) => item.id === focusIdNext)
     if (placed) syncDuration(placed)
   }
 
@@ -247,7 +259,17 @@ export function ResultsPanel({
   function toggleDay(iso: string) {
     if (consumeDayClick()) return
     const source = sessions.find((item) => item.id === focusId) ?? sessions[0]
-    if (!source) return
+    if (!source) {
+      const hours = Math.min(Math.max(draftHours ?? campaign.config.durationHours ?? 2, SLOT_STEP), maxHours)
+      const startHour = campaign.config.dayStartHour
+      const fitted = fitDuration({ startHour, endHour: startHour }, hours, campaign.config.dayStartHour, campaign.config.dayEndHour)
+      const addedId = crypto.randomUUID()
+      const block: SessionRange = { id: addedId, iso, ...fitted }
+      setSessions([block])
+      setFocusId(addedId)
+      syncDuration(block)
+      return
+    }
     const exact = sessions.find((item) => item.iso === iso && item.startHour === source.startHour && item.endHour === source.endHour)
     if (exact) {
       setSessions((current) => current.filter((item) => item.id !== exact.id && !(item.iso === iso && item.startHour === source.startHour && item.endHour === source.endHour)))
@@ -409,7 +431,7 @@ export function ResultsPanel({
         data-end={hours.endHour}
         data-selected-slot={onCalendar ? '' : undefined}
         onClick={() => selectSlot(slot)}
-        className={`glass-well cursor-pointer rounded-2xl p-4 ${onCalendar ? 'ring-2 ring-[#f6cf7a]' : picked.has(key) ? 'ring-2 ring-[#7c7bb9]' : ''}`}
+        className={`glass-well cursor-pointer rounded-2xl p-4 ${onCalendar ? 'ring-2 ring-[color:var(--logo-gold)]' : ''}`}
       >
         <div className="flex items-start justify-between gap-3">
           <button type="button" className="min-w-0 text-left" onClick={() => setExpanded(expanded === key ? null : key)}>
@@ -425,10 +447,8 @@ export function ResultsPanel({
             </p>
           </button>
           <div className="flex items-center gap-2">
-            <span className="rounded-xl bg-[#93ba8c] px-2 py-1 text-xs font-bold text-white">{slot.attendanceScore}%</span>
-            {cardKeys.includes(key) ? (
-              <span data-final-mark="" className="px-2 text-xs font-bold text-[#f6cf7a]">{t(lang, 'final_mark')}</span>
-            ) : (
+            <span className="rounded-xl bg-[color:var(--logo-sage)] px-2 py-1 text-xs font-bold text-[color:var(--logo-sage-ink)]">{slot.attendanceScore}%</span>
+            {!cardKeys.includes(key) ? (
               <button
                 type="button"
                 data-pin-slot=""
@@ -438,23 +458,11 @@ export function ResultsPanel({
                   event.stopPropagation()
                   toggleShortlist(key)
                 }}
-                className={`flex h-11 w-11 items-center justify-center text-xl disabled:cursor-default ${shortlist.includes(key) ? 'text-[#f6cf7a]' : 'text-zinc-500'}`}
+                className={`flex h-11 w-11 items-center justify-center text-xl disabled:cursor-default ${shortlist.includes(key) ? 'text-[color:var(--logo-gold)]' : 'text-zinc-500'}`}
               >
                 {shortlist.includes(key) ? '★' : '☆'}
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                const next = new Set(picked)
-                if (next.has(key)) next.delete(key)
-                else next.add(key)
-                setPicked(next)
-              }}
-              className="flex h-11 w-11 items-center justify-center"
-            >
-              <span className={`h-6 w-6 rounded-full border ${picked.has(key) ? 'border-[#7c7bb9] bg-[#7c7bb9]' : 'border-zinc-400'}`} />
-            </button>
+            ) : null}
           </div>
         </div>
         {expanded === key && (
@@ -510,12 +518,41 @@ export function ResultsPanel({
   }
 
   function toggleCardCheck(key: string) {
+    if (consumeDayClick()) return
     setCardChecks((current) => {
       const next = new Set(current)
       if (next.has(key)) next.delete(key)
       else next.add(key)
       return next
     })
+  }
+
+  function toggleSelectAllCards() {
+    setCardChecks((current) => {
+      if (cardKeys.length > 0 && cardKeys.every((key) => current.has(key))) return new Set()
+      return new Set(cardKeys)
+    })
+  }
+
+  function startCardPaint(event: ReactPointerEvent, key: string) {
+    beginListRangeDrag({
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      button: event.button,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      key,
+      ordered: cardKeys,
+      selected: cardChecks,
+      hitAttr: 'data-slot-key',
+      onRange: (next) => setCardChecks(new Set(next)),
+    })
+  }
+
+  function selectMarkClass(on: boolean, partial = false) {
+    if (on) return 'tone-fill-purple'
+    if (partial) return 'ring-1 ring-[color:var(--logo-purple)] bg-[color-mix(in_srgb,var(--logo-purple)_28%,transparent)]'
+    return 'glass-well'
   }
 
   function peopleFilters() {
@@ -528,7 +565,7 @@ export function ResultsPanel({
               data-group-id="all"
               aria-pressed={groupId === null}
               onClick={() => setGroupId(null)}
-              className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${groupId === null ? 'chip-on' : 'glass-well'}`}
+              className={`min-h-9 shrink-0 rounded-full px-3 text-xs font-bold ${groupId === null ? 'chip-on' : 'glass-well'}`}
             >
               {t(lang, 'filter_all')}
             </button>
@@ -544,7 +581,7 @@ export function ResultsPanel({
                     setGroupId(group.id)
                     setDancerFilter([])
                   }}
-                  className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'chip-on' : 'glass-well'}`}
+                  className={`min-h-9 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'chip-on' : 'glass-well'}`}
                 >
                   {group.name}
                 </button>
@@ -562,7 +599,7 @@ export function ResultsPanel({
             data-dancer-id="all"
             aria-pressed={dancerFilter.length === 0}
             onClick={() => setDancerFilter([])}
-            className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${dancerFilter.length === 0 ? 'chip-on' : 'glass-well'}`}
+            className={`min-h-9 shrink-0 rounded-full px-3 text-xs font-bold ${dancerFilter.length === 0 ? 'chip-on' : 'glass-well'}`}
           >
             {t(lang, 'filter_all')}
           </button>
@@ -575,7 +612,7 @@ export function ResultsPanel({
                 data-dancer-id={person.id}
                 aria-pressed={on}
                 onClick={() => toggleDancer(person.id)}
-                className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'chip-on' : 'glass-well'}`}
+                className={`min-h-9 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'chip-on' : 'glass-well'}`}
               >
                 {person.name}
               </button>
@@ -589,56 +626,93 @@ export function ResultsPanel({
   function selectedSlots() {
     return (
       <section className="space-y-3" data-selected-slots="">
-        <div className="chip-row">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           {listedHours != null ? (
-            <p data-shortlist-hours="" className={`shrink-0 self-center text-xs font-bold tabular-nums ${textMuted(isDarkMode)}`}>
+            <p data-shortlist-hours="" className={`shrink-0 text-xs font-bold tabular-nums ${textMuted(isDarkMode)}`}>
               {t(lang, 'stats_session')} {listedHours}
             </p>
           ) : null}
-          <button type="button" onClick={() => void copy(false)} className="glass-well min-h-11 shrink-0 whitespace-nowrap rounded-full px-4 text-xs font-bold">{t(lang, 'copy_basic')}</button>
-          <button type="button" onClick={() => void copy(true)} className="tone-fill-gold min-h-11 shrink-0 whitespace-nowrap rounded-full px-4 text-xs font-bold">{t(lang, 'copy_full')}</button>
-          <button type="button" onClick={exportCalendar} className="min-h-11 shrink-0 whitespace-nowrap rounded-full border border-[#f6cf7a] px-4 text-xs font-bold text-[#f6cf7a]">{t(lang, 'export_calendar')}</button>
-          {GOOGLE_CALENDAR_ENABLED && (
-            <button type="button" onClick={() => void saveGoogle()} className="glass-well min-h-11 shrink-0 whitespace-nowrap rounded-full px-4 text-xs font-medium">
-              {calendar.token ? t(lang, 'calendar_save') : t(lang, 'calendar_connect')}
-            </button>
-          )}
-          {canPin ? (
-            <button type="button" data-publish="" disabled={cardKeys.length === 0} onClick={() => publish(cardKeys)} className="btn-glow btn-primary min-h-11 shrink-0 rounded-full px-4 text-xs font-bold disabled:opacity-40">
-              {t(lang, 'publish')}
-            </button>
-          ) : null}
-        </div>
-        {canPin && cardKeys.length > 0 ? (
-          <div className="space-y-2">
-            {cardChecks.size > 0 ? (
-              <button type="button" data-batch-edit="" onClick={() => openNoteEditor([...cardChecks])} className="glass-well min-h-11 rounded-full px-4 text-xs font-bold">
-                {t(lang, 'batch_edit')}
+          <div className="chip-row min-w-0 flex-1">
+            <button type="button" onClick={() => void copy(false)} className={quietButton(textMuted(isDarkMode))}>{t(lang, 'copy_basic')}</button>
+            <button type="button" onClick={() => void copy(true)} className="btn-press tone-fill-gold min-h-9 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-bold">{t(lang, 'copy_full')}</button>
+            <button type="button" onClick={exportCalendar} className={quietButton('text-[color:var(--logo-gold)]')}>{t(lang, 'export_calendar')}</button>
+            {GOOGLE_CALENDAR_ENABLED && (
+              <button type="button" onClick={() => void saveGoogle()} className={quietButton(textMuted(isDarkMode))}>
+                {calendar.token ? t(lang, 'calendar_save') : t(lang, 'calendar_connect')}
+              </button>
+            )}
+            {canPin ? (
+              <button type="button" data-publish="" disabled={cardKeys.length === 0} onClick={() => publish(cardKeys)} className="btn-glow btn-primary btn-press min-h-9 shrink-0 rounded-full px-4 text-xs font-bold disabled:opacity-40">
+                {t(lang, 'publish')}
               </button>
             ) : null}
+          </div>
+        </div>
+        {notice ? <p className="text-sm font-medium text-[#93ba8c]">{notice}</p> : null}
+        {canPin && cardKeys.length > 0 ? (
+          <div className="space-y-2" data-card-list="">
+            <div className="flex flex-wrap items-center gap-2">
+              {(() => {
+                const allOn = cardKeys.length > 0 && cardKeys.every((key) => cardChecks.has(key))
+                const partial = cardChecks.size > 0 && !allOn
+                return (
+                  <button
+                    type="button"
+                    data-select-all-cards=""
+                    aria-pressed={allOn}
+                    onClick={toggleSelectAllCards}
+                    className={`inline-flex min-h-9 items-center gap-2 rounded-full px-1 text-xs font-bold ${textPrimary(isDarkMode)}`}
+                  >
+                    <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${selectMarkClass(allOn, partial)}`} aria-hidden />
+                    {t(lang, 'select_all')}
+                  </button>
+                )
+              })()}
+              {cardChecks.size > 0 ? (
+                <button type="button" data-batch-edit="" onClick={() => openNoteEditor([...cardChecks])} className={quietButton(textMuted(isDarkMode))}>
+                  {t(lang, 'batch_edit')}
+                </button>
+              ) : null}
+            </div>
             {cardKeys.map((key) => {
               const note = notes[key] ?? { venue: '', remarks: '' }
               const checked = cardChecks.has(key)
               return (
-                <article key={key} data-selected-card="" data-slot-key={key} className="glass-well rounded-2xl p-3">
-                  <div className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
+                <article
+                  key={key}
+                  data-selected-card=""
+                  data-slot-key={key}
+                  aria-pressed={checked}
+                  aria-label={describeKey(key)}
+                  onPointerDown={(event) => {
+                    const target = event.target as Element
+                    if (target.closest('[data-edit-slot], [data-remove-final]')) return
+                    // Touch: only paint from the mark so the list can still scroll.
+                    if (event.pointerType === 'touch' && !target.closest('[data-card-check]')) return
+                    startCardPaint(event, key)
+                  }}
+                  onClick={(event) => {
+                    const target = event.target as Element
+                    if (target.closest('[data-edit-slot], [data-remove-final]')) return
+                    toggleCardCheck(key)
+                  }}
+                  className={`cursor-pointer select-none rounded-2xl p-3 touch-pan-y ${checked ? 'ring-1 ring-[color:var(--logo-purple)] bg-[color-mix(in_srgb,var(--logo-purple)_18%,transparent)]' : 'glass-well'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span
                       data-card-check=""
-                      checked={checked}
-                      aria-label={describeKey(key)}
-                      onChange={() => toggleCardCheck(key)}
-                      className="mt-1 h-4 w-4"
+                      aria-hidden
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${selectMarkClass(checked)}`}
                     />
                     <div className="min-w-0 flex-1">
                       <p className={`text-sm font-bold ${textPrimary(isDarkMode)}`}>{describeKey(key)}</p>
                       {note.venue ? <p data-card-venue="" className={`mt-1 text-sm ${textPrimary(isDarkMode)}`}>{note.venue}</p> : null}
                       {note.remarks ? <p data-card-remarks="" className={`mt-1 whitespace-pre-wrap text-xs ${textMuted(isDarkMode)}`}>{note.remarks}</p> : null}
                     </div>
-                    <button type="button" data-edit-slot="" aria-label={t(lang, 'edit_details')} onClick={() => openNoteEditor([key])} className="glass-well flex h-11 shrink-0 items-center justify-center rounded-full px-3 text-sm font-bold">
+                    <button type="button" data-edit-slot="" aria-label={t(lang, 'edit_details')} onClick={() => openNoteEditor([key])} className={quietButton(textMuted(isDarkMode))}>
                       {t(lang, 'edit_details')}
                     </button>
-                    <button type="button" data-remove-final="" aria-label={t(lang, 'remove')} onClick={() => removeFinal(key)} className="min-h-11 shrink-0 px-2 text-sm font-bold text-[#f19ba8]">
+                    <button type="button" data-remove-final="" aria-label={t(lang, 'remove')} onClick={() => removeFinal(key)} className={quietButton('text-[color:var(--logo-pink)]')}>
                       {t(lang, 'remove')}
                     </button>
                   </div>
@@ -652,7 +726,7 @@ export function ResultsPanel({
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-4">
+    <div className="mx-auto w-full max-w-[var(--shell-max)] stack-section">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           {embedded ? null : (
@@ -663,37 +737,107 @@ export function ResultsPanel({
           <InfoTip lang={lang} name="results" text={t(lang, 'guide_results')} />
         </div>
       </div>
-      {selectedSlots()}
+      <div className="stack-section" data-results-final="">
+        {selectedSlots()}
+      </div>
       {canPin ? (
-        <ChangeRequestList
-          lang={lang}
-          isDarkMode={isDarkMode}
-          requests={campaign.config.changeRequests ?? []}
-          onResolve={onResolveRequest}
-        />
+        <div className="stack-card" data-results-requests="">
+          <ChangeRequestList
+            lang={lang}
+            isDarkMode={isDarkMode}
+            requests={campaign.config.changeRequests ?? []}
+            onResolve={onResolveRequest}
+          />
+        </div>
       ) : null}
-      {notice && <p className="text-sm font-medium text-[#93ba8c]">{notice}</p>}
       {canPin ? (
-        <div className="inline-flex rounded-full p-0.5 glass-well" role="tablist" data-results-tab={resultsView}>
+        <div
+          className={`flex flex-wrap items-center gap-x-4 gap-y-2 border-b pb-2 ${isDarkMode ? 'border-white/10' : 'border-zinc-200'}`}
+          data-results-toolbar=""
+        >
+          <div className="inline-flex items-center gap-1" role="tablist" data-results-tab={resultsView}>
+            <button
+              type="button"
+              role="tab"
+              data-results-view="schedule"
+              aria-selected={resultsView === 'schedule'}
+              onClick={() => setResultsView('schedule')}
+              className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${
+                resultsView === 'schedule' ? 'chip-on' : textMuted(isDarkMode)
+              }`}
+            >
+              {t(lang, 'tab_schedule')}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              data-results-view="analysis"
+              aria-selected={resultsView === 'analysis'}
+              onClick={() => setResultsView('analysis')}
+              className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${
+                resultsView === 'analysis' ? 'chip-on' : textMuted(isDarkMode)
+              }`}
+            >
+              {t(lang, 'tab_analysis')}
+            </button>
+          </div>
+          {resultsView === 'schedule' ? (
+            <>
+              <span className={`hidden h-4 w-px sm:block ${isDarkMode ? 'bg-white/15' : 'bg-zinc-300'}`} aria-hidden />
+              <div className="inline-flex items-center gap-1" role="tablist" data-pick-mode={pickMode}>
+                <button
+                  type="button"
+                  role="tab"
+                  data-pick="manual"
+                  aria-selected={pickMode === 'manual'}
+                  onClick={() => setPickMode('manual')}
+                  className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${
+                    pickMode === 'manual' ? 'chip-on' : textMuted(isDarkMode)
+                  }`}
+                >
+                  {t(lang, 'pick_manual')}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  data-pick="suggest"
+                  aria-selected={pickMode === 'suggest'}
+                  onClick={() => setPickMode('suggest')}
+                  className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${
+                    pickMode === 'suggest' ? 'chip-on' : textMuted(isDarkMode)
+                  }`}
+                >
+                  {t(lang, 'pick_suggest')}
+                </button>
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : resultsView === 'schedule' ? (
+        <div className={`inline-flex items-center gap-1 border-b pb-3 ${isDarkMode ? 'border-white/10' : 'border-zinc-200'}`} role="tablist" data-pick-mode={pickMode}>
           <button
             type="button"
             role="tab"
-            data-results-view="schedule"
-            aria-selected={resultsView === 'schedule'}
-            onClick={() => setResultsView('schedule')}
-            className={`min-h-11 rounded-full px-4 text-xs font-bold ${resultsView === 'schedule' ? 'chip-on' : ''}`}
+            data-pick="manual"
+            aria-selected={pickMode === 'manual'}
+            onClick={() => setPickMode('manual')}
+            className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${
+              pickMode === 'manual' ? 'chip-on' : textMuted(isDarkMode)
+            }`}
           >
-            {t(lang, 'tab_schedule')}
+            {t(lang, 'pick_manual')}
           </button>
           <button
             type="button"
             role="tab"
-            data-results-view="analysis"
-            aria-selected={resultsView === 'analysis'}
-            onClick={() => setResultsView('analysis')}
-            className={`min-h-11 rounded-full px-4 text-xs font-bold ${resultsView === 'analysis' ? 'chip-on' : ''}`}
+            data-pick="suggest"
+            aria-selected={pickMode === 'suggest'}
+            onClick={() => setPickMode('suggest')}
+            className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${
+              pickMode === 'suggest' ? 'chip-on' : textMuted(isDarkMode)
+            }`}
           >
-            {t(lang, 'tab_analysis')}
+            {t(lang, 'pick_suggest')}
           </button>
         </div>
       ) : null}
@@ -701,28 +845,6 @@ export function ResultsPanel({
         <AnalysisPanel lang={lang} isDarkMode={isDarkMode} campaign={campaign} sessions={sessions} />
       ) : (
       <>
-      <div className="inline-flex rounded-full p-0.5 glass-well" role="tablist" data-pick-mode={pickMode}>
-        <button
-          type="button"
-          role="tab"
-          data-pick="manual"
-          aria-selected={pickMode === 'manual'}
-          onClick={() => setPickMode('manual')}
-          className={`min-h-11 rounded-full px-4 text-xs font-bold ${pickMode === 'manual' ? 'chip-on' : ''}`}
-        >
-          {t(lang, 'pick_manual')}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          data-pick="suggest"
-          aria-selected={pickMode === 'suggest'}
-          onClick={() => setPickMode('suggest')}
-          className={`min-h-11 rounded-full px-4 text-xs font-bold ${pickMode === 'suggest' ? 'chip-on' : ''}`}
-        >
-          {t(lang, 'pick_suggest')}
-        </button>
-      </div>
       {pickMode === 'manual' ? (
       <div className="grid gap-4 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] md:items-start">
         <div className="order-2 min-w-0 space-y-3 md:order-1">
@@ -1031,8 +1153,8 @@ function NameGroup({ title, names, tone }: { title: string; names: string[]; ton
 
 function scoreTone(score: number, isDarkMode: boolean): string {
   if (score >= 90) return 'bg-[color:var(--logo-purple)] text-white'
-  if (score >= 70) return 'bg-[#93ba8c] text-white'
-  if (score >= 50) return 'bg-[#f6cf7a] text-zinc-900'
+  if (score >= 70) return 'bg-[color:var(--logo-sage)] text-[color:var(--logo-sage-ink)]'
+  if (score >= 50) return 'bg-[color:var(--logo-gold)] text-[color:var(--logo-gold-ink)]'
   if (score > 0) return isDarkMode ? 'bg-white/10 text-zinc-200' : 'bg-white text-zinc-600'
   return isDarkMode ? 'bg-black/30 text-zinc-500' : 'bg-zinc-100 text-zinc-400'
 }

@@ -11,6 +11,7 @@ export function MonthBoards({
   renderDay,
   selected,
   onSelectRange,
+  headerEnd,
 }: {
   days: Date[]
   lang: Language
@@ -18,6 +19,7 @@ export function MonthBoards({
   renderDay: (day: Date) => ReactNode
   selected?: readonly string[]
   onSelectRange?: (next: string[]) => void
+  headerEnd?: ReactNode
 }) {
   const months = groupByMonth(days, lang)
   const labels = weekdayLabels(lang)
@@ -44,15 +46,18 @@ export function MonthBoards({
 
   return (
     <div className="space-y-6" data-month-board="" onPointerDown={onPointerDown}>
-      {months.map((month) => (
+      {months.map((month, monthIndex) => (
         <div key={month.key} className="space-y-2">
-          <h4
-            className={`border-b pb-2 text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)} ${
+          <div
+            className={`flex items-center justify-between gap-2 border-b pb-2 ${
               isDarkMode ? 'border-white/10' : 'border-zinc-200'
             }`}
           >
-            {month.label}
-          </h4>
+            <h4 className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>
+              {month.label}
+            </h4>
+            {monthIndex === 0 && headerEnd ? <div className="shrink-0">{headerEnd}</div> : null}
+          </div>
           <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
             {labels.map((label) => (
               <div key={`${month.key}-${label}`} className={`text-center text-[10px] font-bold ${textMuted(isDarkMode)}`}>

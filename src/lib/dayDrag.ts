@@ -29,42 +29,50 @@ export function consumeDayClick(): boolean {
 
 const HOLD_MS = 280
 
-export function beginDayRangeDrag(input: {
+type RangeDragInput = {
   pointerId: number
   pointerType: string
   button: number
   clientX: number
   clientY: number
-  iso: string
+  key: string
   ordered: readonly string[]
   selected: ReadonlySet<string>
+  hitAttr: string
   onRange: (next: string[]) => void
-}): void {
+  /** `hold` waits before painting (calendars). `slop` paints after a short drag (lists). */
+  arm: 'hold' | 'slop'
+}
+
+function beginOrderedRangeDrag(input: RangeDragInput): void {
   if (input.pointerType === 'mouse' && input.button !== 0) return
   const snapshot = new Set(input.selected)
-  const turnOn = !snapshot.has(input.iso)
+  const turnOn = !snapshot.has(input.key)
   const originX = input.clientX
   const originY = input.clientY
   let armed = false
   let active = true
 
-  const paint = (iso: string) => {
-    input.onRange(paintRange(snapshot, input.ordered, input.iso, iso, turnOn))
+  const paint = (key: string) => {
+    input.onRange(paintRange(snapshot, input.ordered, input.key, key, turnOn))
   }
 
-  const hold = window.setTimeout(() => {
-    if (!active) return
-    armed = true
-    paint(input.iso)
-  }, HOLD_MS)
+  const hold =
+    input.arm === 'hold'
+      ? window.setTimeout(() => {
+          if (!active) return
+          armed = true
+          paint(input.key)
+        }, HOLD_MS)
+      : 0
 
   const blockScroll = (event: TouchEvent) => {
     if (armed) event.preventDefault()
   }
 
-  const dayAt = (x: number, y: number) => {
-    const node = document.elementFromPoint(x, y)?.closest('[data-cal-iso]')
-    return node instanceof HTMLElement ? node.getAttribute('data-cal-iso') : null
+  const keyAt = (x: number, y: number) => {
+    const node = document.elementFromPoint(x, y)?.closest(`[${input.hitAttr}]`)
+    return node instanceof HTMLElement ? node.getAttribute(input.hitAttr) : null
   }
 
   const stop = () => {
@@ -81,18 +89,21 @@ export function beginDayRangeDrag(input: {
     const dx = event.clientX - originX
     const dy = event.clientY - originY
     if (!armed) {
-      if (dx * dx + dy * dy > 144) {
+      if (dx * dx + dy * dy <= 144) return
+      if (input.arm === 'hold') {
         swallowClick = true
         window.setTimeout(() => {
           swallowClick = false
         }, 0)
         stop()
+        return
       }
-      return
+      armed = true
+      paint(input.key)
     }
     event.preventDefault()
-    const iso = dayAt(event.clientX, event.clientY)
-    if (iso) paint(iso)
+    const key = keyAt(event.clientX, event.clientY)
+    if (key) paint(key)
   }
 
   const onUp = (event: PointerEvent) => {
@@ -110,4 +121,43 @@ export function beginDayRangeDrag(input: {
   window.addEventListener('pointerup', onUp)
   window.addEventListener('pointercancel', onUp)
   window.addEventListener('touchmove', blockScroll, { passive: false })
+}
+
+export function beginDayRangeDrag(input: {
+  pointerId: number
+  pointerType: string
+  button: number
+  clientX: number
+  clientY: number
+  iso: string
+  ordered: readonly string[]
+  selected: ReadonlySet<string>
+  onRange: (next: string[]) => void
+}): void {
+  beginOrderedRangeDrag({
+    ...input,
+    key: input.iso,
+    hitAttr: 'data-cal-iso',
+    arm: 'hold',
+  })
+}
+
+/** Drag across a list to paint a contiguous selection (click still toggles one item). */
+export function beginListRangeDrag(input: {
+  pointerId: number
+  pointerType: string
+  button: number
+  clientX: number
+  clientY: number
+  key: string
+  ordered: readonly string[]
+  selected: ReadonlySet<string>
+  hitAttr?: string
+  onRange: (next: string[]) => void
+}): void {
+  beginOrderedRangeDrag({
+    ...input,
+    hitAttr: input.hitAttr ?? 'data-slot-key',
+    arm: 'slop',
+  })
 }

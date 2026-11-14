@@ -136,8 +136,8 @@ export function AvailabilityEditor({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-8">
-      <div className={`lg:col-span-5 ${cardClass(isDarkMode)} h-fit rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6`}>
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
+      <div className={`lg:col-span-5 ${cardClass(isDarkMode)} card-pad h-fit`}>
         <div className="flex items-center justify-between gap-3">
           <h3 className={`inline-flex items-center gap-2 font-serif text-2xl font-semibold ${textPrimary(isDarkMode)}`}>
             {t(lang, 'your_submissions')}
@@ -213,11 +213,8 @@ export function AvailabilityEditor({
         </div>
       </div>
 
-      <div className={`min-w-0 lg:col-span-7 ${cardClass(isDarkMode)} rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6 ${disabled ? 'opacity-70' : ''}`}>
+      <div className={`min-w-0 lg:col-span-7 ${cardClass(isDarkMode)} card-pad ${disabled ? 'opacity-70' : ''}`}>
         <MiniSteps steps={[t(lang, 'avail_step_1'), t(lang, 'avail_step_2'), t(lang, 'avail_step_3')]} />
-        <div className="mb-4">
-          <InfoTip lang={lang} name="legend" text={t(lang, 'legend_marks')} />
-        </div>
         <div className="glass-well mb-4 flex rounded-xl p-1">
           <button
             type="button"
@@ -247,6 +244,7 @@ export function AvailabilityEditor({
           isDarkMode={isDarkMode}
           selected={[...selected]}
           onSelectRange={disabled ? undefined : (next) => { setSelected(new Set(next)); setNote('') }}
+          headerEnd={<InfoTip lang={lang} name="legend" text={t(lang, 'legend_marks')} />}
           renderDay={(day) => {
             const iso = toISODateString(day)
             const chosen = selected.has(iso)

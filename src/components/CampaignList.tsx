@@ -4,7 +4,7 @@ import { formatPeopleCount, t } from '../i18n'
 import { canManageRoster, canSeeResults, isAdmin, isChoreographer, isOwner } from '../lib/access'
 import { formatDate, isPast } from '../lib/dates'
 import { preferredInviteCode, preferredInviteLink, shortInviteUrl } from '../lib/invites'
-import { cardClass, groupSurface, inputClass, primaryButton, textMuted, textPrimary } from '../lib/ui'
+import { cardClass, groupSurface, inputClass, primaryButton, quietButton, textMuted, textPrimary } from '../lib/ui'
 import type { Campaign, Language, PersonRole } from '../types'
 import type { HubTab } from './OrganizerPortal'
 
@@ -61,22 +61,22 @@ export function CampaignList({
   }, [showDetail])
 
   const joinForm = (
-    <form onSubmit={submitInvite} className={`${cardClass(isDarkMode)} mb-8 flex flex-col gap-3 rounded-[2rem] p-5 sm:flex-row sm:items-center`}>
-      <div className="min-w-0 flex-1">
-        <p className={`inline-flex items-center gap-1.5 text-sm font-semibold ${textPrimary(isDarkMode)}`}>
-          {t(lang, 'join_admin')}
-          <InfoTip lang={lang} name="join-admin" text={t(lang, 'join_code_hint')} />
-        </p>
-      </div>
-      <input
-        value={invite}
-        onChange={(event) => setInvite(event.target.value)}
-        placeholder={t(lang, 'join_admin_placeholder')}
-        className={`w-full rounded-xl px-4 py-3 sm:max-w-xs ${inputClass(isDarkMode)}`}
-      />
-      <button type="submit" className={primaryButton('shrink-0 px-5 py-3 text-sm')}>
+    <form onSubmit={submitInvite} className={`${cardClass(isDarkMode)} mb-8 space-y-3 rounded-[2rem] p-5`}>
+      <p className={`flex items-center gap-1.5 text-sm font-semibold ${textPrimary(isDarkMode)}`}>
         {t(lang, 'join_admin')}
-      </button>
+        <InfoTip lang={lang} name="join-admin" text={t(lang, 'join_code_hint')} />
+      </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <input
+          value={invite}
+          onChange={(event) => setInvite(event.target.value)}
+          placeholder={t(lang, 'join_admin_placeholder')}
+          className={`min-w-0 w-full flex-1 rounded-xl px-4 py-3 ${inputClass(isDarkMode)}`}
+        />
+        <button type="submit" className={primaryButton('shrink-0 px-5 py-3 text-sm')}>
+          {t(lang, 'join_admin')}
+        </button>
+      </div>
     </form>
   )
 
@@ -100,8 +100,8 @@ export function CampaignList({
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl">
-      <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mx-auto w-full max-w-[var(--shell-max)]">
+      <div className="mb-8 flex flex-col gap-5 sm:mb-10 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className={`inline-flex items-center gap-2 font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
             {t(lang, 'campaigns')}
@@ -159,7 +159,7 @@ export function CampaignList({
                   </button>
                 )}
                 {canSeeResults(campaign, userId, email) ? (
-                  <button type="button" data-results-entry="" onClick={() => onResults(campaign)} className="glass-well min-h-12 w-full rounded-full px-5 text-[15px] font-medium">
+                  <button type="button" data-results-entry="" onClick={() => onResults(campaign)} className={`inline-flex min-h-10 w-full items-center justify-center rounded-md px-2 text-[15px] font-medium opacity-80 transition-opacity hover:opacity-100 ${textMuted(isDarkMode)}`}>
                     {t(lang, 'view_results')}
                   </button>
                 ) : null}
@@ -280,16 +280,16 @@ function EventDetail({
               ) : (
                 <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
               )}
-              <div className="flex gap-2">
-                <button type="button" disabled={!invite.code} onClick={() => invite.code && onCopy(invite.code, 'code')} className={primaryButton('min-h-11 flex-1 px-4 text-sm disabled:opacity-40')}>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <button type="button" disabled={!invite.code} onClick={() => invite.code && onCopy(invite.code, 'code')} className={primaryButton('min-h-9 px-4 text-sm disabled:opacity-40')}>
                   {t(lang, 'copy_code')}
                 </button>
-                <button type="button" disabled={!invite.link} onClick={() => invite.link && onCopy(invite.link, 'link')} className="glass-well min-h-11 flex-1 rounded-full px-4 text-sm font-medium disabled:opacity-40">
+                <button type="button" disabled={!invite.link} onClick={() => invite.link && onCopy(invite.link, 'link')} className={quietButton(`${textMuted(isDarkMode)} disabled:opacity-40`)}>
                   {t(lang, 'copy_short_link')}
                 </button>
               </div>
               {invite.key === 'participant' ? (
-                <button type="button" data-manage="participants" onClick={() => onHub(campaign, 'participants')} className="glass-well min-h-11 w-full rounded-full px-4 text-sm font-medium">
+                <button type="button" data-manage="participants" onClick={() => onHub(campaign, 'participants')} className="glass-well min-h-9 w-full rounded-full px-4 text-sm font-medium">
                   {t(lang, 'manage_participants')}
                 </button>
               ) : null}
@@ -304,18 +304,18 @@ function EventDetail({
             ) : (
               <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
             )}
-            <div className="flex gap-2">
-              <button type="button" disabled={!organizerCode} onClick={() => organizerCode && onCopy(organizerCode, 'code')} className={primaryButton('min-h-11 flex-1 px-4 text-sm disabled:opacity-40')}>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <button type="button" disabled={!organizerCode} onClick={() => organizerCode && onCopy(organizerCode, 'code')} className={primaryButton('min-h-9 px-4 text-sm disabled:opacity-40')}>
                 {t(lang, 'copy_code')}
               </button>
-              <button type="button" disabled={!organizerLink} onClick={() => organizerLink && onCopy(organizerLink, 'link')} className="glass-well min-h-11 flex-1 rounded-full px-4 text-sm font-medium disabled:opacity-40">
+              <button type="button" disabled={!organizerLink} onClick={() => organizerLink && onCopy(organizerLink, 'link')} className={quietButton(`${textMuted(isDarkMode)} disabled:opacity-40`)}>
                 {t(lang, 'copy_link_leader')}
               </button>
             </div>
-            <button type="button" data-manage="organizers" onClick={() => onHub(campaign, 'organizers')} className="glass-well min-h-11 w-full rounded-full px-4 text-sm font-medium">
+            <button type="button" data-manage="organizers" onClick={() => onHub(campaign, 'organizers')} className="glass-well min-h-9 w-full rounded-full px-4 text-sm font-medium">
               {t(lang, 'manage_organizers')}
             </button>
-            <button type="button" data-role-time="organizer" onClick={() => onPortal(campaign, 'choreographer', 'organizer')} className="glass-well min-h-11 w-full rounded-full px-4 text-sm font-medium">
+            <button type="button" data-role-time="organizer" onClick={() => onPortal(campaign, 'choreographer', 'organizer')} className="glass-well min-h-9 w-full rounded-full px-4 text-sm font-medium">
               {t(lang, 'organizer_time')}
             </button>
           </section>
@@ -329,15 +329,15 @@ function EventDetail({
               ) : (
                 <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'invite_after_create')}</p>
               )}
-              <div className="flex gap-2">
-                <button type="button" disabled={!adminCode} onClick={() => adminCode && onCopy(adminCode, 'code')} className={primaryButton('min-h-11 flex-1 px-4 text-sm disabled:opacity-40')}>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <button type="button" disabled={!adminCode} onClick={() => adminCode && onCopy(adminCode, 'code')} className={primaryButton('min-h-9 px-4 text-sm disabled:opacity-40')}>
                   {t(lang, 'copy_code')}
                 </button>
-                <button type="button" disabled={!adminLink} onClick={() => adminLink && onCopy(adminLink, 'link')} className="glass-well min-h-11 flex-1 rounded-full px-4 text-sm font-medium disabled:opacity-40">
+                <button type="button" disabled={!adminLink} onClick={() => adminLink && onCopy(adminLink, 'link')} className={quietButton(`${textMuted(isDarkMode)} disabled:opacity-40`)}>
                   {t(lang, 'copy_admin_link')}
                 </button>
               </div>
-              <button type="button" data-role-time="admin" onClick={() => onPortal(campaign, 'dancer', 'admin')} className="glass-well min-h-11 w-full rounded-full px-4 text-sm font-medium">
+              <button type="button" data-role-time="admin" onClick={() => onPortal(campaign, 'dancer', 'admin')} className="glass-well min-h-9 w-full rounded-full px-4 text-sm font-medium">
                 {t(lang, 'admin_time')}
               </button>
             </section>

@@ -29,7 +29,7 @@ export function MarkFilterControl({
               data-mark={mode}
               aria-pressed={on}
               onClick={() => onChange(mode)}
-              className={`min-h-11 rounded-full text-xs font-bold ${wide ? 'flex-1 px-2' : 'px-3'} ${on ? tone : ''}`}
+              className={`min-h-9 rounded-full text-xs font-bold ${wide ? 'flex-1 px-2' : 'px-3'} ${on ? tone : ''}`}
             >
               {t(lang, mode === 'na' ? 'mode_unavailable' : mode === 'ok' ? 'mode_available' : 'filter_both')}
             </button>

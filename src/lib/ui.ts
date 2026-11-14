@@ -9,18 +9,23 @@ export function inputClass(isDarkMode: boolean): string {
 }
 
 export function textPrimary(isDarkMode: boolean): string {
-  return isDarkMode ? 'text-white' : 'text-zinc-900'
+  return isDarkMode ? 'text-[color:var(--p-ink)]' : 'text-zinc-900'
 }
 
 export function textMuted(isDarkMode: boolean): string {
-  return isDarkMode ? 'text-zinc-300' : 'text-zinc-600'
+  return isDarkMode ? 'text-[color:var(--p-muted)]' : 'text-zinc-600'
 }
 
 export function primaryButton(extra = ''): string {
-  return `btn-glow btn-primary rounded-full font-semibold disabled:opacity-40 ${extra}`
+  return `btn-glow btn-primary btn-press rounded-full font-semibold disabled:opacity-40 ${extra}`
+}
+
+/** Quiet text/control action — not a pill CTA. */
+export function quietButton(extra = ''): string {
+  return `inline-flex h-8 items-center rounded-md px-2 text-xs font-bold opacity-75 transition-opacity hover:opacity-100 ${extra}`
 }
 
 /** Filled, rounded group. Spacing separates these; they do not use a hairline rule. */
 export function groupSurface(extra = ''): string {
-  return `glass-well min-w-0 rounded-2xl p-4 sm:p-5 ${extra}`.trim()
+  return `glass-well min-w-0 card-pad ${extra}`.trim()
 }

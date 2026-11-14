@@ -37,6 +37,17 @@ interface HeatDay {
 interface Preview {
   block: SessionRange
   sourceId: string | null
+  /** Days covered by an Excel-style create drag (same hours on each). */
+  spanIsos: string[]
+}
+
+function daysInSpan(ordered: readonly string[], from: string, to: string): string[] {
+  const start = ordered.indexOf(from)
+  const end = ordered.indexOf(to)
+  if (start < 0 || end < 0) return from ? [from] : []
+  const lo = Math.min(start, end)
+  const hi = Math.max(start, end)
+  return ordered.slice(lo, hi + 1)
 }
 
 /** Measure day columns, not every cell. A block covers the cells underneath, and reading each cell forced a layout on every move. */
@@ -84,9 +95,10 @@ function blockFromDrag(
 ): SessionRange {
   if (drag.kind === 'create' && index === drag.origin && duration != null && duration > SLOT_STEP) {
     const start = roundHour(windowStart + drag.origin * SLOT_STEP)
-    return { id: drag.id, iso: drag.iso, ...fitDuration({ startHour: start, endHour: start }, duration, windowStart, windowEnd) }
+    return { id: drag.id, iso, ...fitDuration({ startHour: start, endHour: start }, duration, windowStart, windowEnd) }
   }
-  if (drag.kind === 'create') return { id: drag.id, iso: drag.iso, ...rangeFromCellIndexes(windowStart, drag.origin, index) }
+  // Create follows the pointer day so a drag can span columns like a spreadsheet selection.
+  if (drag.kind === 'create') return { id: drag.id, iso, ...rangeFromCellIndexes(windowStart, drag.origin, index) }
   if (drag.kind === 'move') return { ...drag.range, iso, ...moveHourRange(drag.range, index - drag.origin, windowStart, windowEnd) }
   if (drag.kind === 'resize-end') return { ...drag.range, ...resizeToCell('end', index, drag.range, windowStart, windowEnd) }
   return { ...drag.range, ...resizeToCell('start', index, drag.range, windowStart, windowEnd) }
@@ -112,14 +124,14 @@ export function slotMatchesSession(slot: TimeSlot, session: SessionRange): boole
 
 function scoreTone(score: number, isDarkMode: boolean, mode: MarkFilter): string {
   if (mode === 'na') {
-    if (score >= 70) return 'bg-[#f19ba8] text-white'
-    if (score >= 40) return isDarkMode ? 'bg-[#f19ba8]/40 text-white' : 'bg-[#f19ba8]/30 text-zinc-800'
+    if (score >= 70) return 'bg-[color:var(--logo-pink)] text-[color:var(--logo-pink-ink)]'
+    if (score >= 40) return isDarkMode ? 'bg-[color-mix(in_srgb,var(--logo-pink)_45%,transparent)] text-[#f4f4f5]' : 'bg-[color-mix(in_srgb,var(--logo-pink)_30%,white)] text-[color:var(--logo-pink-ink)]'
     if (score > 0) return isDarkMode ? 'bg-white/10 text-zinc-200' : 'bg-white text-zinc-600'
     return isDarkMode ? 'bg-black/30 text-zinc-500' : 'bg-zinc-100 text-zinc-400'
   }
-  if (score >= 90) return 'bg-[#7c7bb9] text-white'
-  if (score >= 70) return 'bg-[#93ba8c] text-white'
-  if (score >= 50) return 'bg-[#f6cf7a] text-zinc-900'
+  if (score >= 90) return 'bg-[color:var(--logo-purple)] text-white'
+  if (score >= 70) return 'bg-[color:var(--logo-sage)] text-[color:var(--logo-sage-ink)]'
+  if (score >= 50) return 'bg-[color:var(--logo-gold)] text-[color:var(--logo-gold-ink)]'
   if (score > 0) return isDarkMode ? 'bg-white/10 text-zinc-200' : 'bg-white text-zinc-600'
   return isDarkMode ? 'bg-black/30 text-zinc-500' : 'bg-zinc-100 text-zinc-400'
 }
@@ -136,7 +148,7 @@ function hourAttr(windowStart: number, index: number): string {
 function hiddenSession(item: SessionRange, preview: Preview | null): boolean {
   if (!preview) return false
   if (preview.sourceId) return item.id === preview.sourceId
-  return item.iso === preview.block.iso && rangesOverlap(item, preview.block)
+  return preview.spanIsos.includes(item.iso) && rangesOverlap(item, preview.block)
 }
 
 export function HeatBook({
@@ -176,7 +188,7 @@ export function HeatBook({
   windowStart: number
   windowEnd: number
   nameOf: (id: string) => string
-  onCommit: (block: SessionRange, sourceId: string | null) => void
+  onCommit: (block: SessionRange, sourceId: string | null, spanIsos?: string[]) => void
   onFocus: (id: string) => void
   onToggleDay: (iso: string) => void
   onPaintDays?: (isos: string[]) => void
@@ -293,18 +305,25 @@ export function HeatBook({
   function publish(drag: HeatDrag, iso: string, index: number, duration: number | null) {
     const block = blockFromDrag(drag, index, iso, windowStart, windowEnd, duration)
     const sourceId = sourceIdOf(drag)
+    const ordered = heat.map((day) => day.iso)
+    const spanIsos =
+      drag.kind === 'create' ? daysInSpan(ordered, drag.iso, iso) : [block.iso]
+    const primaryIso = spanIsos.includes(iso) ? iso : spanIsos[spanIsos.length - 1] ?? block.iso
+    const nextBlock = drag.kind === 'create' ? { ...block, iso: primaryIso } : block
     setPreview((current) => {
       if (
         current &&
         current.sourceId === sourceId &&
-        current.block.id === block.id &&
-        current.block.iso === block.iso &&
-        current.block.startHour === block.startHour &&
-        current.block.endHour === block.endHour
+        current.block.id === nextBlock.id &&
+        current.block.iso === nextBlock.iso &&
+        current.block.startHour === nextBlock.startHour &&
+        current.block.endHour === nextBlock.endHour &&
+        current.spanIsos.length === spanIsos.length &&
+        current.spanIsos.every((day, i) => day === spanIsos[i])
       ) {
         return current
       }
-      return { block, sourceId }
+      return { block: nextBlock, sourceId, spanIsos }
     })
   }
 
@@ -391,16 +410,20 @@ export function HeatBook({
     if (!drag || !gridRef.current) return
     const hit = cellFromPoint(event.clientX, event.clientY, gridRef.current) ?? fallbackCell(drag, windowStart)
     const block = blockFromDrag(drag, hit.index, hit.iso, windowStart, windowEnd, chosenHours)
+    const ordered = heat.map((day) => day.iso)
+    const spanIsos = drag.kind === 'create' ? daysInSpan(ordered, drag.iso, hit.iso) : [block.iso]
+    const primaryIso = spanIsos.includes(hit.iso) ? hit.iso : spanIsos[spanIsos.length - 1] ?? block.iso
+    const placed = drag.kind === 'create' ? { ...block, iso: primaryIso } : block
     setPreview(null)
     if (
       drag.kind !== 'create' &&
-      block.iso === drag.range.iso &&
-      block.startHour === drag.range.startHour &&
-      block.endHour === drag.range.endHour
+      placed.iso === drag.range.iso &&
+      placed.startHour === drag.range.startHour &&
+      placed.endHour === drag.range.endHour
     ) {
       onFocus(drag.range.id)
     } else {
-      onCommit(block, sourceIdOf(drag))
+      onCommit(placed, sourceIdOf(drag), drag.kind === 'create' && spanIsos.length > 1 ? spanIsos : undefined)
     }
     scrollRef.current?.focus()
   }
@@ -471,23 +494,23 @@ export function HeatBook({
 
   const cell = `${(2.25 * zoom).toFixed(3)}rem`
   const column = `${Math.max(3.2, 5.1 * zoom).toFixed(3)}rem`
+  const expandBtn =
+    dancers.length > 0 && cols > 0 ? (
+      <button
+        type="button"
+        data-grid-expand=""
+        aria-pressed={full}
+        aria-label={t(lang, full ? 'grid_collapse' : 'grid_expand')}
+        onClick={() => setFull((value) => !value)}
+        className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-md px-2 text-[11px] font-bold opacity-75 transition-opacity hover:opacity-100 ${textMuted(isDarkMode)}`}
+      >
+        <span aria-hidden="true">{full ? '↓' : '↗'}</span>
+        {t(lang, full ? 'grid_collapse' : 'grid_expand')}
+      </button>
+    ) : null
+
   const view = (
-    <div className={full ? 'heat-full' : 'mt-4 space-y-3'} data-grid-full={full ? '' : undefined}>
-      <div className="flex items-center justify-end gap-3">
-        {dancers.length > 0 && cols > 0 ? (
-          <button
-            type="button"
-            data-grid-expand=""
-            aria-pressed={full}
-            aria-label={t(lang, full ? 'grid_collapse' : 'grid_expand')}
-            onClick={() => setFull((value) => !value)}
-            className="glass-well inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-bold"
-          >
-            <span aria-hidden="true">{full ? '↓' : '↗'}</span>
-            {t(lang, full ? 'grid_collapse' : 'grid_expand')}
-          </button>
-        ) : null}
-      </div>
+    <div className={full ? 'heat-full' : 'mt-4 space-y-2'} data-grid-full={full ? '' : undefined}>
       {filter ? (
         <div role="group" aria-controls={dancers.length > 0 && cols > 0 ? 'overlap-grid' : undefined}>
           {filter}
@@ -497,23 +520,26 @@ export function HeatBook({
         <p className="text-sm text-zinc-400">{t(lang, 'list_empty')}</p>
       ) : cols === 0 ? null : (
         <>
-          <div className="flex items-center justify-between gap-3">
-            <p className={`text-sm font-semibold tabular-nums ${textPrimary(isDarkMode)}`} data-range-summary="" aria-live="polite">
+          <div className="flex items-center justify-between gap-2">
+            <p className={`min-w-0 truncate text-xs font-semibold tabular-nums sm:text-sm ${textPrimary(isDarkMode)}`} data-range-summary="" aria-live="polite">
               {summary}
               {sessions.length > 1 ? ` · ${t(lang, 'slots_picked', { n: sessions.length })}` : ''}
             </p>
-            {editable && focused ? (
-              <div className="flex shrink-0 gap-2">
-                <button type="button" data-remove-session="" onClick={() => onRemove(focused.id)} className={`min-h-11 text-xs font-bold ${textMuted(isDarkMode)}`}>
-                  {t(lang, 'clear_range')}
-                </button>
-                {sessions.length > 1 ? (
-                  <button type="button" onClick={onClearAll} className="min-h-11 text-xs font-bold text-[#f19ba8]">
-                    {t(lang, 'clear_all')}
+            <div className="flex shrink-0 items-center gap-1.5">
+              {editable && focused ? (
+                <>
+                  <button type="button" data-remove-session="" onClick={() => onRemove(focused.id)} className={`h-8 px-1.5 text-[11px] font-bold ${textMuted(isDarkMode)}`}>
+                    {t(lang, 'clear_range')}
                   </button>
-                ) : null}
-              </div>
-            ) : null}
+                  {sessions.length > 1 ? (
+                    <button type="button" onClick={onClearAll} className="h-8 px-1.5 text-[11px] font-bold text-[#f19ba8]">
+                      {t(lang, 'clear_all')}
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+              {expandBtn}
+            </div>
           </div>
           <div
             ref={scrollRef}
@@ -538,10 +564,12 @@ export function HeatBook({
             >
               <span className="heat-gutter" data-time-label="" style={{ gridColumn: 1, gridRow: 1 }} />
               {heat.map((day, dayIndex) => {
-                const picked = sessions.some((item) => item.iso === day.iso) || preview?.block.iso === day.iso
+                const picked =
+                  sessions.some((item) => item.iso === day.iso) ||
+                  preview?.block.iso === day.iso ||
+                  Boolean(preview?.spanIsos.includes(day.iso))
                 const label = formatLongDate(parseISODate(day.iso), lang)
                 const place = { gridColumn: dayIndex + 2, gridRow: 1 }
-                const canCopy = Boolean(focused)
                 return editable ? (
                   <div
                     key={day.iso}
@@ -553,11 +581,10 @@ export function HeatBook({
                       type="button"
                       data-duplicate-day={day.iso}
                       aria-label={t(lang, 'duplicate_day')}
-                      disabled={!canCopy}
                       onClick={() => onToggleDay(day.iso)}
-                      className="tone-fill-sage flex h-6 w-6 items-center justify-center rounded-full text-base font-bold leading-none disabled:opacity-40"
+                      className="heat-day-add glass-well"
                     >
-                      +
+                      <span aria-hidden="true">+</span>
                     </button>
                     <button
                       type="button"
@@ -565,7 +592,6 @@ export function HeatBook({
                       data-cal-iso={day.iso}
                       data-selected-day={picked ? '' : undefined}
                       aria-pressed={picked}
-                      disabled={sessions.length === 0 && !preview}
                       onPointerDown={(event) => {
                         if (!onPaintDays || !focused) return
                         const selectedDays = heat
@@ -606,9 +632,13 @@ export function HeatBook({
                 </span>
               ))}
               {heat.map((day, dayIndex) => {
+                const previewOnDay =
+                  preview && preview.spanIsos.includes(day.iso)
+                    ? [{ ...preview.block, id: `${preview.block.id}:${day.iso}`, iso: day.iso }]
+                    : []
                 const blocks = [
                   ...sessions.filter((item) => item.iso === day.iso && !hiddenSession(item, preview)),
-                  ...(preview?.block.iso === day.iso ? [preview.block] : []),
+                  ...previewOnDay,
                 ]
                 return (
                   <div key={day.iso} className="heat-col" data-day={day.iso} style={{ gridColumn: dayIndex + 2, gridRow: `2 / span ${cols}` }}>
@@ -638,7 +668,9 @@ export function HeatBook({
                         const endIndex = indexForHour(block.endHour, windowStart)
                         const span = endIndex - startIndex
                         if (span <= 0) return null
-                        const isFocus = preview ? block.id === preview.block.id : block.id === focused?.id
+                        const isFocus = preview
+                          ? preview.spanIsos.includes(day.iso) && block.startHour === preview.block.startHour
+                          : block.id === focused?.id
                         return (
                           <div
                             key={block.id}
@@ -646,7 +678,7 @@ export function HeatBook({
                             data-session-id={block.id}
                             data-booked-iso={block.iso}
                             data-day={block.iso}
-                            data-focused={isFocus ? '' : undefined}
+                            data-focused={isFocus && block.iso === (preview?.block.iso ?? focused?.iso) ? '' : undefined}
                             className={`heat-block ${isFocus ? 'heat-block-focus' : ''}`}
                             style={{
                               top: `calc(${startIndex} * (var(--heat-cell) + var(--heat-gap)))`,
@@ -654,13 +686,17 @@ export function HeatBook({
                               zIndex: isFocus ? 3 : 2,
                             }}
                           >
-                            {isFocus ? <span data-edge="start" className="heat-edge heat-edge-start" aria-label={t(lang, 'drag_hint')} /> : null}
+                            {isFocus && block.iso === (preview?.block.iso ?? focused?.iso) ? (
+                              <span data-edge="start" className="heat-edge heat-edge-start" aria-label={t(lang, 'drag_hint')} />
+                            ) : null}
                             <span className="heat-block-label">
                               {formatClock(block.startHour)}–{formatClock(block.endHour)}
                               <br />
                               {durationHours(block)} {t(lang, 'hours_unit')}
                             </span>
-                            {isFocus ? <span data-edge="end" className="heat-edge heat-edge-end" aria-label={t(lang, 'drag_hint')} /> : null}
+                            {isFocus && block.iso === (preview?.block.iso ?? focused?.iso) ? (
+                              <span data-edge="end" className="heat-edge heat-edge-end" aria-label={t(lang, 'drag_hint')} />
+                            ) : null}
                           </div>
                         )
                       })}

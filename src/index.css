@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  /* Logo circles (sampled from /logo.png) */
   --logo-sage: #92ba8c;
   --logo-sage-ink: #16301a;
   --logo-gold: #f5ce7b;
@@ -11,6 +12,53 @@
   --logo-pink-ink: #6e2433;
   --logo-purple: #7c7bba;
   --logo-purple-ink: #2e2d55;
+
+  /* Site tokens from logo palette — not taste lime */
+  --p-bg: #0f0f0f;
+  --p-surface: #1a1a1a;
+  --p-ink: #ffffff;
+  --p-muted: #8f8f8f;
+  /* purple = selected / focus chrome */
+  --p-accent: var(--logo-purple);
+  --p-accent-ink: #ffffff;
+  /* sage = primary CTA only (not every control) */
+  --p-action: var(--logo-sage);
+  --p-action-ink: var(--logo-sage-ink);
+
+  /* Spacing scale 4→128 (taste system.md) */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.5rem;
+  --s-6: 2rem;
+  --s-7: 3rem;
+  --s-8: 4rem;
+  --s-9: 6rem;
+  --s-10: 8rem;
+
+  --shell-max: 72rem;
+  --shell-gutter: 1.5rem;
+  --section-gap: var(--s-6);
+  --card-pad: var(--s-5);
+  --card-gap: var(--s-5);
+  --stack-gap: var(--s-4);
+  --control-h: 2.75rem;
+  --r-sm: 0.5rem;
+  --r-md: 0.75rem;
+  --r-lg: 1.25rem;
+
+  --font-display: "Instrument Sans", system-ui, sans-serif;
+  --font-text: "Instrument Sans", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, Menlo, Consolas, monospace;
+  --display-weight: 500;
+  --display-tracking: -0.028em;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --shell-gutter: 2rem;
+  }
 }
 
 @layer base {
@@ -23,9 +71,12 @@
 
   body {
     margin: 0;
-    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-text);
+    font-size: 15px;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    text-wrap: pretty;
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
   }
@@ -57,43 +108,40 @@
   }
 
   ::selection {
-    background: rgba(124, 123, 185, 0.35);
+    background: color-mix(in srgb, var(--p-accent) 35%, transparent);
   }
 }
 
 .font-serif {
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  letter-spacing: -0.04em;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
 }
 
 .theme-dark {
-  color: #f5f5f7;
-  background-color: #050506;
+  color: var(--p-ink);
+  background-color: var(--p-bg);
   background-image:
-    radial-gradient(920px 520px at 12% -8%, rgba(124, 123, 185, 0.32), transparent 58%),
-    radial-gradient(720px 420px at 100% 0%, rgba(246, 207, 122, 0.14), transparent 52%),
-    radial-gradient(780px 480px at 88% 108%, rgba(241, 155, 168, 0.16), transparent 54%),
-    radial-gradient(640px 400px at 0% 100%, rgba(147, 186, 140, 0.14), transparent 52%);
+    radial-gradient(720px 420px at 8% -6%, color-mix(in srgb, var(--p-accent) 10%, transparent), transparent 55%),
+    radial-gradient(640px 380px at 100% 0%, rgba(255, 255, 255, 0.04), transparent 50%);
 }
 
 .theme-light {
-  color: #1d1d1f;
-  background-color: #f5f5f7;
+  color: #0f0f0f;
+  background-color: #f7f7f5;
   background-image:
-    radial-gradient(860px 480px at 8% -10%, rgba(124, 123, 185, 0.18), transparent 58%),
-    radial-gradient(700px 400px at 100% 0%, rgba(246, 207, 122, 0.22), transparent 54%),
-    radial-gradient(760px 440px at 92% 108%, rgba(241, 155, 168, 0.16), transparent 54%),
-    radial-gradient(620px 380px at 0% 100%, rgba(147, 186, 140, 0.16), transparent 52%);
+    radial-gradient(720px 420px at 8% -6%, color-mix(in srgb, var(--logo-sage) 14%, transparent), transparent 55%),
+    radial-gradient(640px 380px at 100% 0%, rgba(0, 0, 0, 0.03), transparent 50%);
 }
 
 .glass {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: color-mix(in srgb, var(--p-surface) 88%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 18px 50px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(40px) saturate(1.6);
-  -webkit-backdrop-filter: blur(40px) saturate(1.6);
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 40px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(28px) saturate(1.2);
+  -webkit-backdrop-filter: blur(28px) saturate(1.2);
 }
 
 .theme-light .glass {
@@ -117,8 +165,8 @@
 }
 
 .glass-well {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
 }
 
 .theme-light .glass-well {
@@ -173,21 +221,21 @@ select.field-control {
 }
 
 .glass-input:focus {
-  border-color: var(--logo-purple);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--logo-purple) 22%, transparent);
-  outline: 2px solid var(--logo-gold);
+  border-color: color-mix(in srgb, var(--p-accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--p-accent) 22%, transparent);
+  outline: 2px solid var(--p-accent);
   outline-offset: 1px;
 }
 
 .btn-primary {
-  background: color-mix(in srgb, var(--logo-purple) 82%, var(--logo-purple-ink));
-  color: #fff;
+  background: var(--p-action);
+  color: var(--p-action-ink);
 }
 
 .btn-primary:focus-visible,
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid var(--logo-gold);
+  outline: 2px solid var(--p-accent);
   outline-offset: 2px;
 }
 
@@ -229,12 +277,14 @@ a:focus-visible {
   color: var(--logo-pink);
 }
 
+/* Selected chips / tabs: logo purple (not white, not sage-on-everything) */
 .chip-on {
-  background: color-mix(in srgb, var(--logo-purple) 24%, transparent);
-  color: var(--logo-purple-ink);
+  background: color-mix(in srgb, var(--logo-purple) 88%, var(--logo-purple-ink));
+  color: #fff;
 }
 
-.theme-dark .chip-on {
+.theme-light .chip-on {
+  background: var(--logo-purple);
   color: #fff;
 }
 
@@ -418,13 +468,47 @@ button.assign-chip {
 .chip-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--s-3);
   max-width: 100%;
   min-width: 0;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
+}
+
+/* Equal shell edges + section rhythm (taste layout) */
+.shell-main {
+  width: 100%;
+  max-width: var(--shell-max);
+  margin-inline: auto;
+  padding-inline: var(--shell-gutter);
+  padding-top: var(--s-5);
+  padding-bottom: max(var(--s-5), env(safe-area-inset-bottom));
+}
+
+@media (min-width: 640px) {
+  .shell-main {
+    padding-top: var(--s-6);
+    padding-bottom: max(var(--s-6), env(safe-area-inset-bottom));
+  }
+}
+
+.stack-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+}
+
+.stack-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stack-gap);
+}
+
+.card-pad {
+  padding: var(--card-pad);
+  border-radius: var(--r-lg);
 }
 
 .chip-row::-webkit-scrollbar {
@@ -500,17 +584,42 @@ button.assign-chip {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 4px;
   min-height: 2.5rem;
   padding: 0.2rem 0.15rem;
   border: 0;
   background: rgba(16, 16, 20, 0.96);
-  color: inherit;
+  color: #f4f4f5;
   font: inherit;
   font-size: 0.62rem;
   font-weight: 700;
   line-height: 1.15;
   text-align: center;
+}
+
+.heat-day button {
+  color: inherit;
+}
+
+/* Small mark, full 44px hit area (operate layout: usable touch, quiet glyph) */
+button.heat-day-add {
+  position: relative;
+  display: inline-flex;
+  height: 0.875rem;
+  width: 0.875rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+button.heat-day-add::before {
+  content: '';
+  position: absolute;
+  inset: -0.9rem;
 }
 
 button.heat-day {
@@ -523,14 +632,15 @@ button.heat-day:disabled {
 
 .heat-day-on,
 .theme-light .heat-day-on {
-  background: #f6cf7a;
-  color: #2a2416;
+  background: var(--logo-gold);
+  color: var(--logo-gold-ink);
 }
 
 .theme-light .heat-gutter,
 .theme-light .heat-time,
 .theme-light .heat-day {
   background: rgba(245, 245, 247, 0.96);
+  color: #27272a;
 }
 
 .heat-col {
@@ -702,5 +812,69 @@ button.heat-day:disabled {
     background: transparent;
     padding: 0;
     backdrop-filter: none;
+  }
+}
+
+/* Taste motion: press, tab settle, heat hover — quiet, not decorative */
+.btn-press {
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.btn-press:hover {
+  filter: brightness(1.04);
+}
+
+.btn-press:active {
+  transform: scale(0.97);
+}
+
+[data-hub-tabs] button,
+[data-results-toolbar] button,
+[data-mark-filter] button {
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
+}
+
+[data-hub-tabs] button:active,
+[data-results-toolbar] button:active {
+  transform: scale(0.98);
+}
+
+.heat-cell {
+  transition: filter 0.15s ease;
+}
+
+.heat-cell:hover {
+  filter: brightness(1.1);
+}
+
+.landing-hero[data-enter] {
+  animation: landing-enter 0.55s ease both;
+}
+
+.landing-hero[data-enter] .hero-heat-mock {
+  animation: landing-enter 0.65s ease 0.12s both;
+}
+
+@keyframes landing-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-press,
+  [data-hub-tabs] button,
+  [data-results-toolbar] button,
+  [data-mark-filter] button,
+  .heat-cell,
+  .landing-hero[data-enter],
+  .landing-hero[data-enter] .hero-heat-mock {
+    animation: none;
+    transition: none;
   }
 }

@@ -220,7 +220,7 @@ export function AssignTarget({
         if (!board.selected) return
         board.move(board.selected.personId, board.selected.fromGroupId, targetId)
       }}
-      className={`assign-target min-h-11 rounded-2xl p-1.5 ${hot ? 'assign-hot' : ''} ${armed ? 'assign-armed' : ''}`}
+      className={`assign-target flex min-h-11 flex-col gap-4 rounded-[var(--r-md)] p-1 ${hot ? 'assign-hot' : ''} ${armed ? 'assign-armed' : ''}`}
     >
       {children}
     </div>
@@ -257,7 +257,7 @@ export function AssignRoleTarget({
         if (!board.selected) return
         board.grant(board.selected.personId, role)
       }}
-      className={`assign-target min-h-16 rounded-2xl p-1.5 ${hot ? 'assign-hot' : ''} ${armed ? 'assign-armed' : ''}`}
+      className={`assign-target flex min-h-16 flex-col gap-4 rounded-[var(--r-md)] p-1 ${hot ? 'assign-hot' : ''} ${armed ? 'assign-armed' : ''}`}
     >
       {children}
       {hint ? (
@@ -273,37 +273,59 @@ export function AssignChips({
   people,
   fromGroupId,
   isDarkMode,
+  onEditTime,
+  editLabel,
 }: {
   people: PersonRef[]
   fromGroupId: string | null
   isDarkMode: boolean
+  onEditTime?: (personId: string) => void
+  editLabel?: string
 }) {
   const board = useContext(AssignContext)
   if (!board || people.length === 0) return null
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-2">
       {people.map((person) => {
         const on = board.selected?.personId === person.id && board.selected.fromGroupId === fromGroupId
         return (
-          <button
-            key={person.id}
-            type="button"
-            data-person-id={person.id}
-            data-from-group={fromGroupId ?? 'all'}
-            aria-pressed={on}
-            onPointerDown={(event) => board.beginDrag(person, fromGroupId, event)}
-            onContextMenu={(event) => event.preventDefault()}
-            onClick={(event) => {
-              event.stopPropagation()
-              board.toggleSelect(person.id, fromGroupId)
-            }}
-            className={`assign-chip inline-flex min-h-11 max-w-full cursor-grab select-none items-center gap-1.5 truncate rounded-full px-3 text-sm font-semibold touch-none ${
-              board.dragId === person.id ? 'opacity-40' : ''
-            } ${on ? 'chip-on' : isDarkMode ? 'bg-white/10 text-white' : 'bg-black/[0.06] text-zinc-900'}`}
-          >
-            <Grip />
-            {person.name}
-          </button>
+          <span key={person.id} className="inline-flex max-w-full items-center gap-1">
+            <button
+              type="button"
+              data-person-id={person.id}
+              data-from-group={fromGroupId ?? 'all'}
+              aria-pressed={on}
+              onPointerDown={(event) => board.beginDrag(person, fromGroupId, event)}
+              onContextMenu={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation()
+                board.toggleSelect(person.id, fromGroupId)
+              }}
+              className={`assign-chip inline-flex min-h-9 max-w-full cursor-grab select-none items-center gap-1.5 truncate rounded-full px-2.5 text-sm font-semibold touch-none ${
+                board.dragId === person.id ? 'opacity-40' : ''
+              } ${on ? 'chip-on' : isDarkMode ? 'bg-white/10 text-white' : 'bg-black/[0.06] text-zinc-900'}`}
+            >
+              <Grip />
+              {person.name}
+            </button>
+            {onEditTime ? (
+              <button
+                type="button"
+                data-edit-time={person.id}
+                aria-label={editLabel ?? 'Edit times'}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onEditTime(person.id)
+                }}
+                className={`inline-flex h-7 shrink-0 items-center rounded-md px-1.5 text-[11px] font-bold opacity-70 transition-opacity hover:opacity-100 ${
+                  isDarkMode ? 'text-white/80' : 'text-zinc-700'
+                }`}
+              >
+                {editLabel ?? 'Edit times'}
+              </button>
+            ) : null}
+          </span>
         )
       })}
     </div>
@@ -316,17 +338,21 @@ export function AssignTray({
   isDarkMode,
   label,
   ariaLabel,
+  onEditTime,
+  editLabel,
 }: {
   targetId: string | null
   people: PersonRef[]
   isDarkMode: boolean
   label?: string
   ariaLabel: string
+  onEditTime?: (personId: string) => void
+  editLabel?: string
 }) {
   return (
     <AssignTarget targetId={targetId} ariaLabel={ariaLabel}>
       {label ? <p className={`px-1 text-[10px] font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{label}</p> : null}
-      <AssignChips people={people} fromGroupId={targetId} isDarkMode={isDarkMode} />
+      <AssignChips people={people} fromGroupId={targetId} isDarkMode={isDarkMode} onEditTime={onEditTime} editLabel={editLabel} />
     </AssignTarget>
   )
 }

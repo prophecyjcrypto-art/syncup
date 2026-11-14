@@ -32,7 +32,7 @@ export function InviteCode({
     <p className={`text-sm ${textMuted(isDarkMode)}`}>{empty}</p>
   )
   return (
-    <div className="space-y-2 text-left" data-invite="">
+    <div className="space-y-3 text-left" data-invite="">
       {label || hint ? (
         <p className={`inline-flex min-w-0 items-center gap-1.5 text-[13px] font-medium ${textMuted(isDarkMode)}`}>
           <span className="truncate">{label}</span>
@@ -41,11 +41,11 @@ export function InviteCode({
       ) : null}
       {codeNode}
       {code && onCopy ? (
-        <div className="flex flex-wrap gap-1.5">
-          <button type="button" onClick={() => onCopy(code, 'code')} className="tone-fill-gold min-h-11 rounded-full px-4 text-sm font-medium">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <button type="button" onClick={() => onCopy(code, 'code')} className="tone-fill-gold min-h-9 rounded-full px-4 text-sm font-medium">
             {t(lang, 'copy_code')}
           </button>
-          <button type="button" onClick={() => onCopy(code, 'link')} className="glass-well min-h-11 rounded-full px-4 text-sm font-medium">
+          <button type="button" onClick={() => onCopy(code, 'link')} className={`min-h-9 rounded-md px-2 text-sm font-medium opacity-75 transition-opacity hover:opacity-100 ${textMuted(isDarkMode)}`}>
             {t(lang, 'copy_short_link')}
           </button>
         </div>

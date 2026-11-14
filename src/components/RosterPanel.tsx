@@ -138,7 +138,7 @@ export function RosterPanel({
               aria-label={t(lang, 'groups_label')}
               className={`min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
             />
-            <button type="submit" disabled={!groupName.trim()} className="tone-fill-sage min-h-11 shrink-0 rounded-full px-4 text-xs font-bold disabled:opacity-40">
+            <button type="submit" disabled={!groupName.trim()} className="tone-fill-purple min-h-11 shrink-0 rounded-full px-4 text-xs font-bold disabled:opacity-40">
               {t(lang, 'add_admin')}
             </button>
           </form>

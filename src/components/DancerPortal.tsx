@@ -14,7 +14,7 @@ import {
 import { publishedSlotKeys } from '../lib/sessionNotes'
 import { formatLongDate, formatTime, isPast, parseISODate } from '../lib/dates'
 import { classifySessionAttendance, incompleteCompulsoryDays, uncoveredDays } from '../lib/schedule'
-import { groupSurface, inputClass, textMuted, textPrimary } from '../lib/ui'
+import { cardClass, groupSurface, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { InfoTip } from './Guide'
 import type { Campaign, Language, PersonRole, TimeBlock } from '../types'
 
@@ -146,7 +146,7 @@ export function DancerPortal({
   const mineRequests = requests.filter((request) => request.status === 'pending' && request.personId === (mine?.id ?? userId))
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
+    <div className="mx-auto w-full max-w-[var(--shell-max)] stack-section">
       <button type="button" onClick={onBack} className={`text-xs font-bold uppercase ${textMuted(isDarkMode)}`}>
         ← {t(lang, 'back_home')}
       </button>
@@ -250,7 +250,9 @@ export function DancerPortal({
             role="dialog"
             aria-modal="true"
             data-session-sheet=""
-            className={`${groupSurface('w-full max-w-md space-y-3')}`}
+            className={`${cardClass(isDarkMode)} w-full max-w-md space-y-3 rounded-[1.5rem] p-4 sm:p-5 ${
+              isDarkMode ? '!bg-[rgba(18,18,22,0.96)]' : '!bg-[rgba(255,255,255,0.96)]'
+            }`}
             onClick={(event) => event.stopPropagation()}
           >
             <h3 className={`text-sm font-semibold ${textPrimary(isDarkMode)}`}>{t(lang, 'session_details')}</h3>

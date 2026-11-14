@@ -104,7 +104,7 @@ export function InfoTip({ lang, text, name }: { lang: Language; text: string; na
           event.stopPropagation()
           setPinned((value) => !value)
         }}
-        className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full border border-current/25 text-[10px] font-semibold leading-none opacity-60 hover:opacity-100"
+        className="inline-flex h-[14px] w-[14px] items-center justify-center rounded-full border border-current/25 text-[8px] font-semibold leading-none opacity-60 hover:opacity-100"
       >
         i
       </button>
@@ -138,11 +138,11 @@ export function FieldLabel({
 
 export function MiniSteps({ steps }: { steps: string[] }) {
   return (
-    <ol className="mb-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+    <ol className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-3">
       {steps.map((step, index) => (
-        <li key={step} className="glass-well flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm">
-          <span className="text-[11px] font-medium tabular-nums opacity-45">{String(index + 1).padStart(2, '0')}</span>
-          <span>{step}</span>
+        <li key={step} className="glass-well flex items-center gap-2 rounded-[var(--r-md)] px-3 py-2.5 text-[11px] leading-snug sm:text-xs">
+          <span className="shrink-0 font-mono text-[10px] font-medium tabular-nums opacity-45">{String(index + 1).padStart(2, '0')}</span>
+          <span className="min-w-0 text-pretty">{step}</span>
         </li>
       ))}
     </ol>

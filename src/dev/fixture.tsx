@@ -149,21 +149,24 @@ const demoEvent: Campaign = {
 
 function Shell({ children, flow }: { children: ReactNode; flow?: boolean }) {
   return (
-    <div className="theme-dark min-h-dvh" data-preview="">
+    <div className="theme-dark min-h-dvh" data-preview="" data-taste-preview="">
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        <div className="absolute -left-32 top-[-8rem] h-[26rem] w-[26rem] rounded-full bg-[#7c7bb9] opacity-40 blur-3xl" />
+        <div className="absolute -left-24 top-[-6rem] h-[22rem] w-[22rem] rounded-full bg-[color:var(--p-accent)] opacity-[0.08] blur-3xl" />
       </div>
       <div className="relative z-10">
+        <div className="border-b border-white/10 bg-[color:var(--logo-gold)] px-[var(--shell-gutter)] py-2 text-center text-[13px] font-medium text-[color:var(--logo-gold-ink)]">
+          Taste Skill preview · local only · not live
+        </div>
         <header className="glass-bar sticky top-0 z-30 pt-[env(safe-area-inset-top)]">
-          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-3 sm:h-16 sm:px-6">
-            <div className="flex min-w-0 items-center gap-2.5">
+          <div className="mx-auto flex h-14 max-w-[var(--shell-max)] items-center justify-between gap-3 px-[var(--shell-gutter)] sm:h-16">
+            <div className="flex min-w-0 items-center gap-3">
               <img src="/logo.png" alt="" className="h-8 w-8 shrink-0 object-contain" />
               <span className="min-w-0">
                 <span className={`block truncate text-[15px] font-semibold ${textPrimary(true)}`}>SyncUp</span>
                 <span className={`block truncate text-xs ${textMuted(true)}`}>Demo</span>
               </span>
             </div>
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="flex shrink-0 items-center gap-2">
               <button type="button" className="glass-well flex h-11 w-11 items-center justify-center rounded-full" aria-label="settings">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.4" />
@@ -176,7 +179,7 @@ function Shell({ children, flow }: { children: ReactNode; flow?: boolean }) {
             </div>
           </div>
           {flow && (
-            <div className="mx-auto max-w-6xl px-3 pb-1 sm:px-6">
+            <div className="mx-auto max-w-[var(--shell-max)] px-[var(--shell-gutter)] pb-2">
               <FlowSteps
                 lang={lang}
                 current="results"
@@ -186,7 +189,7 @@ function Shell({ children, flow }: { children: ReactNode; flow?: boolean }) {
             </div>
           )}
         </header>
-        <main className="mx-auto w-full max-w-6xl px-3 py-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-8">{children}</main>
+        <main className="shell-main">{children}</main>
       </div>
     </div>
   )
@@ -307,7 +310,15 @@ function LivePreview({ name }: { name: string }) {
             ),
           }))
         }
-        onGrantRole={(personId, role) =>
+        onSavePersonTimes={(input) =>
+          setEvent((current) => ({
+            ...current,
+            dancers: current.dancers.map((person) =>
+              person.id === input.personId ? { ...person, blocks: input.blocks, lastUpdated: new Date().toISOString() } : person,
+            ),
+          }))
+        }
+        onGrantRole={(personId, role) => {
           setEvent((current) => {
             const person = [...current.dancers, ...current.choreographers].find((item) => item.id === personId)
             if (!person) return current
@@ -325,7 +336,7 @@ function LivePreview({ name }: { name: string }) {
               admins: [...current.admins, { id: `admin-${personId}`, userId: person.userId, email: person.email.toLowerCase() }],
             }
           })
-        }
+        }}
       />
     </Shell>
   )
