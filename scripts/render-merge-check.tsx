@@ -126,8 +126,6 @@ const existing = renderToStaticMarkup(
       onCancel: () => undefined,
       onConfirm: () => undefined,
       onCopy: () => undefined,
-      onRotateOrganizer: () => undefined,
-      onRotateParticipant: () => undefined,
     }),
   ),
 )
@@ -143,7 +141,23 @@ assert(existing.includes('7K2MQ9P'), 'organizer invite shows the short code')
 assert(existing.includes('9RWT3MD'), 'participant invite shows the short code')
 assert(existing.includes('4H8K2MQ'), 'admin invite shows the short code')
 assert(!existing.includes('organizer=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'), 'the editor copies a code instead of showing the long organizer url')
-assert(!existing.includes('Not set yet'), 'an event that already has a duration does not offer a blank length')
+assert(existing.includes('Not set yet'), 'a saved duration can still be cleared')
+assert(existing.includes('>1 hour</option>'), 'one hour stays singular')
+assert(!existing.includes('>1 hours</option>'), 'one hour is not plural')
+assert(existing.includes('>1.5 hours</option>'), 'other lengths stay plural')
+assert(existing.includes('>0 hours</option>'), 'a zero buffer stays plural')
+assert(!existing.includes('New code'), 'the editor does not offer a new invite code')
+const sectionOrder = ['data-setup-section="timing"', 'data-setup-section="days"', 'data-setup-section="people"', 'data-setup-section="notes"']
+let sectionAt = -1
+for (const marker of sectionOrder) {
+  const at = existing.indexOf(marker)
+  assert(at > sectionAt, `edit page section out of order: ${marker}`)
+  sectionAt = at
+}
+const timing = existing.slice(existing.indexOf('data-setup-section="timing"'), existing.indexOf('data-setup-section="days"'))
+const lengthPair = timing.slice(timing.indexOf('data-timing-length'), timing.indexOf('data-setup-deadline'))
+assert(lengthPair.includes('Duration') && lengthPair.indexOf('Duration') < lengthPair.indexOf('Late / early buffer'), 'buffer sits with duration')
+assert(timing.indexOf('data-setup-deadline') > timing.indexOf('data-timing-length'), 'the deadline stays in the timing section')
 
 const hub = renderToStaticMarkup(
   createElement(OrganizerPortal, {
@@ -173,6 +187,8 @@ assert(hubParticipants.includes('2K7MQ9H') && hubParticipants.includes('data-per
 assert(!hub.slice(hub.indexOf('data-drop-group="all"'), hub.indexOf('data-drop-group="g1"')).includes('d1'), 'grouped dancers stay out of all participants')
 assert(!hubParticipants.includes('7K2MQ9P'), 'the hub keeps the organizer code outside participants')
 assert(hub.includes('data-assign-tray'), 'dancers can be assigned from the hub')
+assert(!hub.includes('New code'), 'the hub does not offer a new invite code')
+assert(hub.includes('Copy code') && hub.includes('Copy link'), 'the hub still copies a code or its link')
 
 const results = renderToStaticMarkup(
   withCalendar(
@@ -237,11 +253,67 @@ const list = renderToStaticMarkup(
     onPortal: () => undefined,
     onCopy: () => undefined,
     onJoinAdmin: () => undefined,
+    onHub: () => undefined,
   }),
 )
 assert(list.includes('View results'), 'a member can open results')
 assert(list.includes('Enter availability'), 'a member can still enter their own times')
+assert(list.includes('1 person'), 'one person is singular')
+assert(!list.includes('1 People') && !list.includes('1 people'), 'the card does not say People for one person')
 assert(!list.includes('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'), 'a member does not see the organizer invite code')
+
+const ownerList = renderToStaticMarkup(
+  createElement(CampaignList, {
+    lang: 'en',
+    isDarkMode: true,
+    campaigns: [{ ...campaign, groups: [{ id: 'g1', name: 'Main', memberIds: [], inviteCode: '2K7MQ9H' }] }],
+    userId: 'owner-1',
+    email: 'owner@example.com',
+    onCreate: () => undefined,
+    onOpen: () => undefined,
+    onDelete: () => undefined,
+    onChoreographers: () => undefined,
+    onDancers: () => undefined,
+    onResults: () => undefined,
+    onPortal: () => undefined,
+    onCopy: () => undefined,
+    onJoinAdmin: () => undefined,
+    onHub: () => undefined,
+  }),
+)
+assert(ownerList.includes('Details'), 'a manager opens a detail view')
+assert(ownerList.includes('View results'), 'results stay on the preview card')
+assert(!ownerList.includes('9RWT3MD'), 'the preview card hides the participant code')
+assert(!ownerList.includes('2K7MQ9H'), 'the preview card hides group codes')
+assert(!ownerList.includes('Copy admin link') && !ownerList.includes('Copy invite link'), 'invite actions stay off the card face')
+assert(!ownerList.includes('Enter availability'), 'operate actions stay off the manager card')
+assert(!ownerList.includes('New code'), 'the card does not rotate codes')
+
+const ownerDetail = renderToStaticMarkup(
+  createElement(CampaignList, {
+    lang: 'en',
+    isDarkMode: true,
+    campaigns: [{ ...campaign, groups: [{ id: 'g1', name: 'Main', memberIds: [], inviteCode: '2K7MQ9H' }] }],
+    userId: 'owner-1',
+    email: 'owner@example.com',
+    initialOpenId: 'event-1',
+    onCreate: () => undefined,
+    onOpen: () => undefined,
+    onDelete: () => undefined,
+    onChoreographers: () => undefined,
+    onDancers: () => undefined,
+    onResults: () => undefined,
+    onPortal: () => undefined,
+    onCopy: () => undefined,
+    onJoinAdmin: () => undefined,
+    onHub: () => undefined,
+  }),
+)
+assert(ownerDetail.includes('data-card-detail'), 'the detail view is reachable')
+assert(ownerDetail.includes('All participants') && ownerDetail.includes('9RWT3MD'), 'the detail shows the event-wide participant code')
+assert(ownerDetail.includes('Copy code') && ownerDetail.includes('Organizer link') && ownerDetail.includes('Copy admin link'), 'the detail labels each invite copy')
+assert(!ownerDetail.includes('2K7MQ9H'), 'group codes stay out of the card detail')
+assert(!ownerDetail.includes('New code'), 'the detail does not rotate codes')
 
 const editor = renderToStaticMarkup(
   withCalendar(

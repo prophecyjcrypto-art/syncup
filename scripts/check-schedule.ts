@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { formatHourCount, formatPeopleCount } from '../src/i18n.ts'
 import { getDaysArray, groupByMonth, parseISODate, setTime, toISODateString } from '../src/lib/dates.ts'
 import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, coveredMs, freeIntervals, markedBlockCount, markedHours, normalizeDurationHours, plannedSessionHours, responseCount, shortlistSessionHours, uncoveredDays } from '../src/lib/schedule.ts'
 import { analyzeEvent } from '../src/lib/analysis.ts'
@@ -181,6 +182,19 @@ assert(normalizeDurationHours(null) === null, 'null duration stays unset')
 assert(normalizeDurationHours(undefined) === null, 'a missing duration stays unset')
 assert(normalizeDurationHours('2.5') === 2.5, 'numeric strings still count as a duration')
 assert(normalizeDurationHours(0) === null, 'zero is not a session length')
+assert(normalizeDurationHours('') === null, 'choosing Not set yet yields null')
+assert(normalizeDurationHours('1.5') === 1.5, 'choosing 1.5 hours keeps that length')
+assert(formatHourCount('en', 1) === '1 hour' && formatHourCount('en', 0.5) === '0.5 hours' && formatHourCount('en', 1.5) === '1.5 hours', 'English hours agree in number')
+assert(formatHourCount('zh', 1) === '1 小時' && formatHourCount('zh', 1.5) === '1.5 小時', 'Chinese hours do not pluralize')
+assert(formatPeopleCount('en', 1) === '1 person' && formatPeopleCount('en', 2) === '2 people', 'English people agree in number')
+assert(formatPeopleCount('zh', 1) === '1 人', 'Chinese people count stays 人')
+const setupUi = readFileSync(new URL('../src/components/SetupPanel.tsx', import.meta.url), 'utf8')
+assert(setupUi.includes('<option value="">{t(lang, \'duration_unset\')}</option>'), 'Not set yet is always in the duration list')
+assert(setupUi.includes('normalizeDurationHours(event.target.value)'), 'the duration select clears through the null parser')
+for (const file of ['InviteCode.tsx', 'SetupPanel.tsx', 'OrganizerPortal.tsx', 'RosterPanel.tsx', 'CampaignList.tsx']) {
+  const source = readFileSync(new URL(`../src/components/${file}`, import.meta.url), 'utf8')
+  assert(!source.includes('rotate_invite') && !source.includes('onRotate'), `${file} does not offer a replacement invite code`)
+}
 
 const heat = availabilityHeatmap({ ...config, dayEndHour: 12 }, [naOnly, { id: 'd4', blocks: [] }], [day])
 assert(heat.length === 1 && heat[0].cells.length === 6, 'heatmap uses half-hour cells inside the daily window')

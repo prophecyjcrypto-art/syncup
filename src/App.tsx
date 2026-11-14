@@ -24,11 +24,7 @@ import {
   InviteError,
   ensureShortCodes,
   removeAdmin,
-  rotateAdminInvite,
-  rotateGroupInvite,
-  rotateOrganizerInvite,
   renameDanceGroup,
-  rotateParticipantInvite,
   savePortalPerson,
   saveRosterPerson,
   setDanceGroupMember,
@@ -592,7 +588,7 @@ export default function App() {
               setActiveId(campaign.id)
               setStep('hub')
             }}
-            onCopy={(url) => copyValue(url, 'link')}
+            onCopy={(value, kind) => copyValue(value, kind)}
             onJoinAdmin={(value) => void joinWithInvite(value)}
           />
         ) : step === 'setup' || step === 'choreographers' || step === 'dancers' || step === 'results' ? (
@@ -608,38 +604,10 @@ export default function App() {
                 onEdit={editing && user && isAdmin(editing, user.id, user.email) ? () => setReadOnly(false) : undefined}
                 onConfirm={(input, newGroups) => void saveSetup(input, newGroups)}
                 onCopy={(value, kind) => copyValue(value, kind)}
-                onRotateInvite={
-                  editing
-                    ? () =>
-                        void run(async () => {
-                          await rotateAdminInvite(editing.id)
-                          setBanner(t(lang, 'invite_rotated'))
-                        })
-                    : undefined
-                }
-                onRotateOrganizer={
-                  editing
-                    ? () =>
-                        void run(async () => {
-                          await rotateOrganizerInvite(editing.id)
-                          setBanner(t(lang, 'invite_rotated'))
-                        })
-                    : undefined
-                }
-                onRotateParticipant={
-                  editing
-                    ? () =>
-                        void run(async () => {
-                          await rotateParticipantInvite(editing.id)
-                          setBanner(t(lang, 'invite_rotated'))
-                        })
-                    : undefined
-                }
                 onRemoveAdmin={(adminId) => void run(() => removeAdmin(adminId))}
                 onCreateGroup={editing ? (name) => void run(() => createDanceGroup(editing.id, name)) : undefined}
                 onRenameGroup={(groupId, name) => void run(() => renameDanceGroup(groupId, name))}
                 onDeleteGroup={(groupId) => void run(() => deleteDanceGroup(groupId))}
-                onRotateGroup={editing ? (groupId) => void run(() => rotateGroupInvite(groupId)) : undefined}
               />
             ) : step === 'choreographers' && active ? (
               <RosterPanel
@@ -671,7 +639,6 @@ export default function App() {
                 onDeleteGroup={(groupId) => run(() => deleteDanceGroup(groupId))}
                 onToggleMember={(groupId, personId, included) => run(() => setDanceGroupMember(groupId, personId, included))}
                 onCopy={(value, kind) => copyValue(value, kind)}
-                onRotateGroup={(groupId) => run(() => rotateGroupInvite(groupId))}
               />
             ) : step === 'results' && active ? (
               <ResultsPanel
@@ -712,7 +679,6 @@ export default function App() {
             isDarkMode={isDarkMode}
             campaign={active}
             canEditEvent
-            canRotateEvent={isAdmin(active, user.id, user.email)}
             onBack={goHome}
             onSchedule={() => {
               setResultsFromHub(true)
@@ -724,39 +690,6 @@ export default function App() {
             onRenameGroup={(groupId, name) => void run(() => renameDanceGroup(groupId, name))}
             onDeleteGroup={(groupId) => void run(() => deleteDanceGroup(groupId))}
             onToggleMember={(groupId, personId, included) => run(() => setDanceGroupMember(groupId, personId, included))}
-            onRotateAdmin={
-              isAdmin(active, user.id, user.email)
-                ? () =>
-                    void run(async () => {
-                      await rotateAdminInvite(active.id)
-                      setBanner(t(lang, 'invite_rotated'))
-                    })
-                : undefined
-            }
-            onRotateOrganizer={
-              isAdmin(active, user.id, user.email)
-                ? () =>
-                    void run(async () => {
-                      await rotateOrganizerInvite(active.id)
-                      setBanner(t(lang, 'invite_rotated'))
-                    })
-                : undefined
-            }
-            onRotateParticipant={
-              isAdmin(active, user.id, user.email)
-                ? () =>
-                    void run(async () => {
-                      await rotateParticipantInvite(active.id)
-                      setBanner(t(lang, 'invite_rotated'))
-                    })
-                : undefined
-            }
-            onRotateGroup={(groupId) =>
-              void run(async () => {
-                await rotateGroupInvite(groupId)
-                setBanner(t(lang, 'invite_rotated'))
-              })
-            }
             onRemoveAdmin={(adminId) => void run(() => removeAdmin(adminId))}
           />
         ) : step === 'portal' && active ? (

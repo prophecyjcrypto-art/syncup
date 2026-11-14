@@ -28,7 +28,6 @@ export function RosterPanel({
   onDeleteGroup,
   onToggleMember,
   onCopy,
-  onRotateGroup,
 }: {
   lang: Language
   isDarkMode: boolean
@@ -43,7 +42,6 @@ export function RosterPanel({
   onDeleteGroup?: (groupId: string) => Promise<boolean>
   onToggleMember?: (groupId: string, personId: string, included: boolean) => Promise<boolean>
   onCopy?: (value: string, kind: 'code' | 'link') => void
-  onRotateGroup?: (groupId: string) => Promise<boolean>
 }) {
   const people = variant === 'choreographer' ? campaign.choreographers : campaign.dancers
   const groups = variant === 'dancer' ? campaign.groups : []
@@ -215,7 +213,6 @@ export function RosterPanel({
                 if (!code) return
                 onCopy(kind === 'link' ? shortInviteUrl(code) : code, kind)
               }}
-              onRotate={onRotateGroup ? () => void onRotateGroup(groupId) : undefined}
             />
           ) : null}
           <MarkFilterControl lang={lang} value={markFilter} onChange={setMarkFilter} />
