@@ -122,7 +122,7 @@ const confirmedSessions = ['2026-11-12', '2026-11-14', '2026-11-16'].map((iso, i
 const demoNotes: Record<string, SessionNote> = Object.fromEntries(
   confirmedSessions.map((key) => [key, {
     venue: lang === 'zh' ? '二號舞蹈室' : 'Studio 2',
-    remarks: lang === 'zh' ? '請準時到達。' : 'Please be on time.',
+    remarks: '',
   }]),
 )
 

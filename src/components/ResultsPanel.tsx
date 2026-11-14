@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { t } from '../i18n'
 import { useCalendar } from '../lib/calendarContext'
 import { buildIcs, formatSlotText } from '../lib/export'
@@ -77,6 +78,10 @@ export function ResultsPanel({
   const [earliestStart, setEarliestStart] = useState<number | null>(null)
   const [notes, setNotes] = useState<Record<string, SessionNote>>(() => ({ ...(campaign.config.sessionNotes ?? {}) }))
   const [draftPins, setDraftPins] = useState<string[]>(campaign.savedSlots)
+  const [cardChecks, setCardChecks] = useState<Set<string>>(new Set())
+  const [noteEditor, setNoteEditor] = useState<string[] | null>(null)
+  const [editorVenue, setEditorVenue] = useState('')
+  const [editorRemarks, setEditorRemarks] = useState('')
   const calendar = useCalendar()
   const notesKey = JSON.stringify(campaign.config.sessionNotes ?? {})
   const savedKey = campaign.savedSlots.join('|')
@@ -134,6 +139,10 @@ export function ResultsPanel({
     .filter((slot) => draftPins.includes(slotKey(slot)))
     .sort((left, right) => left.start.getTime() - right.start.getTime())
   const others = listed.filter((slot) => !draftPins.includes(slotKey(slot)))
+  const cardKeys = useMemo(() => {
+    const painted = sessions.map((session) => setTime(parseISODate(session.iso), session.startHour).toISOString())
+    return [...new Set([...draftPins, ...painted])]
+  }, [draftPins, sessions])
 
   const heatDates = (onDaysOnly ? campaign.onDays : days.map((day) => toISODateString(day))).sort()
   const listedHours = shortlistSessionHours(campaign.config.durationHours, campaign.savedSlots)
@@ -432,16 +441,43 @@ export function ResultsPanel({
     )
   }
 
-  function manualKeys(): string[] {
-    const painted = sessions.map((session) => setTime(parseISODate(session.iso), session.startHour).toISOString())
-    const source = painted.length > 0 ? painted : campaign.savedSlots
-    return [...new Set(source)]
+  function describeKey(key: string): string {
+    const start = new Date(key)
+    if (Number.isNaN(start.getTime())) return key
+    const painted = sessions.find((session) => setTime(parseISODate(session.iso), session.startHour).toISOString() === key)
+    const hours = painted ? durationHours(painted) : (draftHours ?? campaign.config.durationHours ?? 0)
+    const end = new Date(start.getTime() + hours * 3600000)
+    return `${formatLongDate(start, lang)} · ${formatTime(start, lang)}${hours > 0 ? ` – ${formatTime(end, lang)}` : ''}`
   }
 
-  function setNote(key: string, patch: Partial<SessionNote>) {
+  function openNoteEditor(keys: string[]) {
+    if (keys.length === 0) return
+    const first = notes[keys[0]] ?? { venue: '', remarks: '' }
+    const sameVenue = keys.every((key) => (notes[key]?.venue ?? '') === first.venue)
+    const sameRemarks = keys.every((key) => (notes[key]?.remarks ?? '') === first.remarks)
+    setEditorVenue(sameVenue ? first.venue : '')
+    setEditorRemarks(sameRemarks ? first.remarks : '')
+    setNoteEditor(keys)
+  }
+
+  function saveNoteEditor() {
+    if (!noteEditor) return
+    const venue = editorVenue.trim()
+    const remarks = editorRemarks.trim()
     setNotes((current) => {
-      const prev = current[key] ?? { venue: '', remarks: '' }
-      return { ...current, [key]: { venue: prev.venue, remarks: prev.remarks, ...patch } }
+      const next = { ...current }
+      for (const key of noteEditor) next[key] = { venue, remarks }
+      return next
+    })
+    setNoteEditor(null)
+  }
+
+  function toggleCardCheck(key: string) {
+    setCardChecks((current) => {
+      const next = new Set(current)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
     })
   }
 
@@ -513,61 +549,9 @@ export function ResultsPanel({
     )
   }
 
-  function draftFields(keys: string[]) {
-    if (!canPin || keys.length === 0) return null
+  function selectedSlots() {
     return (
-      <div className="mt-4 space-y-3" data-session-draft="">
-        {keys.map((key) => {
-          const start = new Date(key)
-          const hours = draftHours ?? campaign.config.durationHours ?? 0
-          const end = new Date(start.getTime() + hours * 3600000)
-          const note = notes[key] ?? { venue: '', remarks: '' }
-          const when = Number.isNaN(start.getTime())
-            ? key
-            : `${formatLongDate(start, lang)} · ${formatTime(start, lang)}${hours > 0 ? ` – ${formatTime(end, lang)}` : ''}`
-          return (
-            <div key={key} className="space-y-2">
-              <p className={`text-sm font-bold ${textPrimary(isDarkMode)}`}>{when}</p>
-              <label className="block space-y-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-                {t(lang, 'venue_label')}
-                <input
-                  data-venue=""
-                  value={note.venue}
-                  onChange={(event) => setNote(key, { venue: event.target.value })}
-                  className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
-                />
-              </label>
-              <label className="block space-y-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-                {t(lang, 'remarks_label')}
-                <textarea
-                  data-session-remarks=""
-                  rows={2}
-                  value={note.remarks}
-                  onChange={(event) => setNote(key, { remarks: event.target.value })}
-                  className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
-                />
-              </label>
-            </div>
-          )
-        })}
-        <button type="button" data-publish="" onClick={() => publish(keys)} className="btn-glow btn-primary min-h-11 rounded-full px-4 text-xs font-bold">
-          {t(lang, 'publish')}
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-7xl space-y-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          {embedded ? null : (
-            <button type="button" onClick={onBack} className={`min-h-11 self-start text-xs font-bold uppercase ${textMuted(isDarkMode)}`}>
-              ← {t(lang, 'roster')}
-            </button>
-          )}
-          <InfoTip lang={lang} name="results" text={t(lang, 'guide_results')} />
-        </div>
+      <section className="space-y-3" data-selected-slots="">
         <div className="chip-row">
           {listedHours != null ? (
             <p data-shortlist-hours="" className={`shrink-0 self-center text-xs font-bold tabular-nums ${textMuted(isDarkMode)}`}>
@@ -582,8 +566,64 @@ export function ResultsPanel({
               {calendar.token ? t(lang, 'calendar_save') : t(lang, 'calendar_connect')}
             </button>
           )}
+          {canPin ? (
+            <button type="button" data-publish="" disabled={cardKeys.length === 0} onClick={() => publish(cardKeys)} className="btn-glow btn-primary min-h-11 shrink-0 rounded-full px-4 text-xs font-bold disabled:opacity-40">
+              {t(lang, 'publish')}
+            </button>
+          ) : null}
+        </div>
+        {canPin && cardKeys.length > 0 ? (
+          <div className="space-y-2">
+            {cardChecks.size > 0 ? (
+              <button type="button" data-batch-edit="" onClick={() => openNoteEditor([...cardChecks])} className="glass-well min-h-11 rounded-full px-4 text-xs font-bold">
+                {t(lang, 'batch_edit')}
+              </button>
+            ) : null}
+            {cardKeys.map((key) => {
+              const note = notes[key] ?? { venue: '', remarks: '' }
+              const checked = cardChecks.has(key)
+              return (
+                <article key={key} data-selected-card="" data-slot-key={key} className="glass-well rounded-2xl p-3">
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      data-card-check=""
+                      checked={checked}
+                      aria-label={describeKey(key)}
+                      onChange={() => toggleCardCheck(key)}
+                      className="mt-1 h-4 w-4"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm font-bold ${textPrimary(isDarkMode)}`}>{describeKey(key)}</p>
+                      {note.venue ? <p data-card-venue="" className={`mt-1 text-sm ${textPrimary(isDarkMode)}`}>{note.venue}</p> : null}
+                      {note.remarks ? <p data-card-remarks="" className={`mt-1 whitespace-pre-wrap text-xs ${textMuted(isDarkMode)}`}>{note.remarks}</p> : null}
+                    </div>
+                    <button type="button" data-edit-slot="" aria-label={t(lang, 'edit_details')} onClick={() => openNoteEditor([key])} className="glass-well flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold">
+                      {t(lang, 'edit_details')}
+                    </button>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        ) : null}
+      </section>
+    )
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-7xl space-y-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          {embedded ? null : (
+            <button type="button" onClick={onBack} className={`min-h-11 self-start text-xs font-bold uppercase ${textMuted(isDarkMode)}`}>
+              ← {t(lang, 'roster')}
+            </button>
+          )}
+          <InfoTip lang={lang} name="results" text={t(lang, 'guide_results')} />
         </div>
       </div>
+      {selectedSlots()}
       {notice && <p className="text-sm font-medium text-[#93ba8c]">{notice}</p>}
       {canPin ? (
         <div className="inline-flex rounded-full p-0.5 glass-well" role="tablist" data-results-tab={resultsView}>
@@ -704,24 +744,7 @@ export function ResultsPanel({
               setSessions([])
               setFocusId(null)
             }}
-            footer={draftFields(manualKeys())}
             filter={<MarkFilterControl lang={lang} value={markFilter} onChange={setMarkFilter} wide />}
-            sheet={
-              <div className="space-y-1">
-                <p className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'shortlist_title')}</p>
-                {campaign.savedSlots.length === 0 ? (
-                  <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'analysis_none')}</p>
-                ) : (
-                  slots
-                    .filter((slot) => campaign.savedSlots.includes(slotKey(slot)))
-                    .map((slot) => (
-                      <p key={slotKey(slot)} className={`text-sm font-medium ${textPrimary(isDarkMode)}`}>
-                        {formatLongDate(slot.start, lang)} · {formatTime(slot.start, lang)} – {formatTime(slot.end, lang)}
-                      </p>
-                    ))
-                )}
-              </div>
-            }
           />
           <div className="mt-4 max-h-48 space-y-2 overflow-y-auto custom-scrollbar">
             <p className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'choreographer_overlap')}</p>
@@ -854,7 +877,6 @@ export function ResultsPanel({
               </select>
             </label>
             </div>
-            {draftFields(draftPins)}
             <div className="mt-6 space-y-4">
               {pinned.length > 0 && (
                 <div className="space-y-2">
@@ -887,6 +909,59 @@ export function ResultsPanel({
       )}
       </>
       )}
+      {noteEditor && typeof document !== 'undefined'
+        ? createPortal(
+            <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/50 p-4 sm:items-center" onClick={() => setNoteEditor(null)}>
+              <form
+                role="dialog"
+                aria-modal="true"
+                data-note-dialog=""
+                aria-label={noteEditor.length > 1 ? t(lang, 'batch_edit') : t(lang, 'edit_details')}
+                className={`${cardClass(isDarkMode)} w-full max-w-md space-y-3 rounded-[1.5rem] p-4`}
+                onClick={(event) => event.stopPropagation()}
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  saveNoteEditor()
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') setNoteEditor(null)
+                }}
+              >
+                <h3 className={`text-base font-semibold ${textPrimary(isDarkMode)}`}>
+                  {noteEditor.length > 1 ? t(lang, 'batch_edit') : t(lang, 'edit_details')}
+                </h3>
+                <label className="block space-y-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                  {t(lang, 'venue_label')}
+                  <input
+                    data-venue=""
+                    value={editorVenue}
+                    onChange={(event) => setEditorVenue(event.target.value)}
+                    className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+                  />
+                </label>
+                <label className="block space-y-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                  {t(lang, 'remarks_label')}
+                  <textarea
+                    data-session-remarks=""
+                    rows={3}
+                    value={editorRemarks}
+                    onChange={(event) => setEditorRemarks(event.target.value)}
+                    className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+                  />
+                </label>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setNoteEditor(null)} className="glass-well min-h-11 rounded-full px-4 text-xs font-bold">
+                    {t(lang, 'cancel')}
+                  </button>
+                  <button type="submit" data-save-details="" className="btn-glow btn-primary min-h-11 rounded-full px-4 text-xs font-bold">
+                    {t(lang, 'save_details')}
+                  </button>
+                </div>
+              </form>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }

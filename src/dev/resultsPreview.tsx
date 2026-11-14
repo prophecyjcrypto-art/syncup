@@ -18,7 +18,7 @@ const banner = {
 const copy = {
   en: {
     event: 'Spring show rehearsal',
-    remarks: 'Studio 2. Please be on time.',
+    remarks: '',
     organizer: 'Koko Lam',
     main: 'Main',
     reserve: 'Reserve',
@@ -31,7 +31,7 @@ const copy = {
   },
   zh: {
     event: '春季公演彩排',
-    remarks: '二號舞蹈室，請準時到達。',
+    remarks: '',
     organizer: '林可嵐',
     main: '主力',
     reserve: '後備',

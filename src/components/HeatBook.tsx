@@ -160,9 +160,7 @@ export function HeatBook({
   onPaintDays,
   onRemove,
   onClearAll,
-  sheet,
   filter,
-  footer,
 }: {
   lang: Language
   isDarkMode: boolean
@@ -184,9 +182,7 @@ export function HeatBook({
   onPaintDays?: (isos: string[]) => void
   onRemove: (id: string) => void
   onClearAll: () => void
-  sheet?: ReactNode
   filter?: ReactNode
-  footer?: ReactNode
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -545,44 +541,59 @@ export function HeatBook({
                 const picked = sessions.some((item) => item.iso === day.iso) || preview?.block.iso === day.iso
                 const label = formatLongDate(parseISODate(day.iso), lang)
                 const place = { gridColumn: dayIndex + 2, gridRow: 1 }
+                const canCopy = Boolean(focused)
                 return editable ? (
-                  <button
+                  <div
                     key={day.iso}
-                    type="button"
                     data-day-label=""
-                    data-day-toggle={day.iso}
-                    data-cal-iso={day.iso}
-                    data-selected-day={picked ? '' : undefined}
-                    aria-pressed={picked}
-                    disabled={sessions.length === 0 && !preview}
-                    onPointerDown={(event) => {
-                      if (!onPaintDays || !focused) return
-                      const selectedDays = heat
-                        .filter((item) =>
-                          sessions.some((entry) => entry.iso === item.iso && entry.startHour === focused.startHour && entry.endHour === focused.endHour),
-                        )
-                        .map((item) => item.iso)
-                      beginDayRangeDrag({
-                        pointerId: event.pointerId,
-                        pointerType: event.pointerType,
-                        button: event.button,
-                        clientX: event.clientX,
-                        clientY: event.clientY,
-                        iso: day.iso,
-                        ordered: heat.map((item) => item.iso),
-                        selected: new Set(selectedDays),
-                        onRange: onPaintDays,
-                      })
-                    }}
-                    onClick={() => {
-                      if (consumeDayClick()) return
-                      onToggleDay(day.iso)
-                    }}
                     className={`heat-day ${picked ? 'heat-day-on' : textPrimary(isDarkMode)}`}
                     style={place}
                   >
-                    {label}
-                  </button>
+                    <button
+                      type="button"
+                      data-duplicate-day={day.iso}
+                      aria-label={t(lang, 'duplicate_day')}
+                      disabled={!canCopy}
+                      onClick={() => onToggleDay(day.iso)}
+                      className="tone-fill-sage flex h-6 w-6 items-center justify-center rounded-full text-base font-bold leading-none disabled:opacity-40"
+                    >
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      data-day-toggle={day.iso}
+                      data-cal-iso={day.iso}
+                      data-selected-day={picked ? '' : undefined}
+                      aria-pressed={picked}
+                      disabled={sessions.length === 0 && !preview}
+                      onPointerDown={(event) => {
+                        if (!onPaintDays || !focused) return
+                        const selectedDays = heat
+                          .filter((item) =>
+                            sessions.some((entry) => entry.iso === item.iso && entry.startHour === focused.startHour && entry.endHour === focused.endHour),
+                          )
+                          .map((item) => item.iso)
+                        beginDayRangeDrag({
+                          pointerId: event.pointerId,
+                          pointerType: event.pointerType,
+                          button: event.button,
+                          clientX: event.clientX,
+                          clientY: event.clientY,
+                          iso: day.iso,
+                          ordered: heat.map((item) => item.iso),
+                          selected: new Set(selectedDays),
+                          onRange: onPaintDays,
+                        })
+                      }}
+                      onClick={() => {
+                        if (consumeDayClick()) return
+                        onToggleDay(day.iso)
+                      }}
+                      className="min-h-6 w-full bg-transparent text-[0.62rem] font-bold leading-tight"
+                    >
+                      {label}
+                    </button>
+                  </div>
                 ) : (
                   <span key={day.iso} className={`heat-day ${picked ? 'heat-day-on' : textPrimary(isDarkMode)}`} data-day-label="" style={place}>
                     {label}
@@ -661,12 +672,6 @@ export function HeatBook({
         </>
       )}
       {detail}
-      {footer}
-      {full ? (
-        <div className="heat-full-sheet" data-grid-sheet="">
-          {sheet}
-        </div>
-      ) : null}
     </div>
   )
   if (full && typeof document !== 'undefined') return createPortal(view, document.body)

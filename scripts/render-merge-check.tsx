@@ -318,7 +318,7 @@ const results = renderToStaticMarkup(
     }),
   ),
 )
-assert(results.includes('data-slot-grid') && !results.includes('Dancer overlap'), 'results show the heatmap without the overlap heading')
+assert(results.includes('data-slot-grid') && results.includes('data-duplicate-day') && !results.includes('Dancer overlap'), 'results show the heatmap without the overlap heading')
 assert(!results.includes('data-attendance') && !results.includes('data-suggest-dates'), 'date and attendance filters stay in Suggest')
 assert(results.includes('1 of 1 free'), 'heatmap cells count free dancers')
 assert(results.includes('data-pick="manual"') && results.includes('data-pick="suggest"'), 'results can switch between manual and suggested times')
@@ -393,7 +393,7 @@ const publishManual = renderToStaticMarkup(
     createElement(ResultsPanel, {
       lang: 'zh',
       isDarkMode: true,
-      campaign: { ...campaign, savedSlots: [publishedSlot], config: { ...config, durationHours: 2, sessionNotes: { [publishedSlot]: { venue: '二號舞蹈室', remarks: '請準時到達。' } } } },
+      campaign: { ...campaign, savedSlots: [publishedSlot], config: { ...config, durationHours: 2, sessionNotes: { [publishedSlot]: { venue: '二號舞蹈室', remarks: '' } } } },
       onBack: () => undefined,
       onSaveSlots: () => undefined,
       canPin: true,
@@ -417,9 +417,11 @@ const publishSuggest = renderToStaticMarkup(
     }),
   ),
 )
-assert(publishManual.includes('data-publish') && publishManual.includes('發佈') && publishManual.includes('data-venue') && publishManual.includes('二號舞蹈室'), 'manual publish includes the venue and remarks')
+assert(publishManual.includes('data-publish') && publishManual.includes('發佈') && publishManual.includes('data-selected-card') && publishManual.includes('data-edit-slot') && publishManual.includes('二號舞蹈室'), 'manual publish lists the selected time as a card')
+assert(publishManual.indexOf('data-selected-slots') < publishManual.indexOf('data-pick-mode'), 'selected times sit above manual and suggest')
+assert(!publishManual.includes('data-session-draft') && !publishManual.includes('請準時到達'), 'venue and remarks are not inline fields or filler')
 assert(!publishManual.includes('用這些時段') && !publishManual.includes('用這些時間') && !publishManual.includes('發佈給所有人'), 'publish does not use the old shortlist wording')
-assert(publishSuggest.includes('data-publish') && publishSuggest.includes('Publish') && publishSuggest.includes('data-venue') && publishSuggest.includes('data-session-remarks'), 'suggest publish uses the same button')
+assert(publishSuggest.includes('data-publish') && publishSuggest.includes('Publish') && publishSuggest.includes('data-selected-card') && publishSuggest.includes('data-edit-slot'), 'suggest uses the same selected-time cards')
 
 const list = renderToStaticMarkup(
   createElement(CampaignList, {
@@ -609,7 +611,7 @@ const portalView = renderToStaticMarkup(
         ...config,
         durationHours: 2,
         dayEndHour: 22,
-        sessionNotes: { [portalSession.toISOString()]: { venue: '二號舞蹈室', remarks: '請準時到達。' } },
+        sessionNotes: { [portalSession.toISOString()]: { venue: '二號舞蹈室', remarks: '' } },
       },
       savedSlots: [portalSession.toISOString()],
       dancers: [
@@ -642,7 +644,7 @@ assert(portalView.includes('已定時段') && portalView.includes('出席時數'
 assert(portalView.includes('data-attended-hours="2"') && portalView.includes('data-confirmed-session'), 'the afternoon session counts as attended')
 assert(portalView.includes('OK') && !portalView.includes('參加者重疊') && !portalView.includes('data-slot-grid'), 'the participant portal is not the organizer results grid')
 assert(portalView.includes('data-confirmed-day="2026-11-12"') && portalView.includes('14:00'), 'confirmed times are marked on the calendar')
-assert(portalView.includes('二號舞蹈室') && portalView.includes('請準時到達。') && portalView.includes('data-venue="二號舞蹈室"'), 'participants see the venue and remarks on the session')
+assert(portalView.includes('二號舞蹈室') && portalView.includes('data-venue="二號舞蹈室"') && !portalView.includes('請準時到達'), 'participants see the venue, and the demo remarks stay empty')
 function hubAccent(html: string, id: string): string {
   const button = html.match(new RegExp(`<button\\b[^>]*data-hub-step="${id}"[^>]*>`))?.[0] ?? ''
   return button.match(/data-accent="([^"]+)"/)?.[1] ?? ''

@@ -735,17 +735,21 @@ async function main() {
     await delay(40)
     const expanded = await cdp.eval<string>(`(() => {
       const node = document.querySelector('[data-grid-full]')
-      const box = node?.getBoundingClientRect()
+      const box = node instanceof HTMLElement ? node.getBoundingClientRect() : null
+      const grid = node?.querySelector('[data-slot-grid]')
+      const gridBox = grid instanceof HTMLElement ? grid.getBoundingClientRect() : null
+      const buried = node?.querySelector('textarea, input[data-venue], [data-publish], [data-session-draft], [data-selected-card]') != null
       return JSON.stringify({
         full: node != null,
-        sheet: document.querySelector('[data-grid-sheet]')?.textContent ?? '',
         covers: Boolean(box && box.top <= 1 && box.left <= 1 && box.width >= window.innerWidth - 2 && box.height >= window.innerHeight - 2),
+        gridShare: box && gridBox && box.height > 0 ? gridBox.height / box.height : 0,
+        buried,
         heading: document.body.innerText.includes('參加者重疊'),
         close: document.querySelector('[data-grid-expand]')?.textContent ?? '',
       })
     })()`)
-    const expandedParsed = JSON.parse(expanded) as { full: boolean; sheet: string; covers: boolean; heading: boolean; close: string }
-    assert(expandedParsed.full && expandedParsed.covers && expandedParsed.sheet.includes('候選') && !expandedParsed.heading && expandedParsed.close.includes('關閉'), `full calendar was ${expanded}`)
+    const expandedParsed = JSON.parse(expanded) as { full: boolean; covers: boolean; gridShare: number; buried: boolean; heading: boolean; close: string }
+    assert(expandedParsed.full && expandedParsed.covers && expandedParsed.gridShare >= 0.55 && !expandedParsed.buried && !expandedParsed.heading && expandedParsed.close.includes('關閉'), `full calendar was ${expanded}`)
     await cdp.eval(`document.querySelector('[data-grid-expand]')?.click()`)
     await delay(40)
     const closed = await cdp.eval<boolean>(`document.querySelector('[data-grid-full]') == null`)
