@@ -34,6 +34,8 @@ export interface Person {
   name: string
   email: string
   role: PersonRole
+  /** Set when a participant is also an organizer. Role and groups stay as they were. */
+  isOrganizer?: boolean
   blocks: TimeBlock[]
   lastUpdated: string | null
 }

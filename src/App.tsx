@@ -4,12 +4,12 @@ import { CampaignList } from './components/CampaignList'
 import { DancerPortal } from './components/DancerPortal'
 import { FlowSteps, InfoTip, type FlowStep } from './components/Guide'
 import { Landing } from './components/Landing'
-import { OrganizerPortal } from './components/OrganizerPortal'
+import { OrganizerPortal, type HubTab } from './components/OrganizerPortal'
 import { ResultsPanel } from './components/ResultsPanel'
 import { RosterPanel } from './components/RosterPanel'
 import { SetupPanel } from './components/SetupPanel'
 import { LANGUAGES, t } from './i18n'
-import { canManageRoster, isAdmin, isChoreographer } from './lib/access'
+import { canManageRoster, canSeeResults, isAdmin, isChoreographer } from './lib/access'
 import {
   campaignNeedsShortCodes,
   claimAnyInvite,
@@ -23,10 +23,12 @@ import {
   fetchCampaigns,
   InviteError,
   ensureShortCodes,
+  grantAdmin,
   removeAdmin,
   renameDanceGroup,
   savePortalPerson,
   saveRosterPerson,
+  setPersonOrganizer,
   setDanceGroupMember,
   setSavedSlots,
   updateCampaign,
@@ -132,6 +134,8 @@ export default function App() {
   const hasLoaded = useRef(false)
   const mintedShort = useRef(false)
   const [resultsFromHub, setResultsFromHub] = useState(false)
+  const [hubTab, setHubTab] = useState<HubTab>('participants')
+  const [portalIntent, setPortalIntent] = useState<'participant' | 'organizer' | 'admin'>('participant')
   const reloadRef = useRef<() => Promise<void>>(async () => {})
   const active = campaigns.find((campaign) => campaign.id === activeId)
 
@@ -222,12 +226,12 @@ export default function App() {
       }
       if (urlState.campaign) setLinkMissing(!(await campaignVisible(urlState.campaign)))
       else setLinkMissing(false)
-      let rows = await fetchCampaigns()
+      let rows = await fetchCampaigns(user)
       const missing = rows.filter((campaign) => canManageRoster(campaign, user.id, user.email) && campaignNeedsShortCodes(campaign))
       if (!mintedShort.current && missing.length > 0) {
         mintedShort.current = true
         await Promise.all(missing.map((campaign) => ensureShortCodes(campaign.id).catch(() => undefined)))
-        rows = await fetchCampaigns()
+        rows = await fetchCampaigns(user)
       }
       setCampaigns(rows)
       hasLoaded.current = true
@@ -294,11 +298,14 @@ export default function App() {
       const openedAsOrganizer = urlState.role === 'choreographer' && isChoreographer(target, user.id)
       if (urlState.role === 'dancer' || openedAsOrganizer) {
         setPortalRole(openedAsOrganizer ? 'choreographer' : 'dancer')
+        setPortalIntent(openedAsOrganizer ? 'organizer' : 'participant')
         setStep('portal')
-      } else if (canManageRoster(target, user.id, user.email)) {
-        setStep('choreographers')
+      } else if (canSeeResults(target, user.id, user.email)) {
+        setHubTab('participants')
+        setStep('hub')
       } else {
         setPortalRole('dancer')
+        setPortalIntent('participant')
         setStep('portal')
       }
       return
@@ -327,6 +334,7 @@ export default function App() {
 
   function jumpFlow(next: FlowStep) {
     if (next !== 'setup' && !active) return
+    if (next === 'results' && active && user && !canSeeResults(active, user.id, user.email)) return
     if (next === 'setup' && active) {
       setEditing(active)
       setReadOnly(!isAdmin(active, user?.id ?? '', user?.email ?? ''))
@@ -500,16 +508,16 @@ export default function App() {
             )}
           </div>
         </div>
-        {user && (step === 'setup' || step === 'choreographers' || step === 'dancers' || step === 'results') && (
+        {user && active && canSeeResults(active, user.id, user.email) && (step === 'setup' || step === 'choreographers' || step === 'dancers' || step === 'results') && (
           <div className="mx-auto max-w-6xl px-3 pb-1 sm:px-6">
             <FlowSteps
               lang={lang}
               current={step}
               enabled={{
                 setup: true,
-                choreographers: Boolean(active && canManageRoster(active, user.id, user.email)),
-                dancers: Boolean(active && canManageRoster(active, user.id, user.email)),
-                results: Boolean(active),
+                choreographers: true,
+                dancers: true,
+                results: true,
               }}
               onJump={jumpFlow}
             />
@@ -558,35 +566,30 @@ export default function App() {
               setReadOnly(false)
               setStep('setup')
             }}
-            onOpen={(campaign, mode) => {
-              setActiveId(campaign.id)
-              setEditing(campaign)
-              setReadOnly(mode === 'view' || !isAdmin(campaign, user.id, user.email))
-              setStep('setup')
-            }}
             onDelete={(campaign) => {
               if (window.confirm(t(lang, 'delete_confirm'))) void run(() => deleteCampaign(campaign.id))
             }}
-            onChoreographers={(campaign) => {
-              setActiveId(campaign.id)
-              setStep('choreographers')
-            }}
-            onDancers={(campaign) => {
-              setActiveId(campaign.id)
-              setStep('dancers')
-            }}
             onResults={(campaign) => {
+              if (!canSeeResults(campaign, user.id, user.email)) {
+                setActiveId(campaign.id)
+                setPortalRole('dancer')
+                setPortalIntent('participant')
+                setStep('portal')
+                return
+              }
               setActiveId(campaign.id)
               setResultsFromHub(false)
               setStep('results')
             }}
-            onPortal={(campaign, role) => {
+            onPortal={(campaign, role, intent) => {
               setActiveId(campaign.id)
               setPortalRole(role)
+              setPortalIntent(intent ?? (role === 'choreographer' ? 'organizer' : 'participant'))
               setStep('portal')
             }}
-            onHub={(campaign) => {
+            onHub={(campaign, tab) => {
               setActiveId(campaign.id)
+              setHubTab(tab && tab !== 'results' ? tab : 'participants')
               setStep('hub')
             }}
             onCopy={(value, kind) => copyValue(value, kind)}
@@ -641,13 +644,13 @@ export default function App() {
                 onToggleMember={(groupId, personId, included) => run(() => setDanceGroupMember(groupId, personId, included))}
                 onCopy={(value, kind) => copyValue(value, kind)}
               />
-            ) : step === 'results' && active ? (
+            ) : step === 'results' && active && canSeeResults(active, user.id, user.email) ? (
               <ResultsPanel
                 key={active.id}
                 lang={lang}
                 isDarkMode={isDarkMode}
                 campaign={active}
-                onBack={() => setStep(resultsFromHub ? 'hub' : canManageRoster(active, user.id, user.email) ? 'dancers' : 'campaigns')}
+                onBack={() => setStep(resultsFromHub ? 'hub' : 'dancers')}
                 canPin={canManageRoster(active, user.id, user.email)}
                 canSetDuration={isAdmin(active, user.id, user.email)}
                 onSaveSlots={(slots) => {
@@ -671,15 +674,39 @@ export default function App() {
                   )
                 }}
               />
+            ) : step === 'results' && active ? (
+              <DancerPortal
+                key={`${active.id}-${user.id}-results`}
+                lang={lang}
+                isDarkMode={isDarkMode}
+                campaign={active}
+                userId={user.id}
+                email={user.email}
+                linkRole="dancer"
+                intent="participant"
+                limited
+                onBack={goHome}
+                onSave={(input) =>
+                  run(() =>
+                    savePortalPerson({
+                      campaignId: active.id,
+                      userId: user.id,
+                      email: user.email,
+                      ...input,
+                    }),
+                  )
+                }
+              />
             ) : null}
           </>
         ) : step === 'hub' && active && canManageRoster(active, user.id, user.email) ? (
           <OrganizerPortal
-            key={active.id}
+            key={`${active.id}-${hubTab}`}
             lang={lang}
             isDarkMode={isDarkMode}
             campaign={active}
-            canEditEvent
+            canEditEvent={isAdmin(active, user.id, user.email)}
+            initialTab={hubTab}
             onBack={goHome}
             onSchedule={() => {
               setResultsFromHub(true)
@@ -692,16 +719,40 @@ export default function App() {
             onDeleteGroup={(groupId) => void run(() => deleteDanceGroup(groupId))}
             onToggleMember={(groupId, personId, included) => run(() => setDanceGroupMember(groupId, personId, included))}
             onRemoveAdmin={(adminId) => void run(() => removeAdmin(adminId))}
+            onGrantRole={(personId, role) => {
+              const person = [...active.dancers, ...active.choreographers].find((item) => item.id === personId)
+              if (!person) return
+              if (role === 'organizer') {
+                if (person.role === 'choreographer' || person.isOrganizer) return
+                return run(() => setPersonOrganizer(person.id, true))
+              }
+              if (!person.email.includes('@')) return run(async () => {
+                throw new Error(t(lang, 'admin_needs_email'))
+              })
+              if (active.admins.some((admin) => admin.email.toLowerCase() === person.email.toLowerCase())) return
+              return run(() => grantAdmin(active.id, person.email, person.userId))
+            }}
+            onOrganizerTime={() => {
+              setPortalRole('choreographer')
+              setPortalIntent('organizer')
+              setStep('portal')
+            }}
+            onAdminTime={() => {
+              setPortalRole('dancer')
+              setPortalIntent('admin')
+              setStep('portal')
+            }}
           />
         ) : step === 'portal' && active ? (
           <DancerPortal
-            key={`${active.id}-${user.id}`}
+            key={`${active.id}-${user.id}-${portalIntent}`}
             lang={lang}
             isDarkMode={isDarkMode}
             campaign={active}
             userId={user.id}
             email={user.email}
             linkRole={portalRole}
+            intent={portalIntent}
             onBack={goHome}
             onSave={(input) =>
               run(() =>

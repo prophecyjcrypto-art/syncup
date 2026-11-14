@@ -1,4 +1,5 @@
 import { createContext, useContext, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import type { RoleGrantKind } from '../lib/roles'
 import { textMuted } from '../lib/ui'
 
 type PersonRef = { id: string; name: string }
@@ -7,10 +8,19 @@ type Selection = { personId: string; fromGroupId: string | null }
 type Board = {
   selected: Selection | null
   overId: string | null
+  dragging: boolean
   consumeDragClick: () => boolean
   toggleSelect: (personId: string, fromGroupId: string | null) => void
   move: (personId: string, fromGroupId: string | null, toGroupId: string | null) => void
+  grant: (personId: string, role: RoleGrantKind) => void
   beginDrag: (person: PersonRef, fromGroupId: string | null, event: ReactPointerEvent<HTMLButtonElement>) => void
+}
+
+function dropAt(x: number, y: number): { group: string | null; role: RoleGrantKind | null } {
+  const node = document.elementFromPoint(x, y)
+  const role = node?.closest('[data-drop-role]')?.getAttribute('data-drop-role')
+  const group = node?.closest('[data-drop-group]')?.getAttribute('data-drop-group') ?? null
+  return { group, role: role === 'organizer' || role === 'admin' ? role : null }
 }
 
 const AssignContext = createContext<Board | null>(null)
@@ -19,15 +29,31 @@ export function useAssigning(): boolean {
   return useContext(AssignContext)?.selected != null
 }
 
+function Grip() {
+  return (
+    <svg data-grip="" width="10" height="14" viewBox="0 0 10 14" aria-hidden="true" className="shrink-0 opacity-70">
+      <circle cx="2.5" cy="2" r="1.05" fill="currentColor" />
+      <circle cx="7.5" cy="2" r="1.05" fill="currentColor" />
+      <circle cx="2.5" cy="7" r="1.05" fill="currentColor" />
+      <circle cx="7.5" cy="7" r="1.05" fill="currentColor" />
+      <circle cx="2.5" cy="12" r="1.05" fill="currentColor" />
+      <circle cx="7.5" cy="12" r="1.05" fill="currentColor" />
+    </svg>
+  )
+}
+
 export function AssignBoard({
   children,
   onMove,
+  onGrant,
 }: {
   children: ReactNode
   onMove: (personId: string, fromGroupId: string | null, toGroupId: string | null) => void
+  onGrant?: (personId: string, role: RoleGrantKind) => void
 }) {
   const [selected, setSelected] = useState<Selection | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
   const [ghost, setGhost] = useState<{ name: string; x: number; y: number } | null>(null)
   const suppress = useRef(false)
   const dragRef = useRef<{ id: string; fromGroupId: string | null; moved: boolean } | null>(null)
@@ -41,7 +67,15 @@ export function AssignBoard({
   function move(personId: string, fromGroupId: string | null, toGroupId: string | null) {
     setSelected(null)
     setOverId(null)
+    setDragging(false)
     onMove(personId, fromGroupId, toGroupId)
+  }
+
+  function grant(personId: string, role: RoleGrantKind) {
+    setSelected(null)
+    setOverId(null)
+    setDragging(false)
+    onGrant?.(personId, role)
   }
 
   function beginDrag(person: PersonRef, fromGroupId: string | null, event: ReactPointerEvent<HTMLButtonElement>) {
@@ -56,9 +90,10 @@ export function AssignBoard({
       const dy = ev.clientY - originY
       if (!dragRef.current.moved && dx * dx + dy * dy < 36) return
       dragRef.current.moved = true
+      setDragging(true)
       setGhost({ name: person.name, x: ev.clientX, y: ev.clientY })
-      const node = document.elementFromPoint(ev.clientX, ev.clientY)
-      setOverId(node?.closest('[data-drop-group]')?.getAttribute('data-drop-group') ?? null)
+      const drop = dropAt(ev.clientX, ev.clientY)
+      setOverId(drop.role ? `role:${drop.role}` : drop.group)
     }
     const onPointerUp = (ev: PointerEvent) => {
       if (ev.pointerId !== pointerId) return
@@ -69,6 +104,7 @@ export function AssignBoard({
       dragRef.current = null
       setGhost(null)
       setOverId(null)
+      setDragging(false)
       if (!drag?.moved) return
       suppress.current = true
       const stopClick = (click: MouseEvent) => {
@@ -77,9 +113,12 @@ export function AssignBoard({
         window.removeEventListener('click', stopClick, true)
       }
       window.addEventListener('click', stopClick, true)
-      const node = document.elementFromPoint(ev.clientX, ev.clientY)
-      const zone = node?.closest('[data-drop-group]')?.getAttribute('data-drop-group') ?? null
-      if (zone) move(drag.id, drag.fromGroupId, zone === 'all' ? null : zone)
+      const drop = dropAt(ev.clientX, ev.clientY)
+      if (drop.role) {
+        grant(drag.id, drop.role)
+        return
+      }
+      if (drop.group) move(drag.id, drag.fromGroupId, drop.group === 'all' ? null : drop.group)
     }
     window.addEventListener('pointermove', onPointerMove)
     window.addEventListener('pointerup', onPointerUp)
@@ -89,6 +128,7 @@ export function AssignBoard({
   const board: Board = {
     selected,
     overId,
+    dragging,
     consumeDragClick,
     toggleSelect: (personId, fromGroupId) => {
       if (consumeDragClick()) return
@@ -97,12 +137,15 @@ export function AssignBoard({
       )
     },
     move,
+    grant,
     beginDrag,
   }
 
   return (
     <AssignContext.Provider value={board}>
+      <div data-assign-board="" className="flex flex-col gap-4" data-assign-dragging={dragging || selected != null ? '' : undefined}>
       {children}
+      </div>
       {ghost ? (
         <span
           data-assign-ghost=""
@@ -129,7 +172,7 @@ export function AssignTarget({
   if (!board) return null
   const key = targetId ?? 'all'
   const hot = board.overId === key
-  const armed = board.selected != null
+  const armed = board.dragging || board.selected != null
   return (
     <div
       data-drop-group={key}
@@ -144,9 +187,51 @@ export function AssignTarget({
         if (!board.selected) return
         board.move(board.selected.personId, board.selected.fromGroupId, targetId)
       }}
-      className={`min-h-11 rounded-2xl p-1.5 ${hot ? 'bg-[#7c7bb9]/30 ring-2 ring-[#7c7bb9]' : armed ? 'ring-1 ring-[#7c7bb9]/45' : ''}`}
+      className={`assign-target min-h-11 rounded-2xl p-1.5 ${hot ? 'assign-hot' : ''} ${armed ? 'assign-armed' : ''}`}
     >
       {children}
+    </div>
+  )
+}
+
+export function AssignRoleTarget({
+  role,
+  ariaLabel,
+  hint,
+  children,
+}: {
+  role: RoleGrantKind
+  ariaLabel: string
+  hint?: string
+  children: ReactNode
+}) {
+  const board = useContext(AssignContext)
+  if (!board) return null
+  const key = `role:${role}`
+  const hot = board.overId === key
+  const armed = board.dragging || board.selected != null
+  return (
+    <div
+      data-drop-role={role}
+      data-assign-tray=""
+      role="group"
+      aria-label={ariaLabel}
+      onClick={(event) => {
+        const clicked = event.target as HTMLElement
+        if (clicked.closest('[data-person-id]')) return
+        if (clicked.closest('button, a, input, textarea, select') && !clicked.closest('[data-assign-hit]')) return
+        if (board.consumeDragClick()) return
+        if (!board.selected) return
+        board.grant(board.selected.personId, role)
+      }}
+      className={`assign-target min-h-16 rounded-2xl p-1.5 ${hot ? 'assign-hot' : ''} ${armed ? 'assign-armed' : ''}`}
+    >
+      {children}
+      {hint ? (
+        <p data-drop-hint="" className="px-1 py-2 text-sm font-medium opacity-70">
+          {hint}
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -178,10 +263,11 @@ export function AssignChips({
               event.stopPropagation()
               board.toggleSelect(person.id, fromGroupId)
             }}
-            className={`min-h-11 max-w-full cursor-grab select-none truncate rounded-full px-3 text-sm font-semibold ${
-              on ? 'bg-[#7c7bb9] text-white' : isDarkMode ? 'bg-white/10 text-white' : 'bg-black/[0.06] text-zinc-900'
+            className={`inline-flex min-h-11 max-w-full cursor-grab select-none items-center gap-1.5 truncate rounded-full px-3 text-sm font-semibold ${
+              on ? 'tone-fill-purple' : isDarkMode ? 'bg-white/10 text-white' : 'bg-black/[0.06] text-zinc-900'
             }`}
           >
+            <Grip />
             {person.name}
           </button>
         )

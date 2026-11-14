@@ -120,7 +120,7 @@ const en = {
   your_submissions: 'My times',
   sync_changes: 'Save my schedule',
   availability_hint:
-    'If you only mark NA, the rest of the daily range counts as OK. If you only mark OK, the rest counts as NA. If you mark both, every day must be filled for the whole daily range. Where they overlap, NA wins.',
+    'Drag across a day to mark NA or OK. Drag across dates to mark several days. On a phone, drag the same way. If you only mark NA, the rest of the daily range counts as OK. If you only mark OK, the rest counts as NA. If you mark both, every day must be filled for the whole daily range. Where they overlap, NA wins.',
   mode_unavailable: 'NA',
   mode_available: 'OK',
   whole_day: 'Whole day',
@@ -211,7 +211,7 @@ const en = {
   clear_all: 'Clear all',
   slot_blocked: 'That start does not fit the session length, or a checked organizer is not free.',
   heat_free: '{n} of {total} free',
-  guide_portal: 'Enter your name, tap the days, then add NA, OK, or a whole day. Save when the list looks right.',
+  guide_portal: 'Enter your name, tap the days, or drag across the calendar to mark NA or OK. Save when the list looks right.',
   guide_empty_results: 'Try unchecking an organizer, lowering the minimum, or clearing the date filter.',
   avail_step_1: 'Tap the days',
   avail_step_2: 'Choose NA or OK',
@@ -222,7 +222,7 @@ const en = {
   participants_label: 'Participants',
   all_participants: 'All participants',
   participants_hint:
-    'The all-participants code joins with no group. A group code joins as a participant and assigns that group. Drag someone onto a group, or onto All participants to leave that group. On a phone, tap a name, then tap a group.',
+    'The all-participants code joins with no group. A group code joins as a participant and assigns that group. Drag someone onto a group, the organizer box, or the admin box. A role does not remove their group. On a phone, tap a name, then tap the box.',
   tip_daily: 'People mark times inside this window. Whole day means this entire range.',
   tip_links: 'The organizer link can manage the list. The participant link only saves that person’s own times.',
   legend_marks: 'A gold ring is an event day. A pink outline is compulsory.',
@@ -261,7 +261,7 @@ const en = {
   groups_label: 'Groups',
   delete_group: 'Delete this group?',
   guide_groups:
-    'Name a group. Drag a participant onto a group, or onto All participants to leave that group. On a phone, tap a name, then tap a group. Tap a group name again to rename it.',
+    'Name a group. Drag a participant onto a group, the organizer box, or the admin box. On a phone, tap a name, then tap a box. Tap a group name again to rename it.',
   guide_marks: 'Both follows the usual schedule. OK and NA show only time marked that way.',
   guide_stats: 'NA and OK count marked blocks. Responses are people who saved at least one time. Session hours add up the shortlist, or the sessions on the grid when nothing is shortlisted. Attended hours are the time each person is free during those shortlisted sessions.',
   stats_title: 'Overview',
@@ -279,7 +279,7 @@ const en = {
   analysis_ungrouped: 'Ungrouped',
   hub_open: 'Organizer hub',
   hub_people: 'People',
-  hub_hint: 'See who has sent their times, move people between groups, and open settings or stats. The schedule stays on its own screen.',
+  hub_hint: 'Four steps: Event, Organizers, Participants, and Results. Drag people onto a group, organizer, or admin. Results stays with organizers and admins.',
   join_code_hint: 'Paste a code or a link for an admin, an organizer, a participant, or a group.',
   group_code_hint: 'People who use this code join as participants and are placed in this group.',
   groups_setup_hint: 'Name groups while you set up the event. You can assign people later.',
@@ -290,6 +290,11 @@ const en = {
   code_copied: 'Code copied.',
   copy_short_link: 'Copy link',
   no_groups: 'No groups yet.',
+  organizer_time: 'Organizer time',
+  admin_time: 'Admin time',
+  drop_here: 'Drop here',
+  admin_needs_email: 'Add an email before making this person an admin.',
+  results_private: 'Results are for organizers.',
 } as const
 
 const zh: { [K in keyof typeof en]: string } = {
@@ -412,7 +417,7 @@ const zh: { [K in keyof typeof en]: string } = {
   your_submissions: '我的時間',
   sync_changes: '儲存我的時間',
   availability_hint:
-    '若只標記 NA，每日時段中其餘時間視為 OK。若只標記 OK，其餘時間視為 NA。若兩者都標記，每一天都必須填滿整個每日時段。重疊的部分以 NA 為準。',
+    '在日曆上拖曳即可標記 NA 或 OK，橫向拖過數天可一次標記多日。手機上同樣拖曳。若只標記 NA，每日時段中其餘時間視為 OK。若只標記 OK，其餘時間視為 NA。若兩者都標記，每一天都必須填滿整個每日時段。重疊的部分以 NA 為準。',
   mode_unavailable: 'NA',
   mode_available: 'OK',
   whole_day: '全天',
@@ -503,7 +508,7 @@ const zh: { [K in keyof typeof en]: string } = {
   clear_all: '全部清除',
   slot_blocked: '這個開始時間放不進所選時長，或已勾選的主辦人沒有空。',
   heat_free: '{total} 人中有 {n} 人有空',
-  guide_portal: '填寫你的名稱，點選日期，再加入 NA、OK 或全天。確認清單後儲存。',
+  guide_portal: '填寫你的名稱，點選日期，或在日曆上拖曳以標記 NA 或 OK。確認清單後儲存。',
   guide_empty_results: '試著取消勾選一位主辦人、降低最低比例，或清除日期篩選。',
   avail_step_1: '點選日期',
   avail_step_2: '選擇 NA 或 OK',
@@ -514,7 +519,7 @@ const zh: { [K in keyof typeof en]: string } = {
   participants_label: '參加者',
   all_participants: '全體參加者',
   participants_hint:
-    '全體參加者邀請碼加入後尚未分組。組別邀請碼會以參加者身份加入，並編入該組。可將參加者拖到組別，或拖回全體參加者以離開該組。用手機時，先點選姓名，再點選組別。',
+    '全體參加者邀請碼加入後尚未分組。組別邀請碼會以參加者身份加入，並編入該組。可將參加者拖到組別、主辦人或管理員。授予身份不會移出組別。用手機時，先點選姓名，再點選方格。',
   tip_daily: '請在這個時間範圍內填寫。全天是指整段範圍。',
   tip_links: '主辦人連結可以管理名單。參加者連結只能儲存自己的時間。',
   legend_marks: '金圈是活動日。粉紅框是必須出席。',
@@ -553,7 +558,7 @@ const zh: { [K in keyof typeof en]: string } = {
   groups_label: '組別',
   delete_group: '刪除此組別？',
   guide_groups:
-    '先為組別命名。可將參加者拖到組別，或拖回全體參加者以離開該組。用手機時，先點選姓名，再點選組別。再點一次組別名稱可重新命名。',
+    '先為組別命名。可將參加者拖到組別、主辦人或管理員。用手機時，先點選姓名，再點選方格。再點一次組別名稱可重新命名。',
   guide_marks: '全部沿用一般時間表。OK 與 NA 只顯示已這樣標記的時間。',
   guide_stats: 'NA 與 OK 計算已標記的時段。已回覆是已儲存至少一段時間的人數。練習時數是候選時間的總和；若尚未候選，則以格子上的時段計算。出席時數是每人在候選時段內有空的時間。',
   stats_title: '概覽',
@@ -571,7 +576,7 @@ const zh: { [K in keyof typeof en]: string } = {
   analysis_ungrouped: '未分組',
   hub_open: '主辦工作台',
   hub_people: '名單',
-  hub_hint: '查看誰已交回時間，調整組別，並開啟設定或分析。時間表仍然獨立。',
+  hub_hint: '四個步驟：活動、主辦人、參加者、結果。可將參加者拖到組別、主辦人或管理員。結果只供主辦人與管理員查看。',
   join_code_hint: '貼上邀請碼或連結。可以是管理員、主辦人、參加者或組別。',
   group_code_hint: '使用此邀請碼的人會以參加者身份加入，並編入這組。',
   groups_setup_hint: '設定活動時可先為組別命名，稍後再編排參加者。',
@@ -582,6 +587,11 @@ const zh: { [K in keyof typeof en]: string } = {
   code_copied: '已複製邀請碼。',
   copy_short_link: '複製連結',
   no_groups: '尚未有組別。',
+  organizer_time: '主辦人時間',
+  admin_time: '管理員時間',
+  drop_here: '拖到這裡',
+  admin_needs_email: '請先為此參加者填寫電郵，才能設為管理員。',
+  results_private: '結果只供主辦人查看。',
 }
 
 export const LANGUAGES: { code: Language; label: string }[] = [

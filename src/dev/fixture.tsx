@@ -7,7 +7,7 @@ import { FlowSteps } from '../components/Guide'
 import { Landing } from '../components/Landing'
 import { ResultsPanel } from '../components/ResultsPanel'
 import { RosterPanel } from '../components/RosterPanel'
-import { OrganizerPortal } from '../components/OrganizerPortal'
+import { OrganizerPortal, type HubTab } from '../components/OrganizerPortal'
 import { SetupPanel } from '../components/SetupPanel'
 import { CalendarProvider } from '../lib/calendarContext'
 import { parseISODate, setTime } from '../lib/dates'
@@ -161,7 +161,7 @@ function Shell({ children, flow }: { children: ReactNode; flow?: boolean }) {
 }
 
 function LivePreview({ name }: { name: string }) {
-  const tab = name === 'hub-stats' ? 'stats' : name === 'hub-settings' ? 'settings' : 'people'
+  const tab: HubTab = name === 'hub-settings' ? 'event' : 'participants'
   const [event, setEvent] = useState(campaign)
   if (name === 'setup-event') {
     return (
@@ -232,6 +232,25 @@ function LivePreview({ name }: { name: string }) {
                 : group,
             ),
           }))
+        }
+        onGrantRole={(personId, role) =>
+          setEvent((current) => {
+            const person = [...current.dancers, ...current.choreographers].find((item) => item.id === personId)
+            if (!person) return current
+            if (role === 'organizer') {
+              return {
+                ...current,
+                dancers: current.dancers.map((item) => (item.id === personId ? { ...item, isOrganizer: true } : item)),
+                choreographers: current.choreographers.map((item) => (item.id === personId ? { ...item, isOrganizer: true } : item)),
+              }
+            }
+            if (!person.email.includes('@')) return current
+            if (current.admins.some((admin) => admin.email.toLowerCase() === person.email.toLowerCase())) return current
+            return {
+              ...current,
+              admins: [...current.admins, { id: `admin-${personId}`, userId: person.userId, email: person.email.toLowerCase() }],
+            }
+          })
         }
       />
     </Shell>
@@ -306,13 +325,10 @@ function Preview({ name }: { name: string }) {
               admins: [{ id: 'admin-cj', userId: 'admin-cj', email: 'admin@example.com' }],
             },
           ]}
-          userId="admin-cj"
-          email="admin@example.com"
+          userId={previewParams.get('as') === 'member' ? 'guest' : 'admin-cj'}
+          email={previewParams.get('as') === 'member' ? 'guest@example.com' : 'admin@example.com'}
           onCreate={() => undefined}
-          onOpen={() => undefined}
           onDelete={() => undefined}
-          onChoreographers={() => undefined}
-          onDancers={() => undefined}
           onResults={() => undefined}
           onPortal={() => undefined}
           onHub={() => undefined}
@@ -426,19 +442,7 @@ function Preview({ name }: { name: string }) {
     )
   }
   if (name === 'availability') {
-    return (
-      <Shell>
-        <AvailabilityEditor
-          lang={lang}
-          isDarkMode
-          config={campaign.config}
-          onDays={campaign.onDays}
-          compulsoryDays={campaign.compulsoryDays}
-          blocks={[]}
-          onChange={() => undefined}
-        />
-      </Shell>
-    )
+    return <AvailabilityPreview />
   }
   return (
     <CalendarProvider value={{ token: null, note: '', setNote: () => undefined, connect: () => undefined, disconnect: () => undefined }}>
@@ -455,6 +459,23 @@ function Preview({ name }: { name: string }) {
         />
       </Shell>
     </CalendarProvider>
+  )
+}
+
+function AvailabilityPreview() {
+  const [blocks, setBlocks] = useState<TimeBlock[]>([])
+  return (
+    <Shell>
+      <AvailabilityEditor
+        lang={lang}
+        isDarkMode
+        config={campaign.config}
+        onDays={campaign.onDays}
+        compulsoryDays={campaign.compulsoryDays}
+        blocks={blocks}
+        onChange={setBlocks}
+      />
+    </Shell>
   )
 }
 

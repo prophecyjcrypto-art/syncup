@@ -192,6 +192,52 @@ assert(!hubParticipants.includes('7K2MQ9P'), 'the hub keeps the organizer code o
 assert(hub.includes('data-assign-tray'), 'dancers can be assigned from the hub')
 assert(!hub.includes('New code'), 'the hub does not offer a new invite code')
 assert(hub.includes('Copy code') && hub.includes('Copy link'), 'the hub still copies a code or its link')
+assert(hub.includes('data-hub-step="event"') && hub.includes('Event'), 'the hub opens event settings')
+assert(hub.includes('data-hub-step="organizers"') && hub.includes('Organizers'), 'the hub names the organizer step')
+assert(hub.includes('data-hub-step="participants"') && hub.includes('Participants'), 'the hub names the participant step')
+assert(hub.includes('data-hub-step="results"') && hub.includes('Results'), 'the schedule step is called Results')
+assert(!hub.includes('Schedule'), 'the hub does not call that step Schedule')
+assert(hub.includes('data-drop-role="organizer"') && hub.includes('data-drop-role="admin"'), 'organizer and admin boxes are drop targets')
+assert(hub.includes('data-grip'), 'people show a drag grip')
+assert(hub.includes('Drop here'), 'empty role boxes say where to drop')
+const hubEvent = renderToStaticMarkup(
+  createElement(OrganizerPortal, {
+    lang: 'en',
+    isDarkMode: true,
+    campaign,
+    canEditEvent: true,
+    initialTab: 'event',
+    onBack: () => undefined,
+    onSchedule: () => undefined,
+    onCopy: () => undefined,
+    onSave: () => undefined,
+    onCreateGroup: () => undefined,
+    onRenameGroup: () => undefined,
+    onDeleteGroup: () => undefined,
+    onToggleMember: () => undefined,
+  }),
+)
+assert(hubEvent.includes('data-hub-step="event"') && hubEvent.includes('data-setup-section="timing"'), 'event settings live in the hub')
+assert(hubEvent.includes('Duration'), 'the hub can edit the event length')
+const hubZh = renderToStaticMarkup(
+  createElement(OrganizerPortal, {
+    lang: 'zh',
+    isDarkMode: false,
+    campaign,
+    canEditEvent: true,
+    onBack: () => undefined,
+    onSchedule: () => undefined,
+    onCopy: () => undefined,
+    onSave: () => undefined,
+    onCreateGroup: () => undefined,
+    onRenameGroup: () => undefined,
+    onDeleteGroup: () => undefined,
+    onToggleMember: () => undefined,
+  }),
+)
+assert(hubZh.includes('活動') && hubZh.includes('主辦人') && hubZh.includes('參加者') && hubZh.includes('結果'), 'Chinese hub steps use 活動、主辦人、參加者、結果')
+assert(hubZh.includes('data-hub-step="results"'), 'the Chinese results step is the fourth hub step')
+assert(!hubZh.includes('時間表'), 'the Chinese hub does not call the step 時間表')
 
 const results = renderToStaticMarkup(
   withCalendar(
@@ -259,7 +305,7 @@ const list = renderToStaticMarkup(
     onHub: () => undefined,
   }),
 )
-assert(list.includes('View results'), 'a member can open results')
+assert(!list.includes('View results') && !list.includes('data-results-entry'), 'a participant cannot open results')
 assert(list.includes('Enter availability'), 'a member can still enter their own times')
 assert(list.includes('1 person'), 'one person is singular')
 assert(!list.includes('1 People') && !list.includes('1 people'), 'the card does not say People for one person')
@@ -314,13 +360,21 @@ const ownerDetail = renderToStaticMarkup(
 )
 assert(ownerDetail.includes('data-card-detail'), 'the detail view is reachable')
 assert(ownerDetail.includes('All participants') && ownerDetail.includes('9RWT3MD'), 'the detail shows the event-wide participant code')
-assert(ownerDetail.includes('Organizer hub') && ownerDetail.includes('Edit event') && ownerDetail.includes('Enter availability'), 'the detail leads with named actions')
+assert(ownerDetail.includes('Organizer hub'), 'the detail opens the organizer hub by name')
+assert(!ownerDetail.includes('Edit event') && !ownerDetail.includes('Enter availability'), 'the detail does not repeat edit or a generic time button')
 assert(ownerDetail.includes('Copy code') && ownerDetail.includes('Copy organizer link') && ownerDetail.includes('Copy admin link'), 'the detail labels each invite copy')
 assert(ownerDetail.includes('Organizer invite') && ownerDetail.includes('Admin invite'), 'invite headings say who the link is for')
 assert(ownerDetail.includes('2K7MQ9H') && ownerDetail.includes('data-invite="group"'), 'each group keeps its code on the detail')
 assert(ownerDetail.includes('data-delete-event'), 'an owner can delete from the detail')
 assert(!ownerDetail.includes('border-t'), 'detail sections are cards, not hairline rules')
 assert(!ownerDetail.includes('New code') && !ownerDetail.includes('Copy invite link'), 'the detail does not rotate codes or reuse a vague invite label')
+const detail = ownerDetail.slice(ownerDetail.indexOf('data-card-detail'))
+assert(!detail.includes('View results'), 'details does not offer results')
+assert(detail.includes('Manage organizers') && detail.includes('data-role-time="organizer"'), 'organizer time and management stay on the organizer card')
+assert(detail.includes('Admin time') && detail.includes('data-role-time="admin"'), 'admin time stays on the admin card')
+assert(detail.includes('Manage participants') && detail.indexOf('data-invite="participant"') < detail.indexOf('Manage participants'), 'manage participants sits with all participants')
+assert(detail.indexOf('Manage participants') < detail.indexOf('data-invite="admin"'), 'manage participants is not inside the admin card')
+assert(detail.includes('7K2MQ9P') && detail.includes('4H8K2MQ'), 'organizer and admin cards show their codes')
 
 const adminDetail = renderToStaticMarkup(
   createElement(CampaignList, {
@@ -340,8 +394,6 @@ const adminDetail = renderToStaticMarkup(
     onCreate: () => undefined,
     onOpen: () => undefined,
     onDelete: () => undefined,
-    onChoreographers: () => undefined,
-    onDancers: () => undefined,
     onResults: () => undefined,
     onPortal: () => undefined,
     onCopy: () => undefined,
@@ -349,12 +401,15 @@ const adminDetail = renderToStaticMarkup(
     onHub: () => undefined,
   }),
 )
-assert(adminDetail.includes('主辦工作台') && adminDetail.includes('編輯活動') && adminDetail.includes('填寫我的時間'), 'Chinese actions name the hub, edit, and availability')
+assert(adminDetail.includes('主辦工作台'), 'Chinese names the organizer hub')
+assert(!adminDetail.includes('編輯活動') && !adminDetail.includes('填寫我的時間'), 'Chinese details drops edit and the generic time button')
 assert(adminDetail.includes('全體參加者') && adminDetail.includes('複製邀請碼') && adminDetail.includes('複製連結'), 'Chinese participant invites name the code and the link')
 assert(adminDetail.includes('主辦人邀請') && adminDetail.includes('複製主辦人連結'), 'the organizer control is an invite link')
 assert(adminDetail.includes('管理員邀請') && adminDetail.includes('複製管理員連結'), 'the admin control stays an admin invite link')
 assert(adminDetail.includes('2K7MQ9H') && adminDetail.includes('A組'), 'a group card names that group')
 assert(adminDetail.includes('data-delete-event') && adminDetail.includes('刪除'), 'an admin who is not the owner can delete')
+assert(adminDetail.includes('管理主辦人') && adminDetail.includes('管理參加者'), 'Chinese management labels sit on the matching cards')
+assert(adminDetail.includes('主辦人時間') && adminDetail.includes('管理員時間'), 'Chinese time actions name the role')
 const adminSheet = adminDetail.slice(adminDetail.indexOf('data-card-detail'))
 assert(!adminSheet.includes('>主辦<') && !adminSheet.includes('>主辦人<') && !adminSheet.includes('>管理員<'), 'the sheet does not use the short role names as actions')
 
@@ -403,7 +458,13 @@ const editor = renderToStaticMarkup(
 assert(!editor.includes('Connect Google Calendar'), 'availability editor hides Google Calendar')
 assert(!editor.includes(calendar.token), 'a stored calendar token is not rendered')
 assert(editor.includes('OK'), 'availability entry stays')
+assert(editor.includes('data-avail-grid') && editor.includes('data-avail-cell') && editor.includes('09:00'), 'availability uses a results-style time grid')
+assert((editor.match(/data-avail-cell/g) ?? []).length > 1, 'the grid has more than one paintable cell')
+assert(editor.includes('data-day-label') && editor.includes('data-day="2026-11-12"'), 'dates in the grid can be dragged too')
 
 assert(GOOGLE_CALENDAR_ENABLED === false, 'the calendar flag stays off')
+assert(setup.includes('btn-primary') || existing.includes('btn-primary') || hub.includes('tone-fill-gold'), 'accents use the logo palette')
+assert(hub.includes('data-accent="gold"') && hub.includes('data-accent="sage"') && hub.includes('data-accent="purple"'), 'hub steps distinguish logo colors')
+assert(ownerDetail.includes('role-gold') && ownerDetail.includes('role-sage') && ownerDetail.includes('role-purple'), 'role cards use the logo colors')
 
 console.log('merged UI checks passed')

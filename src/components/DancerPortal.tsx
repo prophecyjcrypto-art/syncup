@@ -14,6 +14,8 @@ export function DancerPortal({
   userId,
   email,
   linkRole,
+  intent = 'participant',
+  limited = false,
   onBack,
   onSave,
 }: {
@@ -23,6 +25,8 @@ export function DancerPortal({
   userId: string
   email: string
   linkRole: PersonRole
+  intent?: 'participant' | 'organizer' | 'admin'
+  limited?: boolean
   onBack: () => void
   onSave: (input: { name: string; role: PersonRole; blocks: TimeBlock[] }) => Promise<boolean>
 }) {
@@ -71,8 +75,9 @@ export function DancerPortal({
             <InfoTip lang={lang} name="portal" text={t(lang, 'guide_portal')} />
           </h2>
           <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>
-            {role === 'choreographer' ? t(lang, 'choreographer') : t(lang, 'dancer')} · {email}
+            {intent === 'organizer' ? t(lang, 'organizer_time') : intent === 'admin' ? t(lang, 'admin_time') : t(lang, 'dancer')} · {email}
           </p>
+          {limited ? <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'results_private')}</p> : null}
         </div>
         <p className={`rounded-full px-4 py-2 text-xs font-bold uppercase ${locked ? 'bg-zinc-700 text-zinc-300' : 'bg-[#7c7bb9] text-white'}`}>
           {locked ? t(lang, 'expired') : `${t(lang, 'deadline')} ${formatLongDate(new Date(campaign.expiryDate), lang)}`}
