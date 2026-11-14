@@ -470,7 +470,7 @@ export function HeatBook({
           <button
             type="button"
             onClick={() => onToggleSaved(chosenSlots.map((slot) => slot.start.toISOString()))}
-            className="min-h-11 rounded-full btn-glow bg-[#7c7bb9] px-4 text-xs font-bold text-white"
+            className="btn-glow btn-primary min-h-11 rounded-full px-4 text-xs font-bold"
           >
             {saved ? t(lang, 'on_shortlist') : chosenSlots.length > 1 ? t(lang, 'use_these_times') : t(lang, 'use_this_time')}
           </button>

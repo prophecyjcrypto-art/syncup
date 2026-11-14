@@ -301,6 +301,20 @@ async function main() {
         const grids = await cdp.eval<number>(`document.querySelectorAll('[data-slot-grid]').length`)
         assert(grids === 0, `${item.name} still has a drag grid`)
       }
+      if (item.path.includes('setup') && item.width < 800) {
+        const spill = await cdp.eval<string>(`(() => {
+          const card = document.querySelector('[data-setup-section="timing"]')
+          if (!(card instanceof HTMLElement)) return 'missing'
+          const box = card.getBoundingClientRect()
+          const fields = [...card.querySelectorAll('input, select')]
+          const bad = fields.filter((el) => {
+            const rect = el.getBoundingClientRect()
+            return rect.left < box.left + 12 || rect.right > box.right - 12
+          })
+          return bad.length === 0 ? 'inside' : String(bad.length)
+        })()`)
+        assert(spill === 'inside', `${item.name} fields spill past the card inset (${spill})`)
+      }
       if (item.shot) await shot(cdp, item.shot)
     }
 
@@ -517,7 +531,7 @@ async function main() {
     const picked = await cdp.eval<string>(`(async () => {
       const day = document.querySelector('.cal-day')
       if (!(day instanceof HTMLButtonElement)) return 'missing-day'
-      const on = () => day.className.includes('bg-[#f19ba8]')
+      const on = () => day.hasAttribute('data-day-selected')
       const clearShown = () => [...document.querySelectorAll('button')].some((button) => (button.textContent ?? '').includes('清除日期'))
       day.click()
       await new Promise((resolve) => setTimeout(resolve, 40))
@@ -549,8 +563,14 @@ async function main() {
       apply.click()
       await new Promise((resolve) => setTimeout(resolve, 50))
       const again = document.querySelector('button[aria-label="移除"]') != null && document.body.innerText.includes('10:00')
-      const ok = selected && deselected && added && removed && again
-      return ok ? 'restored' : JSON.stringify({ selected, deselected, added, removed, again })
+      const clearAll = [...document.querySelectorAll('button')].find((button) => (button.textContent ?? '').includes('全部清除'))
+      if (!(clearAll instanceof HTMLButtonElement)) return 'missing-clear ' + JSON.stringify({ selected, deselected, added, removed, again })
+      clearAll.click()
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const cleared = document.body.innerText.includes('尚無時間') && document.querySelector('button[aria-label="移除"]') == null
+      const clearHidden = ![...document.querySelectorAll('button')].some((button) => (button.textContent ?? '').includes('全部清除'))
+      const ok = selected && deselected && added && removed && again && cleared && clearHidden
+      return ok ? 'restored' : JSON.stringify({ selected, deselected, added, removed, again, cleared, clearHidden })
     })()`)
     assert(picked === 'restored', `availability picker did not select, apply, and remove (${picked})`)
     await shot(cdp, '/opt/cursor/artifacts/availability-mobile.png')
@@ -815,6 +835,27 @@ async function main() {
     const hubDesktop = await overflow(cdp)
     assert(hubDesktop.scrollWidth <= hubDesktop.clientWidth + 1, `hub desktop overflows: ${hubDesktop.scrollWidth}`)
     assert(await cdp.eval<boolean>(`document.querySelector('[data-setup-section="timing"]') != null`), 'event settings are not in the hub')
+    await openPage(cdp, '/?preview=portal&lang=zh', 390, 844)
+    const participantPlan = await cdp.eval<string>(`JSON.stringify({
+      sessions: document.querySelectorAll('[data-confirmed-session]').length,
+      attended: document.querySelector('[data-attended-hours]')?.getAttribute('data-attended-hours') ?? '',
+      label: document.body.innerText.includes('出席時數') && document.body.innerText.includes('已定時段'),
+      grid: document.querySelector('[data-slot-grid]') != null,
+      days: document.querySelectorAll('.cal-day').length,
+      paint: document.querySelectorAll('[data-avail-cell]').length,
+    })`)
+    const participantParsed = JSON.parse(participantPlan) as {
+      sessions: number
+      attended: string
+      label: boolean
+      grid: boolean
+      days: number
+      paint: number
+    }
+    assert(
+      participantParsed.sessions >= 2 && Number(participantParsed.attended) > 0 && participantParsed.label && !participantParsed.grid && participantParsed.days > 0 && participantParsed.paint === 0,
+      `participant portal was ${participantPlan}`,
+    )
     await openPage(cdp, '/?preview=events&lang=zh&detail=1', 390, 844)
     const detailText = await cdp.eval<string>(`document.querySelector('[data-card-detail]')?.innerText ?? ''`)
     assert(detailText.includes('管理主辦人') && detailText.includes('管理參加者') && detailText.includes('主辦人時間') && detailText.includes('管理員時間'), `detail actions were "${detailText}"`)

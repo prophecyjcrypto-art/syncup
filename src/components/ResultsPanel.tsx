@@ -442,7 +442,7 @@ export function ResultsPanel({
             </p>
           ) : null}
           <button type="button" onClick={() => void copy(false)} className="glass-well min-h-11 shrink-0 whitespace-nowrap rounded-full px-4 text-xs font-bold">{t(lang, 'copy_basic')}</button>
-          <button type="button" onClick={() => void copy(true)} className="min-h-11 shrink-0 whitespace-nowrap rounded-full btn-glow bg-[#7c7bb9] px-4 text-xs font-bold text-white">{t(lang, 'copy_full')}</button>
+          <button type="button" onClick={() => void copy(true)} className="tone-fill-gold min-h-11 shrink-0 whitespace-nowrap rounded-full px-4 text-xs font-bold">{t(lang, 'copy_full')}</button>
           <button type="button" onClick={exportCalendar} className="min-h-11 shrink-0 whitespace-nowrap rounded-full border border-[#f6cf7a] px-4 text-xs font-bold text-[#f6cf7a]">{t(lang, 'export_calendar')}</button>
           {GOOGLE_CALENDAR_ENABLED && (
             <button type="button" onClick={() => void saveGoogle()} className="glass-well min-h-11 shrink-0 whitespace-nowrap rounded-full px-4 text-xs font-medium">
@@ -460,7 +460,7 @@ export function ResultsPanel({
             data-results-view="schedule"
             aria-selected={resultsView === 'schedule'}
             onClick={() => setResultsView('schedule')}
-            className={`min-h-11 rounded-full px-4 text-xs font-bold ${resultsView === 'schedule' ? 'bg-[#7c7bb9] text-white' : ''}`}
+            className={`min-h-11 rounded-full px-4 text-xs font-bold ${resultsView === 'schedule' ? 'chip-on' : ''}`}
           >
             {t(lang, 'tab_schedule')}
           </button>
@@ -470,7 +470,7 @@ export function ResultsPanel({
             data-results-view="analysis"
             aria-selected={resultsView === 'analysis'}
             onClick={() => setResultsView('analysis')}
-            className={`min-h-11 rounded-full px-4 text-xs font-bold ${resultsView === 'analysis' ? 'bg-[#7c7bb9] text-white' : ''}`}
+            className={`min-h-11 rounded-full px-4 text-xs font-bold ${resultsView === 'analysis' ? 'chip-on' : ''}`}
           >
             {t(lang, 'tab_analysis')}
           </button>
@@ -581,7 +581,7 @@ export function ResultsPanel({
                   data-group-id="all"
                   aria-pressed={groupId === null}
                   onClick={() => setGroupId(null)}
-                  className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${groupId === null ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
+                  className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${groupId === null ? 'chip-on' : 'glass-well'}`}
                 >
                   {t(lang, 'filter_all')}
                 </button>
@@ -597,7 +597,7 @@ export function ResultsPanel({
                         setGroupId(group.id)
                         setDancerFilter([])
                       }}
-                      className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
+                      className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'chip-on' : 'glass-well'}`}
                     >
                       {group.name}
                     </button>
@@ -615,7 +615,7 @@ export function ResultsPanel({
                 data-dancer-id="all"
                 aria-pressed={dancerFilter.length === 0}
                 onClick={() => setDancerFilter([])}
-                className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${dancerFilter.length === 0 ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
+                className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${dancerFilter.length === 0 ? 'chip-on' : 'glass-well'}`}
               >
                 {t(lang, 'filter_all')}
               </button>
@@ -628,7 +628,7 @@ export function ResultsPanel({
                     data-dancer-id={person.id}
                     aria-pressed={on}
                     onClick={() => toggleDancer(person.id)}
-                    className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
+                    className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'chip-on' : 'glass-well'}`}
                   >
                     {person.name}
                   </button>
@@ -779,7 +779,7 @@ function NameGroup({ title, names, tone }: { title: string; names: string[]; ton
 }
 
 function scoreTone(score: number, isDarkMode: boolean): string {
-  if (score >= 90) return 'bg-[#7c7bb9] text-white'
+  if (score >= 90) return 'bg-[color:var(--logo-purple)] text-white'
   if (score >= 70) return 'bg-[#93ba8c] text-white'
   if (score >= 50) return 'bg-[#f6cf7a] text-zinc-900'
   if (score > 0) return isDarkMode ? 'bg-white/10 text-zinc-200' : 'bg-white text-zinc-600'

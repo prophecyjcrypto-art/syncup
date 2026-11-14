@@ -118,10 +118,17 @@ export function AvailabilityEditor({
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-8">
       <div className={`lg:col-span-5 ${cardClass(isDarkMode)} h-fit rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6`}>
-        <h3 className={`inline-flex items-center gap-2 font-serif text-2xl font-semibold ${textPrimary(isDarkMode)}`}>
-          {t(lang, 'your_submissions')}
-          <InfoTip lang={lang} name="availability" text={t(lang, 'availability_hint')} />
-        </h3>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className={`inline-flex items-center gap-2 font-serif text-2xl font-semibold ${textPrimary(isDarkMode)}`}>
+            {t(lang, 'your_submissions')}
+            <InfoTip lang={lang} name="availability" text={t(lang, 'availability_hint')} />
+          </h3>
+          {blocks.length > 0 && !disabled ? (
+            <button type="button" data-clear-times="" onClick={() => onChange([])} className="tone-danger min-h-11 shrink-0 text-sm font-medium">
+              {t(lang, 'clear_all')}
+            </button>
+          ) : null}
+        </div>
         {missingDays.length > 0 && (
           <p className="mt-3 text-sm text-[#f19ba8]">{t(lang, 'mixed_incomplete', { days: missingLabel })}</p>
         )}
@@ -174,7 +181,7 @@ export function AvailabilityEditor({
                   <button
                     type="button"
                     onClick={() => onChange(blocks.filter((item) => item.id !== block.id))}
-                    className="flex h-11 w-11 items-center justify-center text-xl text-zinc-400 hover:text-[#f19ba8]"
+                    className="tone-danger flex h-11 w-11 items-center justify-center text-xl"
                     aria-label={t(lang, 'remove')}
                   >
                     ×
@@ -197,7 +204,7 @@ export function AvailabilityEditor({
             disabled={disabled}
             onClick={() => setMode('unavailable')}
             className={`flex-1 rounded-lg py-3 text-xs font-bold uppercase ${
-              !positive ? 'bg-[#f19ba8] text-white' : textMuted(isDarkMode)
+              !positive ? 'tone-fill-pink' : textMuted(isDarkMode)
             }`}
           >
             {t(lang, 'mode_unavailable')}
@@ -207,7 +214,7 @@ export function AvailabilityEditor({
             disabled={disabled}
             onClick={() => setMode('available')}
             className={`flex-1 rounded-lg py-3 text-xs font-bold uppercase ${
-              positive ? 'bg-[#93ba8c] text-white' : textMuted(isDarkMode)
+              positive ? 'tone-fill-sage' : textMuted(isDarkMode)
             }`}
           >
             {t(lang, 'mode_available')}
@@ -228,12 +235,9 @@ export function AvailabilityEditor({
                 disabled={disabled}
                 onClick={() => toggleDate(iso)}
                 aria-label={formatLongDate(day, lang)}
+                data-day-selected={chosen ? '' : undefined}
                 className={`cal-day relative flex w-full flex-col items-center justify-center rounded-lg text-xs font-bold leading-none ${
-                  chosen
-                    ? positive
-                      ? 'bg-[#93ba8c] text-white'
-                      : 'bg-[#f19ba8] text-white'
-                    : `glass-well ${isDarkMode ? 'text-zinc-100' : 'text-zinc-800'}`
+                  chosen ? (positive ? 'tone-fill-sage' : 'tone-fill-pink') : `glass-well ${isDarkMode ? 'text-zinc-100' : 'text-zinc-800'}`
                 } ${onDays.includes(iso) ? 'ring-2 ring-[#f6cf7a]' : ''} ${
                   compulsoryDays.includes(iso) ? 'outline outline-2 outline-[#f19ba8]' : ''
                 }`}
@@ -260,14 +264,14 @@ export function AvailabilityEditor({
               </button>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid min-w-0 grid-cols-2 gap-3">
             <label className="space-y-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
               {t(lang, 'from')}
               <select
                 value={startHour}
                 disabled={disabled}
                 onChange={(event) => setStartHour(Number(event.target.value))}
-                className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+                className={`w-full min-w-0 max-w-full box-border rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
               >
                 {hours.map((hour) => (
                   <option key={hour} value={hour}>
@@ -282,7 +286,7 @@ export function AvailabilityEditor({
                 value={endHour}
                 disabled={disabled}
                 onChange={(event) => setEndHour(Number(event.target.value))}
-                className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+                className={`w-full min-w-0 max-w-full box-border rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
               >
                 {hours.map((hour) => (
                   <option key={`end-${hour}`} value={hour}>
@@ -298,7 +302,7 @@ export function AvailabilityEditor({
               type="button"
               disabled={disabled}
               onClick={() => addSelection(mode, false)}
-              className={`min-h-11 rounded-2xl py-3 text-sm font-bold text-white ${positive ? 'bg-[#93ba8c]' : 'bg-[#f19ba8]'}`}
+              className={`min-h-11 rounded-2xl py-3 text-sm font-bold ${positive ? 'tone-fill-sage' : 'tone-fill-pink'}`}
             >
               {t(lang, 'apply')}
             </button>
@@ -306,7 +310,7 @@ export function AvailabilityEditor({
               type="button"
               disabled={disabled}
               onClick={() => addSelection('unavailable', true)}
-              className="min-h-11 rounded-2xl bg-[#f19ba8]/20 py-3 text-sm font-bold text-[#f19ba8]"
+              className="tone-soft-pink min-h-11 rounded-2xl py-3 text-sm font-bold"
             >
               {t(lang, 'whole_day_na')}
             </button>
@@ -314,7 +318,7 @@ export function AvailabilityEditor({
               type="button"
               disabled={disabled}
               onClick={() => addSelection('available', true)}
-              className="min-h-11 rounded-2xl bg-[#93ba8c]/20 py-3 text-sm font-bold text-[#93ba8c]"
+              className="tone-soft-sage min-h-11 rounded-2xl py-3 text-sm font-bold"
             >
               {t(lang, 'whole_day_avail')}
             </button>

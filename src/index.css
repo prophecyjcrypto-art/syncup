@@ -126,6 +126,48 @@
   border-color: rgba(0, 0, 0, 0.05);
 }
 
+.glass-input,
+.field-control {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+input.field-control,
+select.field-control,
+textarea.field-control {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+input[type='date'].field-control,
+input[type='time'].field-control,
+input[type='datetime-local'].field-control,
+select.field-control {
+  appearance: none;
+  -webkit-appearance: none;
+  background-clip: padding-box;
+  overflow: hidden;
+}
+
+input[type='date'].field-control::-webkit-datetime-edit,
+input[type='date'].field-control::-webkit-date-and-time-value,
+input[type='time'].field-control::-webkit-datetime-edit {
+  min-width: 0;
+  padding: 0;
+}
+
+select.field-control {
+  padding-inline-end: 2.25rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%2371717a' stroke-width='1.6' stroke-linecap='round' d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 0.7rem;
+}
+
 .glass-input {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -167,6 +209,33 @@ a:focus-visible {
 .tone-fill-pink {
   background: var(--logo-pink);
   color: var(--logo-pink-ink);
+}
+
+.tone-soft-sage {
+  background: color-mix(in srgb, var(--logo-sage) 22%, transparent);
+  color: var(--logo-sage-ink);
+}
+
+.theme-dark .tone-soft-sage {
+  color: var(--logo-sage);
+}
+
+.tone-soft-pink {
+  background: color-mix(in srgb, var(--logo-pink) 22%, transparent);
+  color: var(--logo-pink-ink);
+}
+
+.theme-dark .tone-soft-pink {
+  color: var(--logo-pink);
+}
+
+.chip-on {
+  background: color-mix(in srgb, var(--logo-purple) 24%, transparent);
+  color: var(--logo-purple-ink);
+}
+
+.theme-dark .chip-on {
+  color: #fff;
 }
 
 .tone-danger {

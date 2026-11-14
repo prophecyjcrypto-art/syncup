@@ -42,7 +42,7 @@ export function InviteCode({
       {codeNode}
       {code && onCopy ? (
         <div className="flex flex-wrap gap-1.5">
-          <button type="button" onClick={() => onCopy(code, 'code')} className="min-h-11 rounded-full bg-[#7c7bb9] px-4 text-sm font-medium text-white">
+          <button type="button" onClick={() => onCopy(code, 'code')} className="tone-fill-gold min-h-11 rounded-full px-4 text-sm font-medium">
             {t(lang, 'copy_code')}
           </button>
           <button type="button" onClick={() => onCopy(code, 'link')} className="glass-well min-h-11 rounded-full px-4 text-sm font-medium">

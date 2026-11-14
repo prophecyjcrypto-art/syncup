@@ -1,11 +1,13 @@
 import { createElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { AvailabilityEditor } from '../src/components/AvailabilityEditor.tsx'
+import { DancerPortal } from '../src/components/DancerPortal.tsx'
 import { CampaignList } from '../src/components/CampaignList.tsx'
 import { ResultsPanel } from '../src/components/ResultsPanel.tsx'
 import { OrganizerPortal } from '../src/components/OrganizerPortal.tsx'
 import { SetupPanel } from '../src/components/SetupPanel.tsx'
 import { CalendarProvider } from '../src/lib/calendarContext.tsx'
+import { parseISODate, setTime } from '../src/lib/dates.ts'
 import { GOOGLE_CALENDAR_ENABLED } from '../src/lib/googleCalendar.ts'
 import type { Campaign, TimeBlock } from '../src/types.ts'
 
@@ -525,6 +527,45 @@ assert(!editor.includes('data-avail-grid') && !editor.includes('data-avail-cell'
 assert(editor.includes('cal-day') && editor.includes('<select') && editor.includes('9:00 AM'), 'availability uses a month calendar and time ranges')
 assert(editor.includes('Add times') && editor.includes('Whole day OK') && editor.includes('Whole day NA'), 'a range or a whole day can be applied')
 assert(editor.includes('Tap the days') && editor.includes('My times'), 'the steps and the submissions list stay')
+assert(!editor.includes('Clear all'), 'clear all stays hidden until a time is saved')
+const portalSession = setTime(parseISODate('2026-11-12'), 14)
+const portalView = renderToStaticMarkup(
+  createElement(DancerPortal, {
+    lang: 'zh',
+    isDarkMode: false,
+    campaign: {
+      ...campaign,
+      config: { ...config, durationHours: 2, dayEndHour: 22 },
+      savedSlots: [portalSession.toISOString()],
+      dancers: [
+        {
+          ...dancer,
+          id: 'jie',
+          userId: 'jie',
+          name: '小杰',
+          email: 'jie@example.com',
+          blocks: [
+            {
+              id: 'na',
+              kind: 'unavailable' as const,
+              start: setTime(parseISODate('2026-11-12'), 18),
+              end: setTime(parseISODate('2026-11-12'), 22),
+              wholeDay: false,
+            },
+          ],
+        },
+      ],
+    },
+    userId: 'jie',
+    email: 'jie@example.com',
+    linkRole: 'dancer',
+    onBack: () => undefined,
+    onSave: async () => true,
+  }),
+)
+assert(portalView.includes('已定時段') && portalView.includes('出席時數'), 'participants see confirmed times and their attended hours')
+assert(portalView.includes('data-attended-hours="2"') && portalView.includes('data-confirmed-session'), 'the afternoon session counts as attended')
+assert(portalView.includes('OK') && !portalView.includes('參加者重疊') && !portalView.includes('data-slot-grid'), 'the participant portal is not the organizer results grid')
 
 assert(GOOGLE_CALENDAR_ENABLED === false, 'the calendar flag stays off')
 assert(hub.includes('tone-fill-sage') || hub.includes('tone-fill-gold') || hub.includes('tone-fill-purple'), 'accents use the logo palette')

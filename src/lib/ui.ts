@@ -4,8 +4,8 @@ export function cardClass(isDarkMode: boolean): string {
 
 export function inputClass(isDarkMode: boolean): string {
   return isDarkMode
-    ? 'glass-input bg-black/30 border border-white/10 text-white placeholder:text-white/35 outline-none'
-    : 'glass-input bg-white/70 border border-white/80 text-zinc-900 placeholder:text-zinc-400 outline-none'
+    ? 'field-control glass-input bg-black/30 border border-white/10 text-white placeholder:text-white/35 outline-none'
+    : 'field-control glass-input bg-white/70 border border-white/80 text-zinc-900 placeholder:text-zinc-400 outline-none'
 }
 
 export function textPrimary(isDarkMode: boolean): string {
@@ -22,5 +22,5 @@ export function primaryButton(extra = ''): string {
 
 /** Filled, rounded group. Spacing separates these; they do not use a hairline rule. */
 export function groupSurface(extra = ''): string {
-  return `glass-well rounded-2xl p-4 sm:p-5 ${extra}`.trim()
+  return `glass-well min-w-0 rounded-2xl p-4 sm:p-5 ${extra}`.trim()
 }

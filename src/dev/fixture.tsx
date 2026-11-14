@@ -115,6 +115,17 @@ const campaign: Campaign = {
   ],
 }
 
+const confirmedSessions = ['2026-11-12', '2026-11-14', '2026-11-16'].map((iso, index) =>
+  setTime(parseISODate(iso), index === 1 ? 15 : 14).toISOString(),
+)
+
+const demoEvent: Campaign = {
+  ...campaign,
+  config: { ...campaign.config, durationHours: 2 },
+  savedSlots: confirmedSessions,
+  dancers: campaign.dancers.map((person) => (person.id === 'dancer-jie' ? { ...person, userId: 'jie' } : person)),
+}
+
 function Shell({ children, flow }: { children: ReactNode; flow?: boolean }) {
   return (
     <div className="theme-dark min-h-dvh" data-preview="">
@@ -162,7 +173,7 @@ function Shell({ children, flow }: { children: ReactNode; flow?: boolean }) {
 
 function LivePreview({ name }: { name: string }) {
   const tab: HubTab = name === 'hub-settings' ? 'event' : name === 'hub-organizers' ? 'organizers' : 'participants'
-  const [event, setEvent] = useState(campaign)
+  const [event, setEvent] = useState(demoEvent)
   const [timing, setTiming] = useState(false)
   const [blocks, setBlocks] = useState<TimeBlock[]>([])
   if (name === 'setup-event') {
@@ -389,9 +400,9 @@ function Preview({ name }: { name: string }) {
         <DancerPortal
           lang={lang}
           isDarkMode
-          campaign={campaign}
-          userId="guest"
-          email="guest@example.com"
+          campaign={demoEvent}
+          userId="jie"
+          email="jie@example.com"
           linkRole="dancer"
           onBack={() => undefined}
           onSave={async () => true}

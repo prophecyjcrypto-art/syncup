@@ -53,7 +53,7 @@ export function RosterPanel({
   const [groupId, setGroupId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [markFilter, setMarkFilter] = useState<MarkFilter>('both')
-  const accent = variant === 'choreographer' ? 'bg-[#f6cf7a] text-zinc-900' : 'bg-[#7c7bb9] text-white'
+  const accent = variant === 'choreographer' ? 'tone-fill-gold' : 'btn-primary'
 
   async function save() {
     if (!name.trim()) return
@@ -138,7 +138,7 @@ export function RosterPanel({
               aria-label={t(lang, 'groups_label')}
               className={`min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
             />
-            <button type="submit" disabled={!groupName.trim()} className="min-h-11 shrink-0 rounded-full bg-[#7c7bb9] px-4 text-xs font-bold text-white disabled:opacity-40">
+            <button type="submit" disabled={!groupName.trim()} className="tone-fill-sage min-h-11 shrink-0 rounded-full px-4 text-xs font-bold disabled:opacity-40">
               {t(lang, 'add_admin')}
             </button>
           </form>
@@ -149,7 +149,7 @@ export function RosterPanel({
                 data-group-id="all"
                 aria-pressed={groupId === null}
                 onClick={() => setGroupId(null)}
-                className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${groupId === null ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
+                className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${groupId === null ? 'chip-on' : 'glass-well'}`}
               >
                 {t(lang, 'filter_all')}
               </button>
@@ -232,7 +232,7 @@ export function RosterPanel({
         onChange={setBlocks}
       />
       <div className="dock">
-      <button type="button" disabled={busy || !name.trim()} onClick={() => void save()} className="min-h-11 w-full rounded-full btn-glow bg-[#7c7bb9] px-8 py-3 font-bold text-white disabled:opacity-40 sm:w-auto">
+      <button type="button" disabled={busy || !name.trim()} onClick={() => void save()} className="btn-glow btn-primary min-h-11 w-full rounded-full px-8 py-3 font-bold disabled:opacity-40 sm:w-auto">
         {busy ? t(lang, 'loading') : t(lang, 'save_member')}
       </button>
       </div>
@@ -335,7 +335,7 @@ function GroupChip({
     )
   }
   return (
-    <span className={`inline-flex shrink-0 items-center rounded-full ${selected ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}>
+    <span className={`inline-flex shrink-0 items-center rounded-full ${selected ? 'chip-on' : 'glass-well'}`}>
       <button type="button" data-group-id={group.id} aria-pressed={selected} onClick={onSelect} className="min-h-11 px-3 text-xs font-bold">
         {group.name}
       </button>

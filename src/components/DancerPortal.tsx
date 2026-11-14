@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { AvailabilityEditor } from './AvailabilityEditor'
 import { t } from '../i18n'
-import { formatLongDate, isPast, parseISODate } from '../lib/dates'
-import { incompleteCompulsoryDays, uncoveredDays } from '../lib/schedule'
-import { inputClass, textMuted, textPrimary } from '../lib/ui'
+import { analyzeEvent } from '../lib/analysis'
+import { formatLongDate, formatTime, isPast, parseISODate } from '../lib/dates'
+import { classifySessionAttendance, incompleteCompulsoryDays, uncoveredDays } from '../lib/schedule'
+import { groupSurface, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { InfoTip } from './Guide'
 import type { Campaign, Language, PersonRole, TimeBlock } from '../types'
 
@@ -37,6 +38,19 @@ export function DancerPortal({
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const locked = isPast(campaign.expiryDate)
+  const plan = useMemo(
+    () =>
+      analyzeEvent({
+        config: campaign.config,
+        dancers: mine ? [mine] : [],
+        choreographers: [],
+        groups: [],
+        savedSlots: campaign.savedSlots,
+        sessions: [],
+      }),
+    [campaign, mine],
+  )
+  const attended = plan.dancers.find((person) => person.id === mine?.id)?.attendedHours ?? 0
 
   async function save() {
     if (!name.trim()) {
@@ -79,7 +93,7 @@ export function DancerPortal({
           </p>
           {limited ? <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'results_private')}</p> : null}
         </div>
-        <p className={`rounded-full px-4 py-2 text-xs font-bold uppercase ${locked ? 'bg-zinc-700 text-zinc-300' : 'bg-[#7c7bb9] text-white'}`}>
+        <p className={`rounded-full px-4 py-2 text-xs font-bold uppercase ${locked ? 'bg-zinc-700 text-zinc-300' : 'glass-well'}`}>
           {locked ? t(lang, 'expired') : `${t(lang, 'deadline')} ${formatLongDate(new Date(campaign.expiryDate), lang)}`}
         </p>
       </div>
@@ -90,13 +104,49 @@ export function DancerPortal({
         </div>
       )}
       {locked && <p className="rounded-xl bg-[#f19ba8]/15 px-4 py-3 text-sm font-bold text-[#f19ba8]">{t(lang, 'locked_msg')}</p>}
+      <section className={groupSurface('space-y-3')} data-participant-plan="">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className={`text-[15px] font-semibold ${textPrimary(isDarkMode)}`}>{t(lang, 'confirmed_sessions')}</h3>
+          <p className={`text-sm font-semibold tabular-nums ${textPrimary(isDarkMode)}`} data-attended-hours={attended}>
+            {t(lang, 'analysis_attended')} {attended}
+          </p>
+        </div>
+        {plan.sessions.length === 0 ? (
+          <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'analysis_attended_empty')}</p>
+        ) : (
+          <ul className="space-y-2">
+            {plan.sessions.map((session) => {
+              const status = mine
+                ? classifySessionAttendance(
+                    mine,
+                    session.start.getTime(),
+                    session.end.getTime(),
+                    campaign.config.attendanceTolerance,
+                  ).status
+                : null
+              return (
+                <li key={session.id} data-confirmed-session="" className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className={textPrimary(isDarkMode)}>
+                    {formatLongDate(session.start, lang)} · {formatTime(session.start, lang)} – {formatTime(session.end, lang)}
+                  </span>
+                  {status ? (
+                    <span className={status === 'na' ? 'tone-danger font-semibold' : 'font-semibold text-[#93ba8c]'}>
+                      {status === 'ok' ? t(lang, 'mode_available') : status === 'partial' ? t(lang, 'partial_label') : t(lang, 'mode_unavailable')}
+                    </span>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
       <label className="block max-w-md space-y-2">
         <span className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'member_name')}</span>
         <input
           value={name}
           disabled={locked}
           onChange={(event) => setName(event.target.value)}
-          className={`w-full rounded-2xl px-4 py-3 font-bold ${inputClass(isDarkMode)}`}
+          className={`box-border w-full min-w-0 max-w-full rounded-2xl px-4 py-3 font-bold ${inputClass(isDarkMode)}`}
         />
       </label>
       <AvailabilityEditor
@@ -111,7 +161,7 @@ export function DancerPortal({
       />
       {!locked && (
         <div className="dock">
-        <button type="button" disabled={busy} onClick={() => void save()} className="min-h-11 w-full rounded-full btn-glow bg-[#7c7bb9] px-8 py-3 font-bold text-white disabled:opacity-40 sm:w-auto">
+        <button type="button" disabled={busy} onClick={() => void save()} className="btn-glow btn-primary min-h-11 w-full rounded-full px-8 py-3 font-bold disabled:opacity-40 sm:w-auto">
           {saved && !busy ? t(lang, 'saved_ok') : busy ? t(lang, 'loading') : t(lang, 'sync_changes')}
         </button>
         </div>

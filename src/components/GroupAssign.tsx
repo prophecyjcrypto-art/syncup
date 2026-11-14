@@ -299,7 +299,7 @@ export function AssignChips({
             }}
             className={`assign-chip inline-flex min-h-11 max-w-full cursor-grab select-none items-center gap-1.5 truncate rounded-full px-3 text-sm font-semibold touch-none ${
               board.dragId === person.id ? 'opacity-40' : ''
-            } ${on ? 'tone-fill-purple' : isDarkMode ? 'bg-white/10 text-white' : 'bg-black/[0.06] text-zinc-900'}`}
+            } ${on ? 'chip-on' : isDarkMode ? 'bg-white/10 text-white' : 'bg-black/[0.06] text-zinc-900'}`}
           >
             <Grip />
             {person.name}

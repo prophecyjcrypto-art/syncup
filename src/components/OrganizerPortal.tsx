@@ -223,7 +223,7 @@ export function OrganizerPortal({
             aria-label={t(lang, 'group_placeholder')}
             className={`min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
           />
-          <button type="submit" disabled={!groupName.trim()} className="btn-primary min-h-11 shrink-0 rounded-full px-4 text-sm font-bold disabled:opacity-40">
+          <button type="submit" disabled={!groupName.trim()} className="tone-fill-sage min-h-11 shrink-0 rounded-full px-4 text-sm font-bold disabled:opacity-40">
             {t(lang, 'add_group')}
           </button>
         </form>
