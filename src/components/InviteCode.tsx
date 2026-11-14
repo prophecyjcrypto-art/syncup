@@ -11,6 +11,7 @@ export function InviteCode({
   code,
   empty,
   readOnly,
+  plainLabel,
   onCopy,
   onRotate,
 }: {
@@ -21,6 +22,7 @@ export function InviteCode({
   code: string | null
   empty?: string
   readOnly?: boolean
+  plainLabel?: boolean
   onCopy?: (value: string, kind: 'code' | 'link') => void
   onRotate?: () => void
 }) {
@@ -39,7 +41,7 @@ export function InviteCode({
     <div className="space-y-1.5" data-invite="">
       {label || hint ? (
         <div className="flex items-baseline justify-between gap-3">
-          <p className={`inline-flex min-w-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>
+          <p className={`inline-flex min-w-0 items-center gap-1.5 ${plainLabel ? 'text-xs font-semibold' : 'text-[10px] font-bold uppercase tracking-widest'} ${textMuted(isDarkMode)}`}>
             <span className="truncate">{label}</span>
             {hint ? <InfoTip lang={lang} name="invite" text={hint} /> : null}
           </p>

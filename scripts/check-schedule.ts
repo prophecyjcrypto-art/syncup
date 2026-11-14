@@ -3,6 +3,7 @@ import { getDaysArray, groupByMonth, parseISODate, setTime, toISODateString } fr
 import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, coveredMs, freeIntervals, markedBlockCount, markedHours, normalizeDurationHours, plannedSessionHours, responseCount, shortlistSessionHours, uncoveredDays } from '../src/lib/schedule.ts'
 import { analyzeEvent } from '../src/lib/analysis.ts'
 import { devResultsAllowed, isDevResultsPath } from '../src/lib/devPreview.ts'
+import { membershipChanges } from '../src/lib/groups.ts'
 import { SHORT_CODE_ALPHABET, normalizeLongCode, normalizeShortCode, parseInviteInput, shortCodeFromPath } from '../src/lib/invites.ts'
 import { buildCampaign, sampleShortlist } from '../src/dev/resultsPreview.tsx'
 import { commitSessions, pinsToSave, type SessionRange } from '../src/lib/sessions.ts'
@@ -452,5 +453,17 @@ assert(!/\btruncate\b/i.test(shortMigration), 'the short-code migration does not
 assert(!/\bdelete\s+from\b/i.test(migrationBody), 'applying the migration does not delete rows')
 assert(!/update\s+public\.hupaak_(campaigns|people|blocks|admins|access|groups|group_members)\b/i.test(migrationBody), 'applying the migration does not rewrite events or people')
 assert(!/set\s+code\s*=/i.test(migrationBody), 'applying the migration does not rotate existing long codes')
+
+const pairGroups = [
+  { id: 'a', memberIds: ['ada', 'bea'] },
+  { id: 'b', memberIds: ['bea'] },
+]
+assert(membershipChanges(pairGroups, 'ada', 'a', 'b').map((change) => `${change.groupId}:${change.included}`).join() === 'b:true,a:false', 'moving a dancer adds the new group before leaving the old one')
+assert(membershipChanges(pairGroups, 'bea', 'a', 'b').map((change) => change.groupId).join() === 'a', 'moving onto a group they already belong to only leaves the source')
+assert(membershipChanges(pairGroups, 'ada', 'a', null).every((change) => change.groupId === 'a' && !change.included), 'dropping on all participants leaves that group only')
+assert(membershipChanges(pairGroups, 'cy', null, 'b').map((change) => `${change.groupId}:${change.included}`).join() === 'b:true', 'an ungrouped dancer joins the chosen group')
+assert(membershipChanges(pairGroups, 'ada', 'a', 'a').length === 0, 'dropping onto the current group writes nothing')
+assert(membershipChanges(pairGroups, 'cy', null, null).length === 0, 'an ungrouped dancer dropped on all participants writes nothing')
+assert(!membershipChanges(pairGroups, 'ada', 'a', 'b').some((change) => change.groupId === 'b' && !change.included), 'a move does not remove the destination group')
 
 console.log('schedule checks passed')

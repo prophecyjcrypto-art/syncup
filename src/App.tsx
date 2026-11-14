@@ -723,7 +723,7 @@ export default function App() {
             onCreateGroup={(name) => void run(() => createDanceGroup(active.id, name))}
             onRenameGroup={(groupId, name) => void run(() => renameDanceGroup(groupId, name))}
             onDeleteGroup={(groupId) => void run(() => deleteDanceGroup(groupId))}
-            onToggleMember={(groupId, personId, included) => void run(() => setDanceGroupMember(groupId, personId, included))}
+            onToggleMember={(groupId, personId, included) => run(() => setDanceGroupMember(groupId, personId, included))}
             onRotateAdmin={
               isAdmin(active, user.id, user.email)
                 ? () =>

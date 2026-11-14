@@ -266,17 +266,18 @@ export function SetupPanel({
         </label>
 
         {showGroups || showInvites ? (
-          <div className="space-y-4" data-codes-section="">
-            <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
-              {showGroups && showInvites ? t(lang, 'codes_title') : showGroups ? t(lang, 'groups_label') : t(lang, 'organizer_link')}
-              <InfoTip lang={lang} name="codes" text={t(lang, showGroups && showInvites ? 'codes_hint' : showGroups ? 'groups_setup_hint' : 'organizer_link_hint')} />
-            </h3>
-            {showInvites && initial ? (
-              <div className="space-y-3">
+          <div className="space-y-5" data-codes-section="">
+            <div className="space-y-3" data-participants-block="">
+              <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
+                {t(lang, 'participants_label')}
+                <InfoTip lang={lang} name="participants" text={t(lang, showGroups && !showInvites ? 'groups_setup_hint' : 'participants_hint')} />
+              </h3>
+              {showInvites && initial ? (
                 <InviteCode
                   lang={lang}
                   isDarkMode={isDarkMode}
-                  label={t(lang, 'dancer')}
+                  label={t(lang, 'all_participants')}
+                  plainLabel
                   code={preferredInviteCode(initial.participantShort, initial.participantCode)}
                   empty={t(lang, 'organizer_after_create')}
                   readOnly={readOnly}
@@ -289,63 +290,15 @@ export function SetupPanel({
                   }
                   onRotate={onRotateParticipant}
                 />
-                <InviteCode
-                  lang={lang}
-                  isDarkMode={isDarkMode}
-                  label={t(lang, 'choreographer')}
-                  code={preferredInviteCode(initial.organizerShort, initial.organizerCode)}
-                  empty={t(lang, 'organizer_after_create')}
-                  readOnly={readOnly}
-                  onCopy={(_value, kind) =>
-                    share(
-                      preferredInviteCode(initial.organizerShort, initial.organizerCode),
-                      preferredInviteLink(initial.organizerShort, initial.organizerCode, 'organizer'),
-                      kind,
-                    )
-                  }
-                  onRotate={onRotateOrganizer}
-                />
-                <InviteCode
-                  lang={lang}
-                  isDarkMode={isDarkMode}
-                  label={t(lang, 'admin')}
-                  code={preferredInviteCode(initial.adminShort, initial.adminCode)}
-                  empty={t(lang, 'invite_after_create')}
-                  readOnly={readOnly}
-                  onCopy={(_value, kind) =>
-                    share(
-                      preferredInviteCode(initial.adminShort, initial.adminCode),
-                      preferredInviteLink(initial.adminShort, initial.adminCode, 'admin'),
-                      kind,
-                    )
-                  }
-                  onRotate={onRotateInvite}
-                />
-                <div className="space-y-2">
-                  {(initial.admins.length ?? 0) === 0 && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'admins_empty')}</p>}
-                  {initial.admins.map((admin) => (
-                    <div key={admin.id} className="glass-well flex items-center justify-between rounded-xl px-4 py-3">
-                      <div>
-                        <p className={`font-bold ${textPrimary(isDarkMode)}`}>{admin.email}</p>
-                        <p className="text-[10px] font-bold uppercase text-zinc-400">{t(lang, 'admin_joined')}</p>
-                      </div>
-                      {!readOnly && onRemoveAdmin && (
-                        <button type="button" onClick={() => onRemoveAdmin(admin.id)} className="text-sm font-bold text-[#f19ba8]">
-                          {t(lang, 'remove')}
-                        </button>
-                      )}
-                    </div>
-                  ))}
+              ) : showInvites ? (
+                <div className="space-y-1">
+                  <p className={`text-xs font-semibold ${textMuted(isDarkMode)}`}>{t(lang, 'all_participants')}</p>
+                  <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
                 </div>
-              </div>
-            ) : showInvites ? (
-              <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
-            ) : null}
-            {showGroups ? (
-              <div className={`space-y-3 ${showInvites ? 'border-t border-current/10 pt-4' : ''}`}>
-                {showInvites ? (
-                  <p className={`text-[10px] font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'groups_label')}</p>
-                ) : null}
+              ) : null}
+              {showGroups ? (
+              <div className="space-y-3 border-l border-current/15 pl-3">
+                <p className={`text-[10px] font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'groups_label')}</p>
                 {!readOnly ? (
                   <form onSubmit={addDraftGroup} className={`flex gap-2 ${lock}`}>
                     <input
@@ -426,6 +379,81 @@ export function SetupPanel({
                         ))}
                   </div>
                 ) : null}
+              </div>
+            ) : null}
+            </div>
+            {showInvites ? (
+              <div className="space-y-3 border-t border-current/10 pt-4" data-organizer-block="">
+                <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
+                  {t(lang, 'choreographer')}
+                  <InfoTip lang={lang} name="organizer" text={t(lang, 'organizer_link_hint')} />
+                </h3>
+                {initial ? (
+                  <InviteCode
+                    lang={lang}
+                    isDarkMode={isDarkMode}
+                    label=""
+                    code={preferredInviteCode(initial.organizerShort, initial.organizerCode)}
+                    empty={t(lang, 'organizer_after_create')}
+                    readOnly={readOnly}
+                    onCopy={(_value, kind) =>
+                      share(
+                        preferredInviteCode(initial.organizerShort, initial.organizerCode),
+                        preferredInviteLink(initial.organizerShort, initial.organizerCode, 'organizer'),
+                        kind,
+                      )
+                    }
+                    onRotate={onRotateOrganizer}
+                  />
+                ) : (
+                  <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
+                )}
+              </div>
+            ) : null}
+            {showInvites ? (
+              <div className="space-y-3 border-t border-current/10 pt-4" data-admins-block="">
+                <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
+                  {t(lang, 'admins_label')}
+                  <InfoTip lang={lang} name="admins" text={t(lang, 'invite_admin_hint')} />
+                </h3>
+                {initial ? (
+                  <>
+                    <InviteCode
+                      lang={lang}
+                      isDarkMode={isDarkMode}
+                      label=""
+                      code={preferredInviteCode(initial.adminShort, initial.adminCode)}
+                      empty={t(lang, 'invite_after_create')}
+                      readOnly={readOnly}
+                      onCopy={(_value, kind) =>
+                        share(
+                          preferredInviteCode(initial.adminShort, initial.adminCode),
+                          preferredInviteLink(initial.adminShort, initial.adminCode, 'admin'),
+                          kind,
+                        )
+                      }
+                      onRotate={onRotateInvite}
+                    />
+                    <div className="space-y-2">
+                      {(initial.admins.length ?? 0) === 0 && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'admins_empty')}</p>}
+                      {initial.admins.map((admin) => (
+                        <div key={admin.id} className="glass-well flex items-center justify-between rounded-xl px-4 py-3">
+                          <div className="min-w-0">
+                            <p className={`truncate font-bold ${textPrimary(isDarkMode)}`}>{admin.email}</p>
+                            <p className="text-[10px] font-bold uppercase text-zinc-400">{t(lang, 'admin_joined')}</p>
+                          </div>
+                          {!readOnly && onRemoveAdmin && (
+                            <button type="button" onClick={() => onRemoveAdmin(admin.id)} className="text-sm font-bold text-[#f19ba8]">
+                              {t(lang, 'remove')}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'invite_after_create')}</p>
+                )}
               </div>
             ) : null}
           </div>

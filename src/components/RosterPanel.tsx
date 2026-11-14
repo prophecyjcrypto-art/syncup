@@ -4,9 +4,11 @@ import { MarkFilterControl } from './MarkFilter'
 import { t } from '../i18n'
 import { formatBlockLabel } from '../lib/blocks'
 import { formatDate, formatLongDate, parseISODate } from '../lib/dates'
+import { membershipChanges, peopleForTray } from '../lib/groups'
 import { shortInviteUrl } from '../lib/invites'
 import { uncoveredDays } from '../lib/schedule'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
+import { AssignBoard, AssignTray } from './GroupAssign'
 import { InfoTip } from './Guide'
 import { InviteCode } from './InviteCode'
 import type { MarkFilter } from '../lib/schedule'
@@ -79,6 +81,12 @@ export function RosterPanel({
     if (!groupId) return true
     return groups.find((group) => group.id === groupId)?.memberIds.includes(person.id) ?? false
   })
+
+  async function moveDancer(personId: string, fromGroupId: string | null, toGroupId: string | null) {
+    if (!onToggleMember) return
+    const changes = membershipChanges(groups, personId, fromGroupId, toGroupId)
+    for (const change of changes) await onToggleMember(change.groupId, personId, change.included)
+  }
 
   async function addGroup(event: FormEvent) {
     event.preventDefault()
@@ -171,6 +179,29 @@ export function RosterPanel({
               ))}
             </div>
           ) : null}
+          {groups.length > 0 && people.length > 0 && onToggleMember ? (
+            <AssignBoard onMove={(personId, fromGroupId, toGroupId) => void moveDancer(personId, fromGroupId, toGroupId)}>
+              <div className="max-w-md space-y-2" data-assign-board="">
+                <AssignTray
+                  targetId={null}
+                  people={peopleForTray(people, groups, null)}
+                  isDarkMode={isDarkMode}
+                  label={t(lang, 'all_participants')}
+                  ariaLabel={t(lang, 'all_participants')}
+                />
+                {groups.map((group) => (
+                  <AssignTray
+                    key={group.id}
+                    targetId={group.id}
+                    people={peopleForTray(people, groups, group.id)}
+                    isDarkMode={isDarkMode}
+                    label={group.name}
+                    ariaLabel={group.name}
+                  />
+                ))}
+              </div>
+            </AssignBoard>
+          ) : null}
           {groupId && onCopy ? (
             <InviteCode
               lang={lang}
@@ -245,24 +276,10 @@ export function RosterPanel({
                   </button>
                 </div>
               </div>
-              {groups.length > 0 && onToggleMember ? (
-                <div className="chip-row mb-3 py-1">
-                  {groups.map((group) => {
-                    const on = group.memberIds.includes(person.id)
-                    return (
-                      <button
-                        key={group.id}
-                        type="button"
-                        data-assign-group={group.id}
-                        aria-pressed={on}
-                        onClick={() => void onToggleMember(group.id, person.id, !on)}
-                        className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'bg-[#7c7bb9] text-white' : 'glass-well'}`}
-                      >
-                        {group.name}
-                      </button>
-                    )
-                  })}
-                </div>
+              {groups.some((group) => group.memberIds.includes(person.id)) ? (
+                <p className={`mb-3 text-xs font-semibold ${textMuted(isDarkMode)}`}>
+                  {groups.filter((group) => group.memberIds.includes(person.id)).map((group) => group.name).join(' · ')}
+                </p>
               ) : null}
               <div className="space-y-1">
                 {visibleBlocks(person.blocks).length === 0 ? (
