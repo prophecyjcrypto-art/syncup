@@ -1,7 +1,8 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { t } from '../i18n'
+import { formatHourCount, t } from '../i18n'
 import { formatHourOption, formatLongDate, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
 import { preferredInviteCode, preferredInviteLink, shortInviteUrl } from '../lib/invites'
+import { normalizeDurationHours } from '../lib/schedule'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { FieldLabel, InfoTip } from './Guide'
 import { InviteCode } from './InviteCode'
@@ -17,14 +18,10 @@ export function SetupPanel({
   onEdit,
   onConfirm,
   onCopy,
-  onRotateInvite,
-  onRotateOrganizer,
-  onRotateParticipant,
   onRemoveAdmin,
   onCreateGroup,
   onRenameGroup,
   onDeleteGroup,
-  onRotateGroup,
   showGroups = true,
   showInvites = true,
   embedded = false,
@@ -37,14 +34,10 @@ export function SetupPanel({
   onEdit?: () => void
   onConfirm: (input: CampaignInput, newGroups?: string[]) => void
   onCopy?: (value: string, kind?: 'code' | 'link') => void
-  onRotateInvite?: () => void
-  onRotateOrganizer?: () => void
-  onRotateParticipant?: () => void
   onRemoveAdmin?: (adminId: string) => void
   onCreateGroup?: (name: string) => void
   onRenameGroup?: (groupId: string, name: string) => void
   onDeleteGroup?: (groupId: string) => void
-  onRotateGroup?: (groupId: string) => void
   showGroups?: boolean
   showInvites?: boolean
   embedded?: boolean
@@ -79,6 +72,10 @@ export function SetupPanel({
   )
   const lock = readOnly ? 'pointer-events-none opacity-70' : ''
   const durationOptional = !initial || initial.config.durationHours == null
+  const labelClass = `text-[13px] font-medium leading-5 ${textMuted(isDarkMode)}`
+  const fieldClass = `w-full rounded-xl px-3 py-2.5 text-[15px] font-medium leading-5 ${inputClass(isDarkMode)} ${lock}`
+  const sectionTitle = `inline-flex items-center gap-1.5 text-[15px] font-semibold leading-5 ${textPrimary(isDarkMode)}`
+  const sectionRule = 'space-y-4 border-t border-current/10 pt-6'
 
   function setRange(field: 'startDate' | 'endDate', value: string) {
     setConfig((current) => {
@@ -136,58 +133,57 @@ export function SetupPanel({
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl">
+    <div className="mx-auto w-full max-w-4xl text-left">
       {embedded ? null : (
-      <div className="mb-8 text-center">
-        <h2 className={`flex items-center justify-center gap-2 font-serif text-3xl font-semibold sm:text-4xl ${textPrimary(isDarkMode)}`}>
+      <div className="mb-6">
+        <h2 className={`flex items-center gap-2 text-xl font-semibold tracking-tight ${textPrimary(isDarkMode)}`}>
           {readOnly ? initial?.name : initial ? t(lang, 'edit_event') : t(lang, 'new_campaign')}
           <InfoTip lang={lang} name="setup" text={t(lang, 'guide_setup')} />
         </h2>
-        {readOnly ? <p className={`mt-2 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'view_only')}</p> : null}
+        {readOnly ? <p className={`mt-1 text-[13px] leading-5 ${textMuted(isDarkMode)}`}>{t(lang, 'view_only')}</p> : null}
       </div>
       )}
-      <div className={`${cardClass(isDarkMode)} space-y-6 rounded-[1.5rem] p-4 sm:space-y-8 sm:rounded-[2rem] sm:p-8`}>
-        <label className="block space-y-2">
-          <span className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'campaign_name')}</span>
-          <input
-            value={name}
-            disabled={readOnly}
-            onChange={(event) => setName(event.target.value)}
-            className={`w-full rounded-2xl px-4 py-3 text-lg font-bold ${inputClass(isDarkMode)} ${lock}`}
-          />
-        </label>
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="space-y-2">
-            <span className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'rehearsal_range')}</span>
+      <div className={`${cardClass(isDarkMode)} space-y-6 rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-8`}>
+        <section data-setup-section="timing" className="space-y-4">
+          <label className="block space-y-1.5">
+            <span className={labelClass}>{t(lang, 'campaign_name')}</span>
             <input
-              type="date"
+              value={name}
               disabled={readOnly}
-              value={config.startDate}
-              onChange={(event) => setRange('startDate', event.target.value)}
-              className={`w-full rounded-xl px-4 py-3 font-bold ${inputClass(isDarkMode)} ${lock}`}
+              onChange={(event) => setName(event.target.value)}
+              className={fieldClass}
             />
           </label>
-          <label className="space-y-2">
-            <span className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>&nbsp;</span>
-            <input
-              type="date"
-              disabled={readOnly}
-              min={config.startDate}
-              value={config.endDate}
-              onChange={(event) => setRange('endDate', event.target.value)}
-              className={`w-full rounded-xl px-4 py-3 font-bold ${inputClass(isDarkMode)} ${lock}`}
-            />
-          </label>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <FieldLabel lang={lang} label={t(lang, 'daily_availability')} tip={t(lang, 'tip_daily')} className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`} />
+          <div className="space-y-1.5">
+            <span className={labelClass}>{t(lang, 'rehearsal_range')}</span>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <input
+                type="date"
+                disabled={readOnly}
+                aria-label={t(lang, 'rehearsal_range')}
+                value={config.startDate}
+                onChange={(event) => setRange('startDate', event.target.value)}
+                className={fieldClass}
+              />
+              <input
+                type="date"
+                disabled={readOnly}
+                aria-label={t(lang, 'rehearsal_range')}
+                min={config.startDate}
+                value={config.endDate}
+                onChange={(event) => setRange('endDate', event.target.value)}
+                className={fieldClass}
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <FieldLabel lang={lang} label={t(lang, 'daily_availability')} tip={t(lang, 'tip_daily')} className={labelClass} />
             <div className="flex gap-2">
               <select
                 disabled={readOnly}
                 value={config.dayStartHour}
                 onChange={(event) => setConfig({ ...config, dayStartHour: Number(event.target.value) })}
-                className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)} ${lock}`}
+                className={fieldClass}
               >
                 {rangeOptions(6, 23).map((hour) => (
                   <option key={hour} value={hour}>{formatHourOption(hour)}</option>
@@ -197,7 +193,7 @@ export function SetupPanel({
                 disabled={readOnly}
                 value={config.dayEndHour}
                 onChange={(event) => setConfig({ ...config, dayEndHour: Number(event.target.value) })}
-                className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)} ${lock}`}
+                className={fieldClass}
               >
                 {rangeOptions(9, 28).map((hour) => (
                   <option key={hour} value={hour}>{formatHourOption(hour)}</option>
@@ -205,70 +201,105 @@ export function SetupPanel({
               </select>
             </div>
           </div>
-          <label className="space-y-2">
-            <FieldLabel
-              lang={lang}
-              label={durationOptional ? `${t(lang, 'rehearsal_length')} (${t(lang, 'optional')})` : t(lang, 'rehearsal_length')}
-              tip={t(lang, durationOptional ? 'tip_duration_optional' : 'tip_duration')}
-              className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}
-            />
-            <select
-              disabled={readOnly}
-              value={config.durationHours ?? ''}
-              onChange={(event) => {
-                const raw = event.target.value
-                setConfig({ ...config, durationHours: raw === '' ? null : Number(raw) })
-              }}
-              className={`w-full rounded-xl px-3 py-3 font-bold ${inputClass(isDarkMode)} ${lock}`}
-            >
-              {durationOptional ? <option value="">{t(lang, 'duration_unset')}</option> : null}
-              {rangeOptions(0.5, 24).map((hour) => (
-                <option key={hour} value={hour}>{hour} {t(lang, 'hours')}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="space-y-2">
-            <span className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'submission_deadline')}</span>
+          <div className="grid gap-4 sm:grid-cols-2" data-timing-length="">
+            <label className="space-y-1.5">
+              <FieldLabel
+                lang={lang}
+                label={durationOptional ? `${t(lang, 'rehearsal_length')} (${t(lang, 'optional')})` : t(lang, 'rehearsal_length')}
+                tip={t(lang, durationOptional ? 'tip_duration_optional' : 'tip_duration')}
+                className={labelClass}
+              />
+              <select
+                data-duration=""
+                disabled={readOnly}
+                value={config.durationHours ?? ''}
+                onChange={(event) => setConfig({ ...config, durationHours: normalizeDurationHours(event.target.value) })}
+                className={fieldClass}
+              >
+                <option value="">{t(lang, 'duration_unset')}</option>
+                {rangeOptions(0.5, 24).map((hour) => (
+                  <option key={hour} value={hour}>{formatHourCount(lang, hour)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1.5">
+              <FieldLabel lang={lang} label={t(lang, 'tolerance_label')} tip={t(lang, 'tip_buffer')} className={labelClass} />
+              <select
+                disabled={readOnly}
+                value={config.attendanceTolerance}
+                onChange={(event) => setConfig({ ...config, attendanceTolerance: Number(event.target.value) })}
+                className={fieldClass}
+              >
+                {rangeOptions(0, 12).map((hour) => (
+                  <option key={hour} value={hour}>{formatHourCount(lang, hour)}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label data-setup-deadline="" className="block space-y-1.5">
+            <span className={labelClass}>{t(lang, 'submission_deadline')}</span>
             <input
               type="date"
               disabled={readOnly}
               value={expiry}
               onChange={(event) => setExpiry(event.target.value)}
-              className={`w-full rounded-xl px-4 py-3 font-bold ${inputClass(isDarkMode)} ${lock}`}
+              className={fieldClass}
             />
           </label>
-          <label className="space-y-2">
-            <FieldLabel lang={lang} label={t(lang, 'tolerance_label')} tip={t(lang, 'tip_buffer')} className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`} />
-            <select
-              disabled={readOnly}
-              value={config.attendanceTolerance}
-              onChange={(event) => setConfig({ ...config, attendanceTolerance: Number(event.target.value) })}
-              className={`w-full rounded-xl px-3 py-3 font-bold ${inputClass(isDarkMode)} ${lock}`}
-            >
-              {rangeOptions(0, 12).map((hour) => (
-                <option key={hour} value={hour}>{hour} {t(lang, 'hours')}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <label className="block space-y-2">
-          <span className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'remarks_label')}</span>
-          <textarea
-            disabled={readOnly}
-            rows={3}
-            value={remarks}
-            placeholder={t(lang, 'remarks_placeholder')}
-            onChange={(event) => setRemarks(event.target.value)}
-            className={`w-full resize-none rounded-2xl px-4 py-3 ${inputClass(isDarkMode)} ${lock}`}
+        </section>
+
+        <section data-setup-section="days" className={sectionRule}>
+          <div className="flex flex-wrap items-center gap-3">
+            <h3 className={sectionTitle}>
+              {t(lang, 'on_days')} / {t(lang, 'compulsory_days')}
+              <InfoTip
+                lang={lang}
+                name="days"
+                text={`${markMode === 'show' ? t(lang, 'on_days_hint') : t(lang, 'compulsory_days_hint')}\n${t(lang, 'legend_marks')}`}
+              />
+            </h3>
+            <div className={`glass-well flex rounded-xl p-1 ${lock}`}>
+              <button type="button" onClick={() => setMarkMode('show')} className={`rounded-lg px-3 py-2 text-sm font-medium ${markMode === 'show' ? 'bg-[#f6cf7a] text-zinc-900' : textMuted(isDarkMode)}`}>
+                {t(lang, 'mark_show')}
+              </button>
+              <button type="button" onClick={() => setMarkMode('must')} className={`rounded-lg px-3 py-2 text-sm font-medium ${markMode === 'must' ? 'bg-[#f19ba8] text-white' : textMuted(isDarkMode)}`}>
+                {t(lang, 'mark_must')}
+              </button>
+            </div>
+          </div>
+          <div className="w-full max-w-md">
+          <MonthBoards
+            days={days}
+            lang={lang}
+            isDarkMode={isDarkMode}
+            renderDay={(day) => {
+              const iso = toISODateString(day)
+              const show = onDays.includes(iso)
+              const must = compulsoryDays.includes(iso)
+              return (
+                <button
+                  type="button"
+                  disabled={readOnly}
+                  onClick={() => toggleMark(iso)}
+                  aria-label={formatLongDate(day, lang)}
+                  className={`cal-day glass-well flex w-full items-center justify-center rounded-lg text-sm font-medium leading-none ${
+                    isDarkMode ? 'text-white' : 'text-zinc-800'
+                  } ${show ? 'ring-2 ring-[#f6cf7a]' : ''} ${must ? 'outline outline-2 outline-[#f19ba8]' : ''}`}
+                >
+                  {show ? '★' : ''}
+                  {day.getDate()}
+                </button>
+              )
+            }}
           />
-        </label>
+          </div>
+        </section>
 
         {showGroups || showInvites ? (
+          <section data-setup-section="people" className={sectionRule}>
           <div className="space-y-5" data-codes-section="">
             <div className="space-y-3" data-participants-block="">
-              <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
+              <h3 className={sectionTitle}>
                 {t(lang, 'participants_label')}
                 <InfoTip lang={lang} name="participants" text={t(lang, showGroups && !showInvites ? 'groups_setup_hint' : 'participants_hint')} />
               </h3>
@@ -277,10 +308,8 @@ export function SetupPanel({
                   lang={lang}
                   isDarkMode={isDarkMode}
                   label={t(lang, 'all_participants')}
-                  plainLabel
                   code={preferredInviteCode(initial.participantShort, initial.participantCode)}
                   empty={t(lang, 'organizer_after_create')}
-                  readOnly={readOnly}
                   onCopy={(_value, kind) =>
                     share(
                       preferredInviteCode(initial.participantShort, initial.participantCode),
@@ -288,17 +317,16 @@ export function SetupPanel({
                       kind,
                     )
                   }
-                  onRotate={onRotateParticipant}
                 />
               ) : showInvites ? (
                 <div className="space-y-1">
-                  <p className={`text-xs font-semibold ${textMuted(isDarkMode)}`}>{t(lang, 'all_participants')}</p>
-                  <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
+                  <p className={labelClass}>{t(lang, 'all_participants')}</p>
+                  <p className={`text-sm leading-5 ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
                 </div>
               ) : null}
               {showGroups ? (
-              <div className="space-y-3 border-l border-current/15 pl-3">
-                <p className={`text-[10px] font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'groups_label')}</p>
+              <div className="space-y-3 border-l border-current/15 pl-4">
+                <p className={labelClass}>{t(lang, 'groups_label')}</p>
                 {!readOnly ? (
                   <form onSubmit={addDraftGroup} className={`flex gap-2 ${lock}`}>
                     <input
@@ -306,16 +334,16 @@ export function SetupPanel({
                       onChange={(event) => setDraftGroup(event.target.value)}
                       placeholder={t(lang, 'group_placeholder')}
                       aria-label={t(lang, 'group_placeholder')}
-                      className={`min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+                      className={`min-w-0 flex-1 ${fieldClass}`}
                     />
-                    <button type="submit" disabled={!draftGroup.trim()} className="min-h-11 shrink-0 rounded-full bg-[#7c7bb9] px-4 text-sm font-bold text-white disabled:opacity-40">
+                    <button type="submit" disabled={!draftGroup.trim()} className="min-h-11 shrink-0 rounded-full bg-[#7c7bb9] px-4 text-sm font-medium text-white disabled:opacity-40">
                       {t(lang, 'add_group')}
                     </button>
                   </form>
                 ) : null}
                 {initial
-                  ? initial.groups.length === 0 && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_groups')}</p>
-                  : draftGroups.length === 0 && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_groups')}</p>}
+                  ? initial.groups.length === 0 && <p className={`text-sm leading-5 ${textMuted(isDarkMode)}`}>{t(lang, 'no_groups')}</p>
+                  : draftGroups.length === 0 && <p className={`text-sm leading-5 ${textMuted(isDarkMode)}`}>{t(lang, 'no_groups')}</p>}
                 {(initial ? initial.groups.length : draftGroups.length) > 0 ? (
                   <div className="space-y-3">
                     {initial
@@ -336,17 +364,17 @@ export function SetupPanel({
                                     if (event.key === 'Enter') event.currentTarget.blur()
                                     if (event.key === 'Escape') setRenamingId(null)
                                   }}
-                                  className={`min-w-0 flex-1 rounded-xl px-3 py-2 text-sm font-bold ${inputClass(isDarkMode)}`}
+                                  className={`min-w-0 flex-1 rounded-xl px-3 py-2 text-[15px] font-medium ${inputClass(isDarkMode)}`}
                                 />
                               ) : (
-                                <button type="button" onClick={() => !readOnly && onRenameGroup && setRenamingId(group.id)} className={`truncate text-left text-sm font-bold ${textPrimary(isDarkMode)}`}>
+                                <button type="button" onClick={() => !readOnly && onRenameGroup && setRenamingId(group.id)} className={`truncate text-left text-[15px] font-medium ${textPrimary(isDarkMode)}`}>
                                   {group.name}
                                 </button>
                               )}
                               {!readOnly && onDeleteGroup ? (
                                 <button
                                   type="button"
-                                  className="text-sm font-bold text-[#f19ba8]"
+                                  className="text-sm font-medium text-[#f19ba8]"
                                   onClick={() => {
                                     if (window.confirm(t(lang, 'delete_group'))) onDeleteGroup(group.id)
                                   }}
@@ -361,18 +389,16 @@ export function SetupPanel({
                               label=""
                               code={group.inviteCode ?? null}
                               empty={t(lang, 'organizer_after_create')}
-                              readOnly={readOnly}
                               onCopy={(_value, kind) =>
                                 share(group.inviteCode ?? null, group.inviteCode ? shortInviteUrl(group.inviteCode) : '', kind)
                               }
-                              onRotate={!readOnly && onRotateGroup ? () => onRotateGroup(group.id) : undefined}
                             />
                           </div>
                         ))
                       : draftGroups.map((group, index) => (
                           <div key={`${group}-${index}`} className="flex items-center justify-between gap-3">
-                            <p className={`truncate text-sm font-bold ${textPrimary(isDarkMode)}`}>{group}</p>
-                            <button type="button" className="text-sm font-bold text-[#f19ba8]" onClick={() => setDraftGroups((current) => current.filter((_, item) => item !== index))}>
+                            <p className={`truncate text-[15px] font-medium ${textPrimary(isDarkMode)}`}>{group}</p>
+                            <button type="button" className="text-sm font-medium text-[#f19ba8]" onClick={() => setDraftGroups((current) => current.filter((_, item) => item !== index))}>
                               {t(lang, 'remove')}
                             </button>
                           </div>
@@ -383,8 +409,8 @@ export function SetupPanel({
             ) : null}
             </div>
             {showInvites ? (
-              <div className="space-y-3 border-t border-current/10 pt-4" data-organizer-block="">
-                <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
+              <div className="space-y-3 border-t border-current/10 pt-5" data-organizer-block="">
+                <h3 className={sectionTitle}>
                   {t(lang, 'choreographer')}
                   <InfoTip lang={lang} name="organizer" text={t(lang, 'organizer_link_hint')} />
                 </h3>
@@ -395,7 +421,6 @@ export function SetupPanel({
                     label=""
                     code={preferredInviteCode(initial.organizerShort, initial.organizerCode)}
                     empty={t(lang, 'organizer_after_create')}
-                    readOnly={readOnly}
                     onCopy={(_value, kind) =>
                       share(
                         preferredInviteCode(initial.organizerShort, initial.organizerCode),
@@ -403,16 +428,15 @@ export function SetupPanel({
                         kind,
                       )
                     }
-                    onRotate={onRotateOrganizer}
                   />
                 ) : (
-                  <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
+                  <p className={`text-sm leading-5 ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
                 )}
               </div>
             ) : null}
             {showInvites ? (
-              <div className="space-y-3 border-t border-current/10 pt-4" data-admins-block="">
-                <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
+              <div className="space-y-3 border-t border-current/10 pt-5" data-admins-block="">
+                <h3 className={sectionTitle}>
                   {t(lang, 'admins_label')}
                   <InfoTip lang={lang} name="admins" text={t(lang, 'invite_admin_hint')} />
                 </h3>
@@ -424,7 +448,6 @@ export function SetupPanel({
                       label=""
                       code={preferredInviteCode(initial.adminShort, initial.adminCode)}
                       empty={t(lang, 'invite_after_create')}
-                      readOnly={readOnly}
                       onCopy={(_value, kind) =>
                         share(
                           preferredInviteCode(initial.adminShort, initial.adminCode),
@@ -432,18 +455,17 @@ export function SetupPanel({
                           kind,
                         )
                       }
-                      onRotate={onRotateInvite}
                     />
                     <div className="space-y-2">
-                      {(initial.admins.length ?? 0) === 0 && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'admins_empty')}</p>}
+                      {(initial.admins.length ?? 0) === 0 && <p className={`text-sm leading-5 ${textMuted(isDarkMode)}`}>{t(lang, 'admins_empty')}</p>}
                       {initial.admins.map((admin) => (
-                        <div key={admin.id} className="glass-well flex items-center justify-between rounded-xl px-4 py-3">
+                        <div key={admin.id} className="glass-well flex items-center justify-between gap-3 rounded-xl px-4 py-3">
                           <div className="min-w-0">
-                            <p className={`truncate font-bold ${textPrimary(isDarkMode)}`}>{admin.email}</p>
-                            <p className="text-[10px] font-bold uppercase text-zinc-400">{t(lang, 'admin_joined')}</p>
+                            <p className={`truncate text-[15px] font-medium ${textPrimary(isDarkMode)}`}>{admin.email}</p>
+                            <p className={`text-[13px] leading-5 ${textMuted(isDarkMode)}`}>{t(lang, 'admin_joined')}</p>
                           </div>
                           {!readOnly && onRemoveAdmin && (
-                            <button type="button" onClick={() => onRemoveAdmin(admin.id)} className="text-sm font-bold text-[#f19ba8]">
+                            <button type="button" onClick={() => onRemoveAdmin(admin.id)} className="text-sm font-medium text-[#f19ba8]">
                               {t(lang, 'remove')}
                             </button>
                           )}
@@ -452,75 +474,40 @@ export function SetupPanel({
                     </div>
                   </>
                 ) : (
-                  <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'invite_after_create')}</p>
+                  <p className={`text-sm leading-5 ${textMuted(isDarkMode)}`}>{t(lang, 'invite_after_create')}</p>
                 )}
               </div>
             ) : null}
           </div>
+          </section>
         ) : null}
 
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h3 className={`inline-flex items-center gap-2 font-serif text-2xl ${textPrimary(isDarkMode)}`}>
-                {t(lang, 'on_days')} / {t(lang, 'compulsory_days')}
-                <InfoTip
-                  lang={lang}
-                  name="days"
-                  text={`${markMode === 'show' ? t(lang, 'on_days_hint') : t(lang, 'compulsory_days_hint')}\n${t(lang, 'legend_marks')}`}
-                />
-              </h3>
-            </div>
-            <div className={`glass-well flex rounded-xl p-1 ${lock}`}>
-              <button type="button" onClick={() => setMarkMode('show')} className={`rounded-lg px-3 py-2 text-xs font-bold ${markMode === 'show' ? 'bg-[#f6cf7a] text-zinc-900' : textMuted(isDarkMode)}`}>
-                {t(lang, 'mark_show')}
-              </button>
-              <button type="button" onClick={() => setMarkMode('must')} className={`rounded-lg px-3 py-2 text-xs font-bold ${markMode === 'must' ? 'bg-[#f19ba8] text-white' : textMuted(isDarkMode)}`}>
-                {t(lang, 'mark_must')}
-              </button>
-            </div>
-          </div>
-          <div className="mx-auto w-full max-w-md">
-          <MonthBoards
-            days={days}
-            lang={lang}
-            isDarkMode={isDarkMode}
-            renderDay={(day) => {
-              const iso = toISODateString(day)
-              const show = onDays.includes(iso)
-              const must = compulsoryDays.includes(iso)
-              return (
-                <button
-                  type="button"
-                  disabled={readOnly}
-                  onClick={() => toggleMark(iso)}
-                  aria-label={formatLongDate(day, lang)}
-                  className={`cal-day glass-well flex w-full items-center justify-center rounded-lg text-xs font-bold leading-none ${
-                    isDarkMode ? 'text-white' : 'text-zinc-800'
-                  } ${show ? 'ring-2 ring-[#f6cf7a]' : ''} ${must ? 'outline outline-2 outline-[#f19ba8]' : ''}`}
-                >
-                  {show ? '★' : ''}
-                  {day.getDate()}
-                </button>
-              )
-            }}
-          />
-          </div>
-        </div>
-
-        {note && <p className="font-bold text-[#f19ba8]">{note}</p>}
+        <section data-setup-section="notes" className={sectionRule}>
+          <label className="block space-y-1.5">
+            <span className={labelClass}>{t(lang, 'remarks_label')}</span>
+            <textarea
+              disabled={readOnly}
+              rows={3}
+              value={remarks}
+              placeholder={t(lang, 'remarks_placeholder')}
+              onChange={(event) => setRemarks(event.target.value)}
+              className={`resize-none ${fieldClass}`}
+            />
+          </label>
+        </section>
+        {note && <p className="text-sm font-medium text-[#f19ba8]">{note}</p>}
       </div>
-      <div className="dock mt-6 flex justify-center gap-3 sm:mt-8">
-        <button type="button" onClick={onCancel} className={`min-h-11 px-6 py-3 font-bold ${textMuted(isDarkMode)}`}>
+      <div className="mt-6 flex justify-start gap-3">
+        <button type="button" onClick={onCancel} className={`min-h-11 px-5 text-sm font-medium ${textMuted(isDarkMode)}`}>
           {t(lang, 'cancel')}
         </button>
         {readOnly && onEdit ? (
-          <button type="button" onClick={onEdit} className="min-h-11 rounded-full btn-glow bg-[#7c7bb9] px-8 py-3 font-bold text-white">
+          <button type="button" onClick={onEdit} className="min-h-11 rounded-full btn-glow bg-[#7c7bb9] px-6 text-sm font-medium text-white">
             {t(lang, 'edit_event')}
           </button>
         ) : (
           !readOnly && (
-            <button type="button" disabled={!name.trim()} onClick={confirm} className="min-h-11 rounded-full btn-glow bg-[#7c7bb9] px-8 py-3 font-bold text-white disabled:opacity-40">
+            <button type="button" disabled={!name.trim()} onClick={confirm} className="min-h-11 rounded-full btn-glow bg-[#7c7bb9] px-6 text-sm font-medium text-white disabled:opacity-40">
               {initial ? t(lang, 'save_campaign') : t(lang, 'create_campaign')}
             </button>
           )

@@ -25,6 +25,8 @@ const en = {
   active: 'Active',
   expired: 'Closed',
   submissions: 'People',
+  person_one: 'person',
+  people_count: 'people',
   deadline: 'Deadline',
   manage_leadership: 'Organizers',
   manage_members: 'Participants',
@@ -49,7 +51,8 @@ const en = {
   optional: 'Optional',
   duration_unset: 'Not set yet',
   duration_not_set: 'Duration is not set yet. Look at the overlap, then choose a session length.',
-  hours: 'Hours',
+  hour_one: 'hour',
+  hours: 'hours',
   submission_deadline: 'Submission deadline',
   tolerance_label: 'Late / early buffer',
   remarks_label: 'Notes',
@@ -63,7 +66,11 @@ const en = {
   admins_label: 'Admins',
   invite_admin: 'Admin invite',
   invite_admin_hint: 'Share this code or its short link. After sign-in, they join this event as an admin.',
-  copy_invite: 'Copy invite link',
+  copy_invite: 'Copy admin link',
+  copy_admin_link: 'Copy admin link',
+  delete_event: 'Delete',
+  card_manage: 'Details',
+  card_invites_hint: 'All participants joins with no group. The organizer link can manage the list. The admin link joins as an admin. Group codes stay in the organizer hub.',
   copy_code: 'Copy code',
   rotate_invite: 'New code',
   invite_after_create: 'The admin code appears here after you create the event.',
@@ -306,6 +313,8 @@ const zh: { [K in keyof typeof en]: string } = {
   active: '進行中',
   expired: '已截止',
   submissions: '人數',
+  person_one: '人',
+  people_count: '人',
   deadline: '截止',
   manage_leadership: '主辦人',
   manage_members: '參加者',
@@ -330,6 +339,7 @@ const zh: { [K in keyof typeof en]: string } = {
   optional: '選填',
   duration_unset: '尚未設定',
   duration_not_set: '尚未設定時長。先看重疊，再選擇練習時長。',
+  hour_one: '小時',
   hours: '小時',
   submission_deadline: '提交截止',
   tolerance_label: '遲到／早退緩衝',
@@ -344,7 +354,11 @@ const zh: { [K in keyof typeof en]: string } = {
   admins_label: '管理員',
   invite_admin: '管理員邀請',
   invite_admin_hint: '分享此邀請碼或短連結。對方登入後即可加入為管理員。',
-  copy_invite: '複製邀請連結',
+  copy_invite: '複製管理員連結',
+  copy_admin_link: '複製管理員連結',
+  delete_event: '刪除',
+  card_manage: '詳情',
+  card_invites_hint: '全體參加者邀請碼加入後尚未分組。主辦人連結可以管理名單。管理員連結會以管理員身份加入。組別邀請碼在主辦頁。',
   copy_code: '複製邀請碼',
   rotate_invite: '產生新邀請碼',
   invite_after_create: '建立活動後，管理員邀請碼會顯示在這裡。',
@@ -579,4 +593,14 @@ export function t(
     }
   }
   return text
+}
+
+export function formatHourCount(lang: Language, hours: number): string {
+  const unit = lang === 'zh' || hours !== 1 ? t(lang, 'hours') : t(lang, 'hour_one')
+  return `${hours} ${unit}`
+}
+
+export function formatPeopleCount(lang: Language, count: number): string {
+  const unit = lang === 'zh' || count !== 1 ? t(lang, 'people_count') : t(lang, 'person_one')
+  return `${count} ${unit}`
 }

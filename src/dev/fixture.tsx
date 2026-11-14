@@ -14,7 +14,9 @@ import { parseISODate, setTime } from '../lib/dates'
 import { textMuted, textPrimary } from '../lib/ui'
 import type { BlockKind, Campaign, Language, TimeBlock } from '../types'
 
-const lang: Language = new URLSearchParams(window.location.search).get('lang') === 'en' ? 'en' : 'zh'
+const previewParams = new URLSearchParams(window.location.search)
+const lang: Language = previewParams.get('lang') === 'en' ? 'en' : 'zh'
+const previewDetail = previewParams.get('detail') === '1'
 
 const previewDays = ['2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15', '2026-11-16', '2026-11-17', '2026-11-18']
 
@@ -172,9 +174,6 @@ function LivePreview({ name }: { name: string }) {
           onCancel={() => undefined}
           onConfirm={() => undefined}
           onCopy={() => undefined}
-          onRotateInvite={() => undefined}
-          onRotateOrganizer={() => undefined}
-          onRotateParticipant={() => undefined}
           onCreateGroup={(groupName) =>
             setEvent((current) => ({
               ...current,
@@ -190,7 +189,6 @@ function LivePreview({ name }: { name: string }) {
           onDeleteGroup={(groupId) =>
             setEvent((current) => ({ ...current, groups: current.groups.filter((group) => group.id !== groupId) }))
           }
-          onRotateGroup={() => undefined}
         />
       </Shell>
     )
@@ -202,7 +200,6 @@ function LivePreview({ name }: { name: string }) {
         isDarkMode
         campaign={event}
         canEditEvent
-        canRotateEvent
         initialTab={tab}
         onBack={() => undefined}
         onSchedule={() => undefined}
@@ -236,10 +233,6 @@ function LivePreview({ name }: { name: string }) {
             ),
           }))
         }
-        onRotateAdmin={() => undefined}
-        onRotateOrganizer={() => undefined}
-        onRotateParticipant={() => undefined}
-        onRotateGroup={() => undefined}
       />
     </Shell>
   )
@@ -284,10 +277,19 @@ function Preview({ name }: { name: string }) {
       </div>
     )
   }
-  if (name === 'setup') {
+  if (name === 'setup' || name === 'setup-duration') {
+    const timed = name === 'setup-duration' ? { ...campaign, config: { ...campaign.config, durationHours: 1.5 } } : undefined
     return (
       <Shell>
-        <SetupPanel lang={lang} isDarkMode readOnly={false} onCancel={() => undefined} onConfirm={() => undefined} />
+        <SetupPanel
+          lang={lang}
+          isDarkMode
+          initial={timed}
+          readOnly={false}
+          onCancel={() => undefined}
+          onConfirm={() => undefined}
+          onCopy={() => undefined}
+        />
       </Shell>
     )
   }
@@ -310,6 +312,7 @@ function Preview({ name }: { name: string }) {
           onHub={() => undefined}
           onCopy={() => undefined}
           onJoinAdmin={() => undefined}
+          initialOpenId={previewDetail ? campaign.id : null}
         />
       </Shell>
     )

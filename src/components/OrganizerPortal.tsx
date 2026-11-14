@@ -18,7 +18,6 @@ export function OrganizerPortal({
   isDarkMode,
   campaign,
   canEditEvent,
-  canRotateEvent,
   initialTab = 'people',
   onBack,
   onSchedule,
@@ -28,17 +27,12 @@ export function OrganizerPortal({
   onRenameGroup,
   onDeleteGroup,
   onToggleMember,
-  onRotateAdmin,
-  onRotateOrganizer,
-  onRotateParticipant,
-  onRotateGroup,
   onRemoveAdmin,
 }: {
   lang: Language
   isDarkMode: boolean
   campaign: Campaign
   canEditEvent: boolean
-  canRotateEvent: boolean
   initialTab?: HubTab
   onBack: () => void
   onSchedule: () => void
@@ -48,10 +42,6 @@ export function OrganizerPortal({
   onRenameGroup: (groupId: string, name: string) => void
   onDeleteGroup: (groupId: string) => void
   onToggleMember: (groupId: string, personId: string, included: boolean) => void | Promise<unknown>
-  onRotateAdmin?: () => void
-  onRotateOrganizer?: () => void
-  onRotateParticipant?: () => void
-  onRotateGroup?: (groupId: string) => void
   onRemoveAdmin?: (adminId: string) => void
 }) {
   const [tab, setTab] = useState<HubTab>(initialTab)
@@ -140,10 +130,8 @@ export function OrganizerPortal({
                   lang={lang}
                   isDarkMode={isDarkMode}
                   label={t(lang, 'all_participants')}
-                  plainLabel
                   code={preferredInviteCode(campaign.participantShort, campaign.participantCode)}
                   empty={t(lang, 'organizer_after_create')}
-                  readOnly={!canRotateEvent}
                   onCopy={(_value, kind) =>
                     copyInvite(
                       preferredInviteCode(campaign.participantShort, campaign.participantCode),
@@ -151,7 +139,6 @@ export function OrganizerPortal({
                       kind,
                     )
                   }
-                  onRotate={canRotateEvent ? onRotateParticipant : undefined}
                 />
                 {campaign.groups.length > 0 && campaign.dancers.length > 0 ? (
                   <AssignTray
@@ -162,7 +149,7 @@ export function OrganizerPortal({
                   />
                 ) : null}
                 <div className="space-y-3 border-l border-current/15 pl-3">
-                  <p className={`text-[10px] font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'groups_label')}</p>
+                  <p className={`text-[13px] font-medium ${textMuted(isDarkMode)}`}>{t(lang, 'groups_label')}</p>
                   <form onSubmit={addGroup} className="flex gap-2">
                     <input
                       value={groupName}
@@ -198,7 +185,6 @@ export function OrganizerPortal({
                           code={group.inviteCode ?? null}
                           empty={t(lang, 'organizer_after_create')}
                           onCopy={(_value, kind) => copyInvite(group.inviteCode ?? null, group.inviteCode ? shortInviteUrl(group.inviteCode) : '', kind)}
-                          onRotate={onRotateGroup ? () => onRotateGroup(group.id) : undefined}
                         />
                         {campaign.dancers.length > 0 ? (
                           <AssignChips
@@ -224,7 +210,6 @@ export function OrganizerPortal({
                 label=""
                 code={preferredInviteCode(campaign.organizerShort, campaign.organizerCode)}
                 empty={t(lang, 'organizer_after_create')}
-                readOnly={!canRotateEvent}
                 onCopy={(_value, kind) =>
                   copyInvite(
                     preferredInviteCode(campaign.organizerShort, campaign.organizerCode),
@@ -232,7 +217,6 @@ export function OrganizerPortal({
                     kind,
                   )
                 }
-                onRotate={canRotateEvent ? onRotateOrganizer : undefined}
               />
             </div>
             <div className="space-y-3 border-t border-current/10 pt-4" data-admins-block="">
@@ -240,14 +224,13 @@ export function OrganizerPortal({
                 {t(lang, 'admins_label')}
                 <InfoTip lang={lang} name="admins" text={t(lang, 'invite_admin_hint')} />
               </h3>
-              {canRotateEvent || campaign.adminShort || campaign.adminCode ? (
+              {campaign.adminShort || campaign.adminCode ? (
                 <InviteCode
                   lang={lang}
                   isDarkMode={isDarkMode}
                   label=""
                   code={preferredInviteCode(campaign.adminShort, campaign.adminCode)}
                   empty={t(lang, 'invite_after_create')}
-                  readOnly={!canRotateEvent}
                   onCopy={(_value, kind) =>
                     copyInvite(
                       preferredInviteCode(campaign.adminShort, campaign.adminCode),
@@ -255,7 +238,6 @@ export function OrganizerPortal({
                       kind,
                     )
                   }
-                  onRotate={canRotateEvent ? onRotateAdmin : undefined}
                 />
               ) : null}
               {(campaign.admins.length ?? 0) === 0 ? <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'admins_empty')}</p> : null}

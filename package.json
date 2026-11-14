@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "check": "tsx scripts/check-schedule.ts && tsx scripts/check-layout.ts"
+    "check": "tsx scripts/check-schedule.ts && tsx scripts/render-merge-check.tsx && tsx scripts/check-layout.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.8",
