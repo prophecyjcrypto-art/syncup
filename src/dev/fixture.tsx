@@ -299,9 +299,15 @@ function Preview({ name }: { name: string }) {
         <CampaignList
           lang={lang}
           isDarkMode
-          campaigns={[campaign]}
-          userId="owner"
-          email="owner@example.com"
+          campaigns={[
+            {
+              ...campaign,
+              ownerId: 'user_legacy_owner',
+              admins: [{ id: 'admin-cj', userId: 'admin-cj', email: 'admin@example.com' }],
+            },
+          ]}
+          userId="admin-cj"
+          email="admin@example.com"
           onCreate={() => undefined}
           onOpen={() => undefined}
           onDelete={() => undefined}

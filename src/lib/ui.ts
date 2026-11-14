@@ -19,3 +19,8 @@ export function textMuted(isDarkMode: boolean): string {
 export function primaryButton(extra = ''): string {
   return `btn-glow rounded-full bg-[#7c7bb9] font-semibold text-white disabled:opacity-40 ${extra}`
 }
+
+/** Filled, rounded group. Spacing separates these; they do not use a hairline rule. */
+export function groupSurface(extra = ''): string {
+  return `glass-well rounded-2xl p-4 sm:p-5 ${extra}`.trim()
+}

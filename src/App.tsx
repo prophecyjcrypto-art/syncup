@@ -313,7 +313,8 @@ export default function App() {
       await reload()
       return true
     } catch (error) {
-      setBanner(error instanceof Error ? error.message : 'Something went wrong')
+      const raw = error instanceof Error ? error.message : 'Something went wrong'
+      setBanner(raw === 'delete_blocked' ? t(lang, 'delete_failed') : raw)
       return false
     }
   }

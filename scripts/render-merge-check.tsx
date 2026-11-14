@@ -147,6 +147,9 @@ assert(!existing.includes('>1 hours</option>'), 'one hour is not plural')
 assert(existing.includes('>1.5 hours</option>'), 'other lengths stay plural')
 assert(existing.includes('>0 hours</option>'), 'a zero buffer stays plural')
 assert(!existing.includes('New code'), 'the editor does not offer a new invite code')
+assert(existing.includes('data-setup-calendar') && !existing.includes('max-w-md'), 'the edit calendar uses the content width')
+assert(!existing.includes('border-t') && !existing.includes('border-l'), 'edit sections are cards, not hairline rules')
+assert(existing.includes('data-info="days"'), 'the calendar info control stays')
 const sectionOrder = ['data-setup-section="timing"', 'data-setup-section="days"', 'data-setup-section="people"', 'data-setup-section="notes"']
 let sectionAt = -1
 for (const marker of sectionOrder) {
@@ -311,9 +314,78 @@ const ownerDetail = renderToStaticMarkup(
 )
 assert(ownerDetail.includes('data-card-detail'), 'the detail view is reachable')
 assert(ownerDetail.includes('All participants') && ownerDetail.includes('9RWT3MD'), 'the detail shows the event-wide participant code')
-assert(ownerDetail.includes('Copy code') && ownerDetail.includes('Organizer link') && ownerDetail.includes('Copy admin link'), 'the detail labels each invite copy')
-assert(!ownerDetail.includes('2K7MQ9H'), 'group codes stay out of the card detail')
-assert(!ownerDetail.includes('New code'), 'the detail does not rotate codes')
+assert(ownerDetail.includes('Organizer hub') && ownerDetail.includes('Edit event') && ownerDetail.includes('Enter availability'), 'the detail leads with named actions')
+assert(ownerDetail.includes('Copy code') && ownerDetail.includes('Copy organizer link') && ownerDetail.includes('Copy admin link'), 'the detail labels each invite copy')
+assert(ownerDetail.includes('Organizer invite') && ownerDetail.includes('Admin invite'), 'invite headings say who the link is for')
+assert(ownerDetail.includes('2K7MQ9H') && ownerDetail.includes('data-invite="group"'), 'each group keeps its code on the detail')
+assert(ownerDetail.includes('data-delete-event'), 'an owner can delete from the detail')
+assert(!ownerDetail.includes('border-t'), 'detail sections are cards, not hairline rules')
+assert(!ownerDetail.includes('New code') && !ownerDetail.includes('Copy invite link'), 'the detail does not rotate codes or reuse a vague invite label')
+
+const adminDetail = renderToStaticMarkup(
+  createElement(CampaignList, {
+    lang: 'zh',
+    isDarkMode: false,
+    campaigns: [
+      {
+        ...campaign,
+        ownerId: 'user_legacy_owner',
+        admins: [{ id: 'admin-cj', userId: 'admin-cj', email: 'admin@example.com' }],
+        groups: [{ id: 'g1', name: 'A組', memberIds: [], inviteCode: '2K7MQ9H' }],
+      },
+    ],
+    userId: 'admin-cj',
+    email: 'admin@example.com',
+    initialOpenId: 'event-1',
+    onCreate: () => undefined,
+    onOpen: () => undefined,
+    onDelete: () => undefined,
+    onChoreographers: () => undefined,
+    onDancers: () => undefined,
+    onResults: () => undefined,
+    onPortal: () => undefined,
+    onCopy: () => undefined,
+    onJoinAdmin: () => undefined,
+    onHub: () => undefined,
+  }),
+)
+assert(adminDetail.includes('主辦工作台') && adminDetail.includes('編輯活動') && adminDetail.includes('填寫我的時間'), 'Chinese actions name the hub, edit, and availability')
+assert(adminDetail.includes('全體參加者') && adminDetail.includes('複製邀請碼') && adminDetail.includes('複製連結'), 'Chinese participant invites name the code and the link')
+assert(adminDetail.includes('主辦人邀請') && adminDetail.includes('複製主辦人連結'), 'the organizer control is an invite link')
+assert(adminDetail.includes('管理員邀請') && adminDetail.includes('複製管理員連結'), 'the admin control stays an admin invite link')
+assert(adminDetail.includes('2K7MQ9H') && adminDetail.includes('A組'), 'a group card names that group')
+assert(adminDetail.includes('data-delete-event') && adminDetail.includes('刪除'), 'an admin who is not the owner can delete')
+const adminSheet = adminDetail.slice(adminDetail.indexOf('data-card-detail'))
+assert(!adminSheet.includes('>主辦<') && !adminSheet.includes('>主辦人<') && !adminSheet.includes('>管理員<'), 'the sheet does not use the short role names as actions')
+
+const choreographerDetail = renderToStaticMarkup(
+  createElement(CampaignList, {
+    lang: 'en',
+    isDarkMode: true,
+    campaigns: [
+      {
+        ...campaign,
+        choreographers: [{ ...dancer, id: 'org-1', userId: 'org-user', role: 'choreographer' }],
+      },
+    ],
+    userId: 'org-user',
+    email: 'org@example.com',
+    initialOpenId: 'event-1',
+    onCreate: () => undefined,
+    onOpen: () => undefined,
+    onDelete: () => undefined,
+    onChoreographers: () => undefined,
+    onDancers: () => undefined,
+    onResults: () => undefined,
+    onPortal: () => undefined,
+    onCopy: () => undefined,
+    onJoinAdmin: () => undefined,
+    onHub: () => undefined,
+  }),
+)
+assert(choreographerDetail.includes('data-card-detail'), 'an organizer can open the detail')
+assert(!choreographerDetail.includes('data-delete-event'), 'an organizer who is not an admin cannot delete')
+assert(!choreographerDetail.includes('Copy admin link'), 'an organizer does not get the admin invite')
 
 const editor = renderToStaticMarkup(
   withCalendar(

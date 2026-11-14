@@ -216,6 +216,10 @@
   .cal-day {
     height: 2.5rem;
   }
+
+  [data-setup-calendar] .cal-day {
+    height: 4.25rem;
+  }
 }
 
 .chip-row {
