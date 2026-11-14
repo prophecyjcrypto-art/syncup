@@ -25,34 +25,40 @@ export function InviteCode({
   onRotate?: () => void
 }) {
   const short = Boolean(code && code.length <= 8)
+  const codeNode = code ? (
+    <p
+      data-invite-code={code}
+      className={`font-mono font-medium ${short ? 'shrink-0 text-[15px] tracking-[0.12em]' : 'min-w-0 break-all text-sm tracking-wide'} ${textPrimary(isDarkMode)}`}
+    >
+      {code}
+    </p>
+  ) : (
+    <p className={`text-sm ${textMuted(isDarkMode)}`}>{empty}</p>
+  )
   return (
-    <div className="space-y-2" data-invite="">
+    <div className="space-y-1.5" data-invite="">
       {label || hint ? (
-        <p className={`inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>
-          {label}
-          {hint ? <InfoTip lang={lang} name="invite" text={hint} /> : null}
-        </p>
-      ) : null}
-      {code ? (
-        <p
-          data-invite-code={code}
-          className={`font-mono font-semibold ${short ? 'text-[1.65rem] tracking-[0.22em]' : 'break-all text-sm tracking-wide'} ${textPrimary(isDarkMode)}`}
-        >
-          {code}
-        </p>
+        <div className="flex items-baseline justify-between gap-3">
+          <p className={`inline-flex min-w-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>
+            <span className="truncate">{label}</span>
+            {hint ? <InfoTip lang={lang} name="invite" text={hint} /> : null}
+          </p>
+          {short || !code ? codeNode : null}
+        </div>
       ) : (
-        <p className={`text-sm ${textMuted(isDarkMode)}`}>{empty}</p>
+        codeNode
       )}
+      {code && !short && (label || hint) ? codeNode : null}
       {code && onCopy ? (
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => onCopy(code, 'code')} className="min-h-11 rounded-full bg-[#7c7bb9] px-4 text-sm font-bold text-white">
+        <div className="flex flex-wrap gap-1.5">
+          <button type="button" onClick={() => onCopy(code, 'code')} className="min-h-11 rounded-full bg-[#7c7bb9] px-3 text-xs font-bold text-white">
             {t(lang, 'copy_code')}
           </button>
-          <button type="button" onClick={() => onCopy(code, 'link')} className="glass-well min-h-11 rounded-full px-4 text-sm font-bold">
+          <button type="button" onClick={() => onCopy(code, 'link')} className="glass-well min-h-11 rounded-full px-3 text-xs font-bold">
             {t(lang, 'copy_short_link')}
           </button>
           {!readOnly && onRotate ? (
-            <button type="button" onClick={onRotate} className="min-h-11 rounded-full px-4 text-sm font-bold text-[#f19ba8]">
+            <button type="button" onClick={onRotate} className="min-h-11 rounded-full px-3 text-xs font-bold text-[#f19ba8]">
               {t(lang, 'rotate_invite')}
             </button>
           ) : null}

@@ -265,90 +265,167 @@ export function SetupPanel({
           />
         </label>
 
-        {showGroups ? (
-          <div className="space-y-3">
-            <h3 className={`inline-flex items-center gap-2 font-serif text-2xl ${textPrimary(isDarkMode)}`}>
-              {t(lang, 'groups_label')}
-              <InfoTip lang={lang} name="groups" text={t(lang, 'groups_setup_hint')} />
+        {showGroups || showInvites ? (
+          <div className="space-y-4" data-codes-section="">
+            <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
+              {showGroups && showInvites ? t(lang, 'codes_title') : showGroups ? t(lang, 'groups_label') : t(lang, 'organizer_link')}
+              <InfoTip lang={lang} name="codes" text={t(lang, showGroups && showInvites ? 'codes_hint' : showGroups ? 'groups_setup_hint' : 'organizer_link_hint')} />
             </h3>
-            {!readOnly ? (
-              <form onSubmit={addDraftGroup} className={`flex gap-2 ${lock}`}>
-                <input
-                  value={draftGroup}
-                  onChange={(event) => setDraftGroup(event.target.value)}
-                  placeholder={t(lang, 'group_placeholder')}
-                  aria-label={t(lang, 'group_placeholder')}
-                  className={`min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+            {showInvites && initial ? (
+              <div className="space-y-3">
+                <InviteCode
+                  lang={lang}
+                  isDarkMode={isDarkMode}
+                  label={t(lang, 'dancer')}
+                  code={preferredInviteCode(initial.participantShort, initial.participantCode)}
+                  empty={t(lang, 'organizer_after_create')}
+                  readOnly={readOnly}
+                  onCopy={(_value, kind) =>
+                    share(
+                      preferredInviteCode(initial.participantShort, initial.participantCode),
+                      preferredInviteLink(initial.participantShort, initial.participantCode, 'participant'),
+                      kind,
+                    )
+                  }
+                  onRotate={onRotateParticipant}
                 />
-                <button type="submit" disabled={!draftGroup.trim()} className="min-h-11 shrink-0 rounded-full bg-[#7c7bb9] px-4 text-sm font-bold text-white disabled:opacity-40">
-                  {t(lang, 'add_group')}
-                </button>
-              </form>
-            ) : null}
-            {initial
-              ? initial.groups.length === 0 && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_groups')}</p>
-              : draftGroups.length === 0 && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_groups')}</p>}
-            {(initial ? initial.groups.length : draftGroups.length) > 0 ? (
-              <div className="space-y-4">
-                {initial
-                  ? initial.groups.map((group) => (
-                      <div key={group.id} className="space-y-2" data-group-id={group.id}>
-                        <div className="flex items-center justify-between gap-3">
-                          {renamingId === group.id && onRenameGroup ? (
-                            <input
-                              autoFocus
-                              defaultValue={group.name}
-                              aria-label={t(lang, 'group_placeholder')}
-                              onBlur={(event) => {
-                                setRenamingId(null)
-                                const next = event.target.value.trim()
-                                if (next && next !== group.name) onRenameGroup(group.id, next)
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') event.currentTarget.blur()
-                                if (event.key === 'Escape') setRenamingId(null)
-                              }}
-                              className={`min-w-0 flex-1 rounded-xl px-3 py-2 text-sm font-bold ${inputClass(isDarkMode)}`}
-                            />
-                          ) : (
-                            <button type="button" onClick={() => !readOnly && onRenameGroup && setRenamingId(group.id)} className={`truncate text-left text-sm font-bold ${textPrimary(isDarkMode)}`}>
-                              {group.name}
-                            </button>
-                          )}
-                          {!readOnly && onDeleteGroup ? (
-                            <button
-                              type="button"
-                              className="text-sm font-bold text-[#f19ba8]"
-                              onClick={() => {
-                                if (window.confirm(t(lang, 'delete_group'))) onDeleteGroup(group.id)
-                              }}
-                            >
-                              {t(lang, 'remove')}
-                            </button>
-                          ) : null}
-                        </div>
-                        <InviteCode
-                          lang={lang}
-                          isDarkMode={isDarkMode}
-                          label=""
-                          code={group.inviteCode ?? null}
-                          empty={t(lang, 'organizer_after_create')}
-                          readOnly={readOnly}
-                          onCopy={(_value, kind) =>
-                            share(group.inviteCode ?? null, group.inviteCode ? shortInviteUrl(group.inviteCode) : '', kind)
-                          }
-                          onRotate={!readOnly && onRotateGroup ? () => onRotateGroup(group.id) : undefined}
-                        />
+                <InviteCode
+                  lang={lang}
+                  isDarkMode={isDarkMode}
+                  label={t(lang, 'choreographer')}
+                  code={preferredInviteCode(initial.organizerShort, initial.organizerCode)}
+                  empty={t(lang, 'organizer_after_create')}
+                  readOnly={readOnly}
+                  onCopy={(_value, kind) =>
+                    share(
+                      preferredInviteCode(initial.organizerShort, initial.organizerCode),
+                      preferredInviteLink(initial.organizerShort, initial.organizerCode, 'organizer'),
+                      kind,
+                    )
+                  }
+                  onRotate={onRotateOrganizer}
+                />
+                <InviteCode
+                  lang={lang}
+                  isDarkMode={isDarkMode}
+                  label={t(lang, 'admin')}
+                  code={preferredInviteCode(initial.adminShort, initial.adminCode)}
+                  empty={t(lang, 'invite_after_create')}
+                  readOnly={readOnly}
+                  onCopy={(_value, kind) =>
+                    share(
+                      preferredInviteCode(initial.adminShort, initial.adminCode),
+                      preferredInviteLink(initial.adminShort, initial.adminCode, 'admin'),
+                      kind,
+                    )
+                  }
+                  onRotate={onRotateInvite}
+                />
+                <div className="space-y-2">
+                  {(initial.admins.length ?? 0) === 0 && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'admins_empty')}</p>}
+                  {initial.admins.map((admin) => (
+                    <div key={admin.id} className="glass-well flex items-center justify-between rounded-xl px-4 py-3">
+                      <div>
+                        <p className={`font-bold ${textPrimary(isDarkMode)}`}>{admin.email}</p>
+                        <p className="text-[10px] font-bold uppercase text-zinc-400">{t(lang, 'admin_joined')}</p>
                       </div>
-                    ))
-                  : draftGroups.map((group, index) => (
-                      <div key={`${group}-${index}`} className="flex items-center justify-between gap-3">
-                        <p className={`truncate text-sm font-bold ${textPrimary(isDarkMode)}`}>{group}</p>
-                        <button type="button" className="text-sm font-bold text-[#f19ba8]" onClick={() => setDraftGroups((current) => current.filter((_, item) => item !== index))}>
+                      {!readOnly && onRemoveAdmin && (
+                        <button type="button" onClick={() => onRemoveAdmin(admin.id)} className="text-sm font-bold text-[#f19ba8]">
                           {t(lang, 'remove')}
                         </button>
-                      </div>
-                    ))}
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : showInvites ? (
+              <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
+            ) : null}
+            {showGroups ? (
+              <div className={`space-y-3 ${showInvites ? 'border-t border-current/10 pt-4' : ''}`}>
+                {showInvites ? (
+                  <p className={`text-[10px] font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'groups_label')}</p>
+                ) : null}
+                {!readOnly ? (
+                  <form onSubmit={addDraftGroup} className={`flex gap-2 ${lock}`}>
+                    <input
+                      value={draftGroup}
+                      onChange={(event) => setDraftGroup(event.target.value)}
+                      placeholder={t(lang, 'group_placeholder')}
+                      aria-label={t(lang, 'group_placeholder')}
+                      className={`min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+                    />
+                    <button type="submit" disabled={!draftGroup.trim()} className="min-h-11 shrink-0 rounded-full bg-[#7c7bb9] px-4 text-sm font-bold text-white disabled:opacity-40">
+                      {t(lang, 'add_group')}
+                    </button>
+                  </form>
+                ) : null}
+                {initial
+                  ? initial.groups.length === 0 && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_groups')}</p>
+                  : draftGroups.length === 0 && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_groups')}</p>}
+                {(initial ? initial.groups.length : draftGroups.length) > 0 ? (
+                  <div className="space-y-3">
+                    {initial
+                      ? initial.groups.map((group) => (
+                          <div key={group.id} className="space-y-1.5 border-t border-current/10 pt-3" data-group-id={group.id}>
+                            <div className="flex items-center justify-between gap-3">
+                              {renamingId === group.id && onRenameGroup ? (
+                                <input
+                                  autoFocus
+                                  defaultValue={group.name}
+                                  aria-label={t(lang, 'group_placeholder')}
+                                  onBlur={(event) => {
+                                    setRenamingId(null)
+                                    const next = event.target.value.trim()
+                                    if (next && next !== group.name) onRenameGroup(group.id, next)
+                                  }}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter') event.currentTarget.blur()
+                                    if (event.key === 'Escape') setRenamingId(null)
+                                  }}
+                                  className={`min-w-0 flex-1 rounded-xl px-3 py-2 text-sm font-bold ${inputClass(isDarkMode)}`}
+                                />
+                              ) : (
+                                <button type="button" onClick={() => !readOnly && onRenameGroup && setRenamingId(group.id)} className={`truncate text-left text-sm font-bold ${textPrimary(isDarkMode)}`}>
+                                  {group.name}
+                                </button>
+                              )}
+                              {!readOnly && onDeleteGroup ? (
+                                <button
+                                  type="button"
+                                  className="text-sm font-bold text-[#f19ba8]"
+                                  onClick={() => {
+                                    if (window.confirm(t(lang, 'delete_group'))) onDeleteGroup(group.id)
+                                  }}
+                                >
+                                  {t(lang, 'remove')}
+                                </button>
+                              ) : null}
+                            </div>
+                            <InviteCode
+                              lang={lang}
+                              isDarkMode={isDarkMode}
+                              label=""
+                              code={group.inviteCode ?? null}
+                              empty={t(lang, 'organizer_after_create')}
+                              readOnly={readOnly}
+                              onCopy={(_value, kind) =>
+                                share(group.inviteCode ?? null, group.inviteCode ? shortInviteUrl(group.inviteCode) : '', kind)
+                              }
+                              onRotate={!readOnly && onRotateGroup ? () => onRotateGroup(group.id) : undefined}
+                            />
+                          </div>
+                        ))
+                      : draftGroups.map((group, index) => (
+                          <div key={`${group}-${index}`} className="flex items-center justify-between gap-3">
+                            <p className={`truncate text-sm font-bold ${textPrimary(isDarkMode)}`}>{group}</p>
+                            <button type="button" className="text-sm font-bold text-[#f19ba8]" onClick={() => setDraftGroups((current) => current.filter((_, item) => item !== index))}>
+                              {t(lang, 'remove')}
+                            </button>
+                          </div>
+                        ))}
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -403,94 +480,6 @@ export function SetupPanel({
           </div>
         </div>
 
-        {showInvites && (!readOnly || initial?.organizerCode || initial?.participantCode || initial?.organizerShort || initial?.participantShort) && (
-          <div className="space-y-5">
-            <h3 className={`inline-flex items-center gap-2 font-serif text-2xl ${textPrimary(isDarkMode)}`}>
-              {t(lang, 'organizer_link')}
-              <InfoTip lang={lang} name="links" text={t(lang, 'organizer_link_hint')} />
-            </h3>
-            {initial?.participantCode || initial?.participantShort ? (
-              <InviteCode
-                lang={lang}
-                isDarkMode={isDarkMode}
-                label={t(lang, 'dancer')}
-                code={preferredInviteCode(initial.participantShort, initial.participantCode)}
-                readOnly={readOnly}
-                onCopy={(_value, kind) =>
-                  share(
-                    preferredInviteCode(initial.participantShort, initial.participantCode),
-                    preferredInviteLink(initial.participantShort, initial.participantCode, 'participant'),
-                    kind,
-                  )
-                }
-                onRotate={onRotateParticipant}
-              />
-            ) : null}
-            {initial?.organizerCode || initial?.organizerShort ? (
-              <InviteCode
-                lang={lang}
-                isDarkMode={isDarkMode}
-                label={t(lang, 'choreographer')}
-                code={preferredInviteCode(initial.organizerShort, initial.organizerCode)}
-                readOnly={readOnly}
-                onCopy={(_value, kind) =>
-                  share(
-                    preferredInviteCode(initial.organizerShort, initial.organizerCode),
-                    preferredInviteLink(initial.organizerShort, initial.organizerCode, 'organizer'),
-                    kind,
-                  )
-                }
-                onRotate={onRotateOrganizer}
-              />
-            ) : !initial?.participantCode && !initial?.participantShort ? (
-              <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
-            ) : null}
-          </div>
-        )}
-
-        {showInvites ? (
-        <div className="space-y-3">
-          <h3 className={`inline-flex items-center gap-2 font-serif text-2xl ${textPrimary(isDarkMode)}`}>
-            {t(lang, 'admins_label')}
-            <InfoTip lang={lang} name="admins" text={t(lang, 'invite_admin_hint')} />
-          </h3>
-          {initial?.adminCode || initial?.adminShort ? (
-            <InviteCode
-              lang={lang}
-              isDarkMode={isDarkMode}
-              label={t(lang, 'admin')}
-              code={preferredInviteCode(initial.adminShort, initial.adminCode)}
-              readOnly={readOnly}
-              onCopy={(_value, kind) =>
-                share(
-                  preferredInviteCode(initial.adminShort, initial.adminCode),
-                  preferredInviteLink(initial.adminShort, initial.adminCode, 'admin'),
-                  kind,
-                )
-              }
-              onRotate={onRotateInvite}
-            />
-          ) : (
-            <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'invite_after_create')}</p>
-          )}
-          <div className="space-y-2">
-            {(initial?.admins.length ?? 0) === 0 && <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'admins_empty')}</p>}
-            {initial?.admins.map((admin) => (
-              <div key={admin.id} className="glass-well flex items-center justify-between rounded-xl px-4 py-3">
-                <div>
-                  <p className={`font-bold ${textPrimary(isDarkMode)}`}>{admin.email}</p>
-                  <p className="text-[10px] font-bold uppercase text-zinc-400">{t(lang, 'admin_joined')}</p>
-                </div>
-                {!readOnly && onRemoveAdmin && (
-                  <button type="button" onClick={() => onRemoveAdmin(admin.id)} className="text-sm font-bold text-[#f19ba8]">
-                    {t(lang, 'remove')}
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-        ) : null}
         {note && <p className="font-bold text-[#f19ba8]">{note}</p>}
       </div>
       <div className="dock mt-6 flex justify-center gap-3 sm:mt-8">

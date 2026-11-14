@@ -3,9 +3,9 @@ import { t } from '../i18n'
 import { useCalendar } from '../lib/calendarContext'
 import { buildIcs, formatSlotText } from '../lib/export'
 import { clearGoogleToken, createCalendarEvents, GOOGLE_CALENDAR_ENABLED, GoogleCalendarError } from '../lib/googleCalendar'
-import { formatLongDate, formatTime, getDaysArray, parseISODate, toISODateString } from '../lib/dates'
+import { formatLongDate, formatTime, getDaysArray, parseISODate, setTime, toISODateString } from '../lib/dates'
 import { durationHours, fitDuration, roundHour, SLOT_STEP } from '../lib/timeRange'
-import { availabilityHeatmap, calculateBestSlots, compulsoryReport, sharedFreeByDay, shortlistSessionHours, type MarkFilter } from '../lib/schedule'
+import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, compulsoryReport, sharedFreeByDay, shortlistSessionHours, type MarkFilter } from '../lib/schedule'
 import { commitSessions, pinsToSave, toggleSessionDay, type SessionRange } from '../lib/sessions'
 import { cardClass, textMuted, textPrimary } from '../lib/ui'
 import { InfoTip } from './Guide'
@@ -94,8 +94,18 @@ export function ResultsPanel({
     () => calculateBestSlots(slotConfig, required, dancers),
     [slotConfig, required, dancers],
   )
+  const windowSlots = useMemo(() => {
+    return sessions.flatMap((session) => {
+      if (slots.some((slot) => slotMatchesSession(slot, session))) return []
+      const start = setTime(parseISODate(session.iso), session.startHour)
+      const end = setTime(parseISODate(session.iso), session.endHour)
+      if (end.getTime() <= start.getTime()) return []
+      return [classifySessionWindow(dancers, start, end, slotConfig.attendanceTolerance)]
+    })
+  }, [sessions, slots, dancers, slotConfig.attendanceTolerance])
+  const shownSlots = useMemo(() => [...slots, ...windowSlots], [slots, windowSlots])
 
-  const dated = slots.filter((slot) => {
+  const dated = shownSlots.filter((slot) => {
     const iso = toISODateString(slot.start)
     if (onDaysOnly && !campaign.onDays.includes(iso)) return false
     if (selectedDates.size > 0 && !selectedDates.has(iso)) return false

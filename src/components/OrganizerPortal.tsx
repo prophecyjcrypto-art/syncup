@@ -145,55 +145,10 @@ export function OrganizerPortal({
             />
           </section>
 
-          <section className={`${cardClass(isDarkMode)} space-y-4 rounded-[1.5rem] p-4 sm:p-5`}>
-            <h3 className={`inline-flex items-center gap-2 font-serif text-2xl ${textPrimary(isDarkMode)}`}>
-              {t(lang, 'groups_label')}
-              <InfoTip lang={lang} name="groups" text={t(lang, 'group_code_hint')} />
-            </h3>
-            <form onSubmit={addGroup} className="flex gap-2">
-              <input
-                value={groupName}
-                onChange={(event) => setGroupName(event.target.value)}
-                placeholder={t(lang, 'group_placeholder')}
-                aria-label={t(lang, 'group_placeholder')}
-                className={`min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
-              />
-              <button type="submit" disabled={!groupName.trim()} className="min-h-11 shrink-0 rounded-full bg-[#7c7bb9] px-4 text-sm font-bold text-white disabled:opacity-40">
-                {t(lang, 'add_group')}
-              </button>
-            </form>
-            {campaign.groups.length === 0 ? <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_groups')}</p> : null}
-            {campaign.groups.map((group) => (
-              <div key={group.id} className="space-y-2 border-t border-white/10 pt-4" data-group-id={group.id}>
-                <div className="flex items-center justify-between gap-3">
-                  <GroupName lang={lang} isDarkMode={isDarkMode} name={group.name} onRename={(name) => onRenameGroup(group.id, name)} />
-                  <button
-                    type="button"
-                    className="text-sm font-bold text-[#f19ba8]"
-                    onClick={() => {
-                      if (window.confirm(t(lang, 'delete_group'))) onDeleteGroup(group.id)
-                    }}
-                  >
-                    {t(lang, 'remove')}
-                  </button>
-                </div>
-                <InviteCode
-                  lang={lang}
-                  isDarkMode={isDarkMode}
-                  label=""
-                  code={group.inviteCode ?? null}
-                  empty={t(lang, 'organizer_after_create')}
-                  onCopy={(_value, kind) => copyInvite(group.inviteCode ?? null, group.inviteCode ? shortInviteUrl(group.inviteCode) : '', kind)}
-                  onRotate={onRotateGroup ? () => onRotateGroup(group.id) : undefined}
-                />
-              </div>
-            ))}
-          </section>
-
-          <section className={`${cardClass(isDarkMode)} space-y-5 rounded-[1.5rem] p-4 sm:p-5`}>
-            <h3 className={`inline-flex items-center gap-2 font-serif text-2xl ${textPrimary(isDarkMode)}`}>
-              {t(lang, 'organizer_link')}
-              <InfoTip lang={lang} name="links" text={t(lang, 'organizer_link_hint')} />
+          <section className={`${cardClass(isDarkMode)} space-y-4 rounded-[1.5rem] p-4 sm:p-5`} data-codes-section="">
+            <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
+              {t(lang, 'codes_title')}
+              <InfoTip lang={lang} name="codes" text={t(lang, 'codes_hint')} />
             </h3>
             <InviteCode
               lang={lang}
@@ -232,7 +187,6 @@ export function OrganizerPortal({
                 lang={lang}
                 isDarkMode={isDarkMode}
                 label={t(lang, 'admin')}
-                hint={t(lang, 'invite_admin_hint')}
                 code={preferredInviteCode(campaign.adminShort, campaign.adminCode)}
                 empty={t(lang, 'invite_after_create')}
                 readOnly={!canRotateEvent}
@@ -246,6 +200,61 @@ export function OrganizerPortal({
                 onRotate={canRotateEvent ? onRotateAdmin : undefined}
               />
             ) : null}
+            {(campaign.admins.length ?? 0) === 0 ? <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'admins_empty')}</p> : null}
+            {campaign.admins.map((admin) => (
+              <div key={admin.id} className="glass-well flex items-center justify-between rounded-xl px-4 py-3">
+                <div className="min-w-0">
+                  <p className={`truncate font-bold ${textPrimary(isDarkMode)}`}>{admin.email}</p>
+                  <p className="text-[10px] font-bold uppercase text-zinc-400">{t(lang, 'admin_joined')}</p>
+                </div>
+                {onRemoveAdmin ? (
+                  <button type="button" onClick={() => onRemoveAdmin(admin.id)} className="text-sm font-bold text-[#f19ba8]">
+                    {t(lang, 'remove')}
+                  </button>
+                ) : null}
+              </div>
+            ))}
+            <div className="space-y-3 border-t border-current/10 pt-4">
+              <p className={`text-[10px] font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'groups_label')}</p>
+              <form onSubmit={addGroup} className="flex gap-2">
+                <input
+                  value={groupName}
+                  onChange={(event) => setGroupName(event.target.value)}
+                  placeholder={t(lang, 'group_placeholder')}
+                  aria-label={t(lang, 'group_placeholder')}
+                  className={`min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+                />
+                <button type="submit" disabled={!groupName.trim()} className="min-h-11 shrink-0 rounded-full bg-[#7c7bb9] px-4 text-sm font-bold text-white disabled:opacity-40">
+                  {t(lang, 'add_group')}
+                </button>
+              </form>
+              {campaign.groups.length === 0 ? <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_groups')}</p> : null}
+              {campaign.groups.map((group) => (
+                <div key={group.id} className="space-y-1.5 border-t border-current/10 pt-3" data-group-id={group.id}>
+                  <div className="flex items-center justify-between gap-3">
+                    <GroupName lang={lang} isDarkMode={isDarkMode} name={group.name} onRename={(name) => onRenameGroup(group.id, name)} />
+                    <button
+                      type="button"
+                      className="text-sm font-bold text-[#f19ba8]"
+                      onClick={() => {
+                        if (window.confirm(t(lang, 'delete_group'))) onDeleteGroup(group.id)
+                      }}
+                    >
+                      {t(lang, 'remove')}
+                    </button>
+                  </div>
+                  <InviteCode
+                    lang={lang}
+                    isDarkMode={isDarkMode}
+                    label=""
+                    code={group.inviteCode ?? null}
+                    empty={t(lang, 'organizer_after_create')}
+                    onCopy={(_value, kind) => copyInvite(group.inviteCode ?? null, group.inviteCode ? shortInviteUrl(group.inviteCode) : '', kind)}
+                    onRotate={onRotateGroup ? () => onRotateGroup(group.id) : undefined}
+                  />
+                </div>
+              ))}
+            </div>
           </section>
         </div>
       ) : null}

@@ -1,4 +1,4 @@
-import type { AppConfig, BlockKind, TimeSlot } from '../types'
+import type { AppConfig, BlockKind, PartialMember, TimeSlot } from '../types'
 import { getDaysArray, parseISODate, setTime, toISODateString } from './dates'
 import { roundHour, type HourRange } from './timeRange'
 
@@ -128,6 +128,90 @@ function dayWindow(config: AppConfig, iso: string): { start: number; end: number
   }
 }
 
+export interface SessionAttendance {
+  status: 'ok' | 'partial' | 'na'
+  availability: number
+  missingMins: number
+  lateMins: number
+  earlyMins: number
+}
+
+/**
+ * Classify one person against one session window.
+ * OK: free the whole time, or the gap fits the late/early buffer and they are free for some of it.
+ * Partial: some free time, but more missing than the buffer.
+ * NA: no free time. A longer buffer never turns a fully absent person into OK.
+ */
+export function classifySessionAttendance(
+  person: SchedulePerson,
+  startMs: number,
+  endMs: number,
+  toleranceMs: number,
+): SessionAttendance {
+  const durationMs = Math.max(0, endMs - startMs)
+  const intervals = freeIntervals(person, startMs, endMs)
+  const covered = durationMs > 0 ? coveredMs(intervals) : 0
+  const missing = Math.max(0, durationMs - covered)
+  const availability = durationMs > 0 ? Math.min(100, (covered / durationMs) * 100) : 0
+  const first = intervals[0]?.start
+  const lastFree = intervals.length ? intervals[intervals.length - 1].end : undefined
+  const lateMins = first !== undefined && first > startMs + 1000 ? Math.ceil((first - startMs) / 60000) : 0
+  const earlyMins = lastFree !== undefined && lastFree < endMs - 1000 ? Math.ceil((endMs - lastFree) / 60000) : 0
+  const hasFree = covered > 1000
+  const withinBuffer = missing <= Math.max(0, toleranceMs) + 1000
+  const status: SessionAttendance['status'] = !hasFree ? 'na' : missing <= 1000 || withinBuffer ? 'ok' : 'partial'
+  return {
+    status,
+    availability,
+    missingMins: Math.ceil(missing / 60000),
+    lateMins,
+    earlyMins,
+  }
+}
+
+/** OK / Partial / NA for one window. Callers use this for suggested slots and for a shortlist that is longer than `durationHours`. */
+export function classifySessionWindow(
+  dancers: SchedulePerson[],
+  start: Date,
+  end: Date,
+  toleranceHours: number,
+): TimeSlot {
+  const startMs = start.getTime()
+  const endMs = end.getTime()
+  const toleranceMs = toleranceHours * 60 * 60 * 1000
+  const availableMembers: string[] = []
+  const partialMembers: PartialMember[] = []
+  const unavailableMembers: TimeSlot['unavailableMembers'] = []
+  let totalAttendance = 0
+
+  for (const dancer of dancers) {
+    const attendance = classifySessionAttendance(dancer, startMs, endMs, toleranceMs)
+    totalAttendance += attendance.availability
+    if (attendance.status === 'ok') {
+      availableMembers.push(dancer.id)
+    } else if (attendance.status === 'partial') {
+      partialMembers.push({
+        id: dancer.id,
+        missingMins: attendance.missingMins,
+        lateMins: attendance.lateMins,
+        earlyMins: attendance.earlyMins,
+      })
+    } else {
+      unavailableMembers.push({ id: dancer.id, availability: Math.round(attendance.availability) })
+    }
+  }
+
+  return {
+    start,
+    end,
+    availableMembers,
+    partialMembers,
+    unavailableMembers,
+    attendanceScore: dancers.length > 0 ? Math.round(totalAttendance / dancers.length) : 100,
+    score: availableMembers.length + partialMembers.length,
+  }
+}
+
 export function calculateBestSlots(
   config: AppConfig,
   choreographers: SchedulePerson[],
@@ -137,7 +221,6 @@ export function calculateBestSlots(
   if (durationHours == null) return []
   const durationMs = durationHours * 60 * 60 * 1000
   const stepMs = 30 * 60 * 1000
-  const toleranceMs = config.attendanceTolerance * 60 * 60 * 1000
 
   const slots: TimeSlot[] = []
   let day = parseISODate(config.startDate)
@@ -154,46 +237,7 @@ export function calculateBestSlots(
       })
       if (!choreographersOk) continue
 
-      const availableMembers: string[] = []
-      const partialMembers: TimeSlot['partialMembers'] = []
-      const unavailableMembers: TimeSlot['unavailableMembers'] = []
-      let totalAttendance = 0
-
-      for (const dancer of dancers) {
-        const intervals = freeIntervals(dancer, startMs, endMs)
-        const covered = coveredMs(intervals)
-        const missing = durationMs - covered
-        const availability = Math.min(100, (covered / durationMs) * 100)
-        totalAttendance += availability
-
-        if (missing <= 1000) {
-          availableMembers.push(dancer.id)
-        } else if (missing <= toleranceMs + 1000) {
-          const first = intervals[0]?.start
-          const lastFree = intervals.length ? intervals[intervals.length - 1].end : undefined
-          const lateMins = first !== undefined && first > startMs + 1000 ? Math.ceil((first - startMs) / 60000) : 0
-          const earlyMins =
-            lastFree !== undefined && lastFree < endMs - 1000 ? Math.ceil((endMs - lastFree) / 60000) : 0
-          partialMembers.push({
-            id: dancer.id,
-            missingMins: Math.ceil(missing / 60000),
-            lateMins,
-            earlyMins,
-          })
-        } else {
-          unavailableMembers.push({ id: dancer.id, availability: Math.round(availability) })
-        }
-      }
-
-      slots.push({
-        start: new Date(startMs),
-        end: new Date(endMs),
-        availableMembers,
-        partialMembers,
-        unavailableMembers,
-        attendanceScore: dancers.length > 0 ? Math.round(totalAttendance / dancers.length) : 100,
-        score: availableMembers.length + partialMembers.length,
-      })
+      slots.push(classifySessionWindow(dancers, new Date(startMs), new Date(endMs), config.attendanceTolerance))
     }
 
     day = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1)
