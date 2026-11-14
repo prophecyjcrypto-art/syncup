@@ -61,19 +61,19 @@ export function CampaignList({
   }, [showDetail])
 
   const joinForm = (
-    <form onSubmit={submitInvite} className={`${cardClass(isDarkMode)} mb-8 space-y-3 rounded-[2rem] p-5`}>
-      <p className={`flex items-center gap-1.5 text-sm font-semibold ${textPrimary(isDarkMode)}`}>
+    <form onSubmit={submitInvite} className={`${cardClass(isDarkMode)} mb-8 flex flex-col gap-3 rounded-[2rem] p-5`}>
+      <p className={`inline-flex min-w-0 flex-wrap items-center gap-1.5 text-sm font-semibold ${textPrimary(isDarkMode)}`}>
         {t(lang, 'join_admin')}
         <InfoTip lang={lang} name="join-admin" text={t(lang, 'join_code_hint')} />
       </p>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
         <input
           value={invite}
           onChange={(event) => setInvite(event.target.value)}
           placeholder={t(lang, 'join_admin_placeholder')}
-          className={`min-w-0 w-full flex-1 rounded-xl px-4 py-3 ${inputClass(isDarkMode)}`}
+          className={`min-h-11 min-w-0 w-full flex-1 rounded-xl px-4 py-3 ${inputClass(isDarkMode)}`}
         />
-        <button type="submit" className={primaryButton('shrink-0 px-5 py-3 text-sm')}>
+        <button type="submit" className={primaryButton('min-h-11 w-full shrink-0 px-5 py-3 text-sm sm:w-auto')}>
           {t(lang, 'join_admin')}
         </button>
       </div>
