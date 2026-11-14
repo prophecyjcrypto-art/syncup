@@ -21,7 +21,10 @@ export function ChangeRequestList({
   const wholeDay = lang === 'zh' ? '全天' : 'Whole day'
   return (
     <section className="space-y-2" data-change-requests="">
-      <h3 className={`text-sm font-semibold ${textPrimary(isDarkMode)}`}>{t(lang, 'change_request')}</h3>
+      <h3 className={`inline-flex items-center gap-2 text-sm font-semibold ${textPrimary(isDarkMode)}`}>
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[color:var(--logo-pink)]" aria-hidden />
+        {t(lang, 'change_request')}
+      </h3>
       {pending.map((request) => {
         const previous = restoreBlocks(request.previousBlocks)
         const proposed = restoreBlocks(request.proposedBlocks)

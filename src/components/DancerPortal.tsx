@@ -171,7 +171,7 @@ export function DancerPortal({
           <p className={`mt-2 whitespace-pre-wrap text-sm ${textPrimary(isDarkMode)}`}>{campaign.remarks}</p>
         </div>
       )}
-      {locked && <p className="rounded-xl bg-[#f19ba8]/15 px-4 py-3 text-sm font-bold text-[#f19ba8]">{t(lang, 'locked_msg')}</p>}
+      {locked && <p className="rounded-xl bg-[color-mix(in_srgb,var(--logo-pink)_15%,transparent)] px-4 py-3 text-sm font-bold text-[color:var(--logo-pink)]">{t(lang, 'locked_msg')}</p>}
       {notice ? <p data-request-notice="" className="text-sm font-medium text-[#f6cf7a]">{notice}</p> : null}
       {mineRequests.length > 0 ? (
         <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'change_request')} · {mineRequests.length}</p>

@@ -519,7 +519,7 @@ export default function App() {
       </header>
 
       <main className="shell-main">
-        {banner && <p className="glass mb-4 rounded-2xl px-4 py-3 text-sm font-bold text-[#f19ba8]">{banner}</p>}
+        {banner && <p className="glass mb-4 rounded-2xl px-4 py-3 text-sm font-bold text-[color:var(--logo-pink)]">{banner}</p>}
         {linkMissing && step === 'campaigns' && (
           <p className="glass mb-4 rounded-2xl px-4 py-3 text-sm font-bold text-[#c9a227]">{t(lang, 'not_found')}</p>
         )}

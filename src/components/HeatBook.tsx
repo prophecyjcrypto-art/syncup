@@ -486,7 +486,7 @@ export function HeatBook({
         ) : preview ? null : chosenHours == null ? (
           <p className={`text-xs ${textMuted(isDarkMode)}`}>{t(lang, 'choose_length_first')}</p>
         ) : (
-          <p className="text-xs text-[#f19ba8]">{t(lang, 'slot_blocked')}</p>
+          <p className="text-xs text-[color:var(--logo-pink)]">{t(lang, 'slot_blocked')}</p>
         )}
       </div>
     )
@@ -532,7 +532,7 @@ export function HeatBook({
                     {t(lang, 'clear_range')}
                   </button>
                   {sessions.length > 1 ? (
-                    <button type="button" onClick={onClearAll} className="h-8 px-1.5 text-[11px] font-bold text-[#f19ba8]">
+                    <button type="button" onClick={onClearAll} className="h-8 px-1.5 text-[11px] font-bold text-[color:var(--logo-pink)]">
                       {t(lang, 'clear_all')}
                     </button>
                   ) : null}

@@ -551,7 +551,7 @@ export function ResultsPanel({
 
   function selectMarkClass(on: boolean, partial = false) {
     if (on) return 'tone-fill-purple'
-    if (partial) return 'ring-1 ring-[color:var(--logo-purple)] bg-[color-mix(in_srgb,var(--logo-purple)_28%,transparent)]'
+    if (partial) return 'ring-1 ring-[color:var(--logo-pink)] bg-[color-mix(in_srgb,var(--logo-pink)_28%,transparent)]'
     return 'glass-well'
   }
 
@@ -990,7 +990,7 @@ export function ResultsPanel({
                         else next.add(iso)
                         setSelectedDates(next)
                       }}
-                      className={`cal-day flex w-full items-center justify-center rounded-md text-xs font-bold leading-none ${scoreTone(score, isDarkMode)} ${selected ? 'ring-2 ring-white' : ''} ${campaign.compulsoryDays.includes(iso) ? 'outline outline-2 outline-[#f19ba8]' : ''}`}
+                      className={`cal-day flex w-full items-center justify-center rounded-md text-xs font-bold leading-none ${scoreTone(score, isDarkMode)} ${selected ? 'ring-2 ring-white' : ''} ${campaign.compulsoryDays.includes(iso) ? 'outline outline-2 outline-[color:var(--logo-pink)]' : ''}`}
                     >
                       {campaign.onDays.includes(iso) ? '★' : ''}
                       {day.getDate()}

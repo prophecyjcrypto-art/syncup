@@ -108,7 +108,8 @@
   }
 
   ::selection {
-    background: color-mix(in srgb, var(--p-accent) 35%, transparent);
+    background: color-mix(in srgb, var(--logo-pink) 42%, transparent);
+    color: var(--p-ink);
   }
 }
 
@@ -123,6 +124,7 @@
   background-color: var(--p-bg);
   background-image:
     radial-gradient(720px 420px at 8% -6%, color-mix(in srgb, var(--p-accent) 10%, transparent), transparent 55%),
+    radial-gradient(520px 340px at 92% 12%, color-mix(in srgb, var(--logo-pink) 12%, transparent), transparent 58%),
     radial-gradient(640px 380px at 100% 0%, rgba(255, 255, 255, 0.04), transparent 50%);
 }
 
@@ -131,6 +133,7 @@
   background-color: #f7f7f5;
   background-image:
     radial-gradient(720px 420px at 8% -6%, color-mix(in srgb, var(--logo-sage) 14%, transparent), transparent 55%),
+    radial-gradient(520px 340px at 92% 10%, color-mix(in srgb, var(--logo-pink) 14%, transparent), transparent 58%),
     radial-gradient(640px 380px at 100% 0%, rgba(0, 0, 0, 0.03), transparent 50%);
 }
 
@@ -397,6 +400,8 @@ button.assign-chip {
 
 .info-tip > button {
   position: relative;
+  color: var(--logo-pink);
+  border-color: color-mix(in srgb, var(--logo-pink) 45%, transparent);
 }
 
 .info-tip > button::after {
@@ -667,7 +672,7 @@ button.heat-day:disabled {
 }
 
 .heat-cell-pinned {
-  outline: 2px solid #f6cf7a;
+  outline: 2px solid var(--logo-pink);
   outline-offset: -2px;
 }
 

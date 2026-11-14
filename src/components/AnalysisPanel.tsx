@@ -199,8 +199,8 @@ function SplitBar({ ok, na, max, isDarkMode }: { ok: number; na: number; max: nu
   const scale = max > 0 ? max : 1
   return (
     <div className={`flex h-1.5 overflow-hidden rounded-full ${isDarkMode ? 'bg-white/10' : 'bg-black/10'}`}>
-      <div className="h-full bg-[#93ba8c]" style={{ width: `${(ok / scale) * 100}%` }} />
-      <div className="h-full bg-[#f19ba8]" style={{ width: `${(na / scale) * 100}%` }} />
+      <div className="h-full bg-[color:var(--logo-sage)]" style={{ width: `${(ok / scale) * 100}%` }} />
+      <div className="h-full bg-[color:var(--logo-pink)]" style={{ width: `${(na / scale) * 100}%` }} />
     </div>
   )
 }

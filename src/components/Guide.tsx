@@ -141,7 +141,7 @@ export function MiniSteps({ steps }: { steps: string[] }) {
     <ol className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-3">
       {steps.map((step, index) => (
         <li key={step} className="glass-well flex items-center gap-2 rounded-[var(--r-md)] px-3 py-2.5 text-[11px] leading-snug sm:text-xs">
-          <span className="shrink-0 font-mono text-[10px] font-medium tabular-nums opacity-45">{String(index + 1).padStart(2, '0')}</span>
+          <span className="shrink-0 font-mono text-[10px] font-medium tabular-nums text-[color:var(--logo-pink)] opacity-85">{String(index + 1).padStart(2, '0')}</span>
           <span className="min-w-0 text-pretty">{step}</span>
         </li>
       ))}
@@ -181,7 +181,11 @@ export function FlowSteps({
             >
               <span
                 className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] ${
-                  active ? 'bg-[#7c7bb9] text-white' : 'glass-well'
+                  active
+                    ? step === 'results'
+                      ? 'tone-fill-pink'
+                      : 'bg-[color:var(--logo-purple)] text-white'
+                    : 'glass-well'
                 }`}
               >
                 {index + 1}

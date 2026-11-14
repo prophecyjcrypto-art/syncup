@@ -265,14 +265,14 @@ export function AvailabilityEditor({
                   className={`cal-day relative flex w-full flex-col items-center justify-center rounded-lg text-xs font-bold leading-none ${
                     chosen ? (positive ? 'tone-fill-sage' : 'tone-fill-pink') : `glass-well ${isDarkMode ? 'text-zinc-100' : 'text-zinc-800'}`
                   } ${onDays.includes(iso) ? 'ring-2 ring-[#f6cf7a]' : ''} ${
-                    compulsoryDays.includes(iso) ? 'outline outline-2 outline-[#f19ba8]' : ''
+                    compulsoryDays.includes(iso) ? 'outline outline-2 outline-[color:var(--logo-pink)]' : ''
                   }`}
                 >
                   {onDays.includes(iso) ? '★' : ''}
                   {day.getDate()}
                   <span className="mt-0.5 flex gap-1">
                     {booked.length > 0 ? <i className="h-1.5 w-1.5 rounded-full bg-[color:var(--logo-gold)]" /> : null}
-                    {kinds.has('unavailable') && <i className="h-1.5 w-1.5 rounded-full bg-[#f19ba8]" />}
+                    {kinds.has('unavailable') && <i className="h-1.5 w-1.5 rounded-full bg-[color:var(--logo-pink)]" />}
                     {kinds.has('available') && <i className="h-1.5 w-1.5 rounded-full bg-[#93ba8c]" />}
                   </span>
                 </button>

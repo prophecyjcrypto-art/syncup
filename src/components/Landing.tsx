@@ -13,16 +13,18 @@ const HOW = [
 /** Static product UI for the hero — real heat-grid language, not a dashboard collage. */
 function HeroHeatMock({ isDarkMode }: { isDarkMode: boolean }) {
   const days = ['四', '五', '六', '日', '一', '二', '三']
+  // Scores map to all four logo circles: purple / sage / gold / pink.
   const rows = [
-    [70, 70, 90, 70, 70, 50, 70],
-    [70, 90, 90, 70, 90, 70, 50],
-    [50, 70, 70, 90, 70, 70, 70],
-    [70, 50, 70, 70, 90, 90, 70],
+    [70, 70, 90, 70, 40, 55, 70],
+    [70, 90, 90, 40, 90, 70, 55],
+    [55, 70, 40, 90, 70, 70, 70],
+    [70, 40, 70, 55, 90, 90, 40],
   ]
   function tone(score: number) {
     if (score >= 90) return 'bg-[color:var(--logo-purple)]'
     if (score >= 70) return 'bg-[color:var(--logo-sage)]'
-    return 'bg-[color:var(--logo-gold)]'
+    if (score >= 50) return 'bg-[color:var(--logo-gold)]'
+    return 'bg-[color:var(--logo-pink)]'
   }
   return (
     <div
@@ -33,7 +35,7 @@ function HeroHeatMock({ isDarkMode }: { isDarkMode: boolean }) {
     >
       <div className="mb-2 flex items-center justify-between gap-2 px-1">
         <span className={`text-[11px] font-semibold tabular-nums ${textMuted(isDarkMode)}`}>16:00–18:00 · 2h</span>
-        <span className="rounded-full bg-[color:var(--logo-sage)] px-2 py-0.5 text-[10px] font-bold text-[color:var(--logo-sage-ink)]">3 / 4</span>
+        <span className="rounded-full bg-[color:var(--logo-pink)] px-2 py-0.5 text-[10px] font-bold text-[color:var(--logo-pink-ink)]">3 / 4</span>
       </div>
       <div className="grid grid-cols-[1.6rem_repeat(7,minmax(0,1fr))] gap-1">
         <span />
@@ -50,7 +52,7 @@ function HeroHeatMock({ isDarkMode }: { isDarkMode: boolean }) {
             {row.map((score, col) => (
               <span
                 key={`${rowIndex}-${col}`}
-                className={`h-7 rounded-[0.35rem] sm:h-8 ${tone(score)} ${col === 2 && rowIndex < 2 ? 'ring-1 ring-[color:var(--logo-gold)]' : ''}`}
+                className={`h-7 rounded-[0.35rem] sm:h-8 ${tone(score)} ${col === 2 && rowIndex < 2 ? 'ring-1 ring-[color:var(--logo-pink)]' : ''}`}
               />
             ))}
           </div>
@@ -119,7 +121,7 @@ export function Landing({
         <ol className="mx-auto mt-8 max-w-xl space-y-6">
           {HOW.map(([title, body], index) => (
             <li key={title} className="flex gap-4 text-left">
-              <span className="font-mono text-[12px] font-medium tabular-nums opacity-40">{String(index + 1).padStart(2, '0')}</span>
+              <span className="font-mono text-[12px] font-medium tabular-nums text-[color:var(--logo-pink)] opacity-80">{String(index + 1).padStart(2, '0')}</span>
               <div className="min-w-0">
                 <h3 className={`text-base font-semibold ${textPrimary(isDarkMode)}`}>{t(lang, title)}</h3>
                 <p className={`mt-1 text-[13px] leading-relaxed text-pretty sm:text-sm ${textMuted(isDarkMode)}`}>{t(lang, body)}</p>

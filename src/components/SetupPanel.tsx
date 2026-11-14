@@ -290,7 +290,7 @@ export function SetupPanel({
                   aria-label={formatLongDate(day, lang)}
                   className={`cal-day glass-well flex w-full items-center justify-center rounded-lg text-sm font-medium leading-none ${
                     isDarkMode ? 'text-white' : 'text-zinc-800'
-                  } ${show ? 'ring-2 ring-[#f6cf7a]' : ''} ${must ? 'outline outline-2 outline-[#f19ba8]' : ''}`}
+                  } ${show ? 'ring-2 ring-[color:var(--logo-gold)]' : ''} ${must ? 'outline outline-2 outline-[color:var(--logo-pink)]' : ''}`}
                 >
                   {show ? '★' : ''}
                   {day.getDate()}
