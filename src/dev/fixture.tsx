@@ -161,8 +161,10 @@ function Shell({ children, flow }: { children: ReactNode; flow?: boolean }) {
 }
 
 function LivePreview({ name }: { name: string }) {
-  const tab: HubTab = name === 'hub-settings' ? 'event' : 'participants'
+  const tab: HubTab = name === 'hub-settings' ? 'event' : name === 'hub-organizers' ? 'organizers' : 'participants'
   const [event, setEvent] = useState(campaign)
+  const [timing, setTiming] = useState(false)
+  const [blocks, setBlocks] = useState<TimeBlock[]>([])
   if (name === 'setup-event') {
     return (
       <Shell>
@@ -193,6 +195,24 @@ function LivePreview({ name }: { name: string }) {
       </Shell>
     )
   }
+  if (timing) {
+    return (
+      <Shell>
+        <button type="button" onClick={() => setTiming(false)} className={`mb-4 text-xs font-bold uppercase ${textMuted(true)}`}>
+          ← {lang === 'zh' ? '主辦工作台' : 'Organizer hub'}
+        </button>
+        <AvailabilityEditor
+          lang={lang}
+          isDarkMode
+          config={event.config}
+          onDays={event.onDays}
+          compulsoryDays={event.compulsoryDays}
+          blocks={blocks}
+          onChange={setBlocks}
+        />
+      </Shell>
+    )
+  }
   return (
     <Shell>
       <OrganizerPortal
@@ -202,6 +222,8 @@ function LivePreview({ name }: { name: string }) {
         canEditEvent
         initialTab={tab}
         onBack={() => undefined}
+        onOrganizerTime={() => setTiming(true)}
+        onAdminTime={() => setTiming(true)}
         onCopy={() => undefined}
         onSave={() => undefined}
         onCreateGroup={(groupName) =>

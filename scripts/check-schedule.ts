@@ -3,7 +3,7 @@ import { formatHourCount, formatPeopleCount } from '../src/i18n.ts'
 import { getDaysArray, groupByMonth, parseISODate, setTime, toISODateString } from '../src/lib/dates.ts'
 import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, coveredMs, freeIntervals, markedBlockCount, markedHours, normalizeDurationHours, plannedSessionHours, responseCount, shortlistSessionHours, uncoveredDays } from '../src/lib/schedule.ts'
 import { analyzeEvent } from '../src/lib/analysis.ts'
-import { devResultsAllowed, isDevResultsPath } from '../src/lib/devPreview.ts'
+import { devResultsAllowed, isDevHubPath, isDevResultsPath } from '../src/lib/devPreview.ts'
 import { membershipChanges } from '../src/lib/groups.ts'
 import { canEditEvent, canSeeResults } from '../src/lib/access.ts'
 import { emailForAdminGrant, grantRole } from '../src/lib/roles.ts'
@@ -312,7 +312,10 @@ assert(devResultsAllowed(false, 'preview') === true, 'a Vercel preview build can
 assert(devResultsAllowed(false, 'production') === false, 'production cannot open the results preview')
 assert(devResultsAllowed(false, undefined) === false, 'a build without Vercel preview cannot open the results preview')
 assert(isDevResultsPath('/dev/results') && isDevResultsPath('/dev/results/'), 'the preview lives at /dev/results')
-assert(!isDevResultsPath('/') && !isDevResultsPath('/dev/results/extra'), 'other paths are not the preview')
+assert(!isDevResultsPath('/') && !isDevResultsPath('/dev/results/extra') && !isDevResultsPath('/dev'), 'other paths are not the results preview')
+assert(isDevHubPath('/dev') && isDevHubPath('/dev/'), 'the login-free mock lives at /dev')
+assert(!isDevHubPath('/dev/results') && !isDevHubPath('/') && !isDevHubPath('/dev/extra'), 'only /dev opens the product mock')
+assert(shortCodeFromPath('/dev') === null, 'the mock path is not an invite')
 
 const sample = buildCampaign('zh', sampleShortlist(), 2)
 assert(sample.groups.map((group) => group.name).join() === '主力,後備', 'the sample has a main group and a reserve group')
@@ -328,6 +331,10 @@ const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8
 assert(!appSource.includes('/dev/results'), 'the signed-in app does not link to the preview')
 const mainSource = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8')
 assert(mainSource.includes('__SYNCUP_DEV_RESULTS__') && !/searchParams\.get\(\s*['"]dev['"]\s*\)/.test(mainSource), 'the preview is not unlocked by a public query secret')
+assert(mainSource.includes('isDevHubPath') && mainSource.includes("mockAllowed && (previewName || hubPath)"), 'the product mock uses the same preview build gate')
+assert(!mainSource.includes('import.meta.env.DEV'), 'a hosted preview is not limited to the Vite dev server')
+const fixtureSource = readFileSync(new URL('../src/dev/fixture.tsx', import.meta.url), 'utf8')
+assert(!fixtureSource.includes('lib/db') && !fixtureSource.includes('lib/supabase') && !fixtureSource.includes('fetchCampaigns'), 'the product mock cannot read or write live events')
 const viteConfig = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8')
 assert(viteConfig.includes('devResultsAllowed'), 'the Vite build uses the same preview gate')
 

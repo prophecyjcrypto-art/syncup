@@ -183,11 +183,13 @@ const hub = renderToStaticMarkup(
     },
   }),
 )
-const hubParticipants = hub.slice(hub.indexOf('data-participants-block'), hub.indexOf('data-organizer-block'))
+const hubParticipants = hub.slice(hub.indexOf('data-participants-block'))
 assert(hubParticipants.includes('All participants') && hubParticipants.indexOf('All participants') < hubParticipants.indexOf('Groups'), 'hub lists all participants before groups')
 assert(hubParticipants.includes('2K7MQ9H') && hubParticipants.includes('data-person-id="d1"'), 'a group shows its code and its dancers')
 assert(!hub.slice(hub.indexOf('data-drop-group="all"'), hub.indexOf('data-drop-group="g1"')).includes('d1'), 'grouped dancers stay out of all participants')
-assert(!hubParticipants.includes('7K2MQ9P'), 'the hub keeps the organizer code outside participants')
+assert(!hub.includes('7K2MQ9P') && !hub.includes('4H8K2MQ'), 'the participants tab hides organizer and admin invites')
+assert(!hub.includes('data-drop-role') && !hub.includes('data-organizer-block') && !hub.includes('data-admins-block'), 'the participants tab has no role targets')
+assert(!hub.includes('data-role-time'), 'organizer and admin time stay off the participants tab')
 assert(hub.includes('data-assign-tray'), 'dancers can be assigned from the hub')
 assert(!hub.includes('New code'), 'the hub does not offer a new invite code')
 assert(hub.includes('Copy code') && hub.includes('Copy link'), 'the hub still copies a code or its link')
@@ -203,9 +205,36 @@ for (const id of ['event', 'organizers', 'participants', 'results']) {
   assert(button.length > 0, `missing the ${id} tab`)
   assert(!/>\s*[1-4]\s*</.test(button), `the ${id} tab is numbered`)
 }
-assert(hub.includes('data-drop-role="organizer"') && hub.includes('data-drop-role="admin"'), 'organizer and admin boxes are drop targets')
 assert(hub.includes('data-grip'), 'people show a drag grip')
-assert(hub.includes('Drop here'), 'empty role boxes say where to drop')
+const hubOrganizers = renderToStaticMarkup(
+  createElement(OrganizerPortal, {
+    lang: 'en',
+    isDarkMode: true,
+    campaign: {
+      ...campaign,
+      groups: [{ id: 'g1', name: 'Main', memberIds: ['d1'], inviteCode: '2K7MQ9H' }],
+    },
+    canEditEvent: true,
+    initialTab: 'organizers',
+    onBack: () => undefined,
+    onCopy: () => undefined,
+    onSave: () => undefined,
+    onCreateGroup: () => undefined,
+    onRenameGroup: () => undefined,
+    onDeleteGroup: () => undefined,
+    onToggleMember: () => undefined,
+    onOrganizerTime: () => undefined,
+    onAdminTime: () => undefined,
+  }),
+)
+assert(hubOrganizers.includes('data-hub-tabs') && hubOrganizers.includes('data-hub="organizers"'), 'organizers stay on the same tab bar')
+assert(hubOrganizers.includes('data-drop-role="organizer"') && hubOrganizers.includes('data-drop-role="admin"'), 'organizer and admin boxes are on the organizers tab')
+assert(hubOrganizers.includes('Drop here'), 'empty role boxes say where to drop')
+assert(hubOrganizers.includes('7K2MQ9P') && hubOrganizers.includes('4H8K2MQ'), 'organizer and admin invites stay on their tab')
+assert(hubOrganizers.includes('data-role-time="organizer"') && hubOrganizers.includes('data-role-time="admin"'), 'each role can open its own time entry')
+assert(hubOrganizers.includes('data-staff-stats'), 'organizers and admins have their own stats')
+assert(!hubOrganizers.includes('data-participants-block') && !hubOrganizers.includes('data-person-id'), 'the organizers tab does not list participants')
+assert(!hubOrganizers.includes('2K7MQ9H') && !hubOrganizers.includes('All participants'), 'the organizers tab does not assign groups')
 const hubEvent = renderToStaticMarkup(
   createElement(OrganizerPortal, {
     lang: 'en',
@@ -491,10 +520,11 @@ const editor = renderToStaticMarkup(
 )
 assert(!editor.includes('Connect Google Calendar'), 'availability editor hides Google Calendar')
 assert(!editor.includes(calendar.token), 'a stored calendar token is not rendered')
-assert(editor.includes('OK'), 'availability entry stays')
-assert(editor.includes('data-avail-grid') && editor.includes('data-avail-cell') && editor.includes('09:00'), 'availability uses a results-style time grid')
-assert((editor.match(/data-avail-cell/g) ?? []).length > 1, 'the grid has more than one paintable cell')
-assert(editor.includes('data-day-label') && editor.includes('data-day="2026-11-12"'), 'dates in the grid can be dragged too')
+assert(editor.includes('OK') && !editor.includes('Avail'), 'availability opposite NA stays OK')
+assert(!editor.includes('data-avail-grid') && !editor.includes('data-avail-cell'), 'personal availability is not a paint grid')
+assert(editor.includes('cal-day') && editor.includes('<select') && editor.includes('9:00 AM'), 'availability uses a month calendar and time ranges')
+assert(editor.includes('Add times') && editor.includes('Whole day OK') && editor.includes('Whole day NA'), 'a range or a whole day can be applied')
+assert(editor.includes('Tap the days') && editor.includes('My times'), 'the steps and the submissions list stay')
 
 assert(GOOGLE_CALENDAR_ENABLED === false, 'the calendar flag stays off')
 assert(hub.includes('tone-fill-sage') || hub.includes('tone-fill-gold') || hub.includes('tone-fill-purple'), 'accents use the logo palette')

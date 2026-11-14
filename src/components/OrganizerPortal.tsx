@@ -83,6 +83,16 @@ export function OrganizerPortal({
   )
   const dancerById = useMemo(() => new Map(campaign.dancers.map((person) => [person.id, person])), [campaign.dancers])
   const organizers = useMemo(() => organizersOf(campaign), [campaign])
+  const staff = useMemo(() => {
+    const map = new Map(organizers.map((person) => [person.id, person]))
+    const everyone = [...campaign.choreographers, ...campaign.dancers]
+    for (const admin of campaign.admins) {
+      const person = everyone.find((item) => item.email.toLowerCase() === admin.email.toLowerCase())
+      if (person) map.set(person.id, person)
+    }
+    return [...map.values()]
+  }, [campaign, organizers])
+  const staffById = useMemo(() => new Map(staff.map((person) => [person.id, person])), [staff])
   const labels: Record<HubTab, string> = {
     event: t(lang, 'flow_event'),
     organizers: t(lang, 'manage_leadership'),
@@ -271,7 +281,7 @@ export function OrganizerPortal({
 
       <div role="tabpanel" id={`hub-panel-${tab}`} aria-labelledby={`hub-tab-${tab}`} className="space-y-4">
         {tab === 'participants' ? (
-          <AssignBoard onMove={(personId, fromGroupId, toGroupId) => void moveDancer(personId, fromGroupId, toGroupId)} onGrant={grantRole}>
+          <AssignBoard onMove={(personId, fromGroupId, toGroupId) => void moveDancer(personId, fromGroupId, toGroupId)}>
             <div className="space-y-3" data-participants-block="" data-manage="participants">
               <h3 className={`inline-flex items-center gap-2 px-1 text-base font-semibold ${textPrimary(isDarkMode)}`}>
                 {t(lang, 'manage_participants')}
@@ -343,20 +353,35 @@ export function OrganizerPortal({
                 groupComposer()
               )}
             </div>
-            {roleCards()}
           </AssignBoard>
         ) : null}
 
         {tab === 'organizers' ? (
-          <AssignBoard onMove={(personId, fromGroupId, toGroupId) => void moveDancer(personId, fromGroupId, toGroupId)} onGrant={grantRole}>
-            {campaign.dancers.length > 0 ? (
-              <div className={groupSurface('space-y-2')}>
-                <p className={`px-1 text-[13px] font-medium ${textMuted(isDarkMode)}`}>{t(lang, 'participants_label')}</p>
-                <AssignChips people={campaign.dancers} fromGroupId={null} isDarkMode={isDarkMode} />
-              </div>
-            ) : null}
-            {roleCards()}
-          </AssignBoard>
+          <>
+            <AssignBoard onMove={() => undefined} onGrant={grantRole}>
+              {roleCards()}
+            </AssignBoard>
+            <section className={groupSurface('space-y-4')} data-staff-stats="">
+              <PeopleList
+                lang={lang}
+                isDarkMode={isDarkMode}
+                title={t(lang, 'stats_responses')}
+                ids={staff.filter((person) => person.blocks.length > 0).map((person) => person.id)}
+                names={new Map(staff.map((person) => [person.id, person.name]))}
+                dancerById={staffById}
+                groups={[]}
+              />
+              <PeopleList
+                lang={lang}
+                isDarkMode={isDarkMode}
+                title={t(lang, 'analysis_waiting')}
+                ids={staff.filter((person) => person.blocks.length === 0).map((person) => person.id)}
+                names={new Map(staff.map((person) => [person.id, person.name]))}
+                dancerById={staffById}
+                groups={[]}
+              />
+            </section>
+          </>
         ) : null}
 
         {tab === 'participants' ? (

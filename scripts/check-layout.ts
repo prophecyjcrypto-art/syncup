@@ -289,10 +289,10 @@ async function main() {
       const calendarText = await cdp.eval<string>(`document.body.innerText.includes('Google 日曆') || document.body.innerText.includes('Google Calendar') ? document.body.innerText.slice(0, 500) : ''`)
       assert(calendarText === '', `${item.name} shows Google Calendar: ${calendarText}`)
       if (item.path.includes('availability')) {
-        const height = await cdp.eval<number | null>(`document.querySelector('[data-avail-cell]')?.getBoundingClientRect().height ?? null`)
+        const height = await cdp.eval<number | null>(`document.querySelector('.cal-day')?.getBoundingClientRect().height ?? null`)
         assert(height != null && height > 0 && height <= 44, `${item.name} calendar cells are ${height}px tall`)
-        const grids = await cdp.eval<number>(`document.querySelectorAll('[data-avail-grid]').length`)
-        assert(grids === 1, `${item.name} is missing the availability grid`)
+        const paint = await cdp.eval<number>(`document.querySelectorAll('[data-avail-grid], [data-avail-cell]').length`)
+        assert(paint === 0, `${item.name} still uses the paint grid`)
       } else if (item.path.includes('results') || item.path.includes('setup')) {
         const height = await cdp.eval<number | null>(`document.querySelector('.cal-day')?.getBoundingClientRect().height ?? null`)
         assert(height != null && height <= 44, `${item.name} calendar cells are ${height}px tall`)
@@ -514,31 +514,45 @@ async function main() {
     assert(desktopOverflow.scrollWidth <= desktopOverflow.clientWidth + 1, `desktop block overflows: ${desktopOverflow.scrollWidth}`)
 
     await openPage(cdp, '/?preview=availability&lang=zh', 390, 844)
-    const painted = await cdp.eval<string>(`(async () => {
-      const grid = document.querySelector('[data-avail-grid]')
-      const start = document.querySelector('[data-avail-cell][data-slot="2"]')
-      const end = document.querySelector('[data-avail-cell][data-slot="5"]')
-      if (!(grid instanceof HTMLElement) || !(start instanceof HTMLElement) || !(end instanceof HTMLElement)) return 'missing'
-      end.scrollIntoView({ block: 'center', inline: 'center' })
-      const point = (el) => {
-        const rect = el.getBoundingClientRect()
-        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
-      }
-      const from = point(start)
-      const to = point(end)
-      const fire = (type, pos, buttons) => {
-        grid.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: pos.x, clientY: pos.y, pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, buttons }))
-      }
-      const hit = document.elementFromPoint(from.x, from.y)
-      fire('pointerdown', from, 1)
-      fire('pointermove', to, 1)
-      fire('pointerup', to, 0)
-      await new Promise((resolve) => setTimeout(resolve, 80))
-      const marked = document.querySelectorAll('[data-mark="na"]').length
-      if (marked >= 4 && !document.body.innerText.includes('提早')) return 'painted'
-      return 'empty ' + marked + ' hit ' + (hit instanceof HTMLElement ? hit.getAttribute('data-slot') ?? hit.className : 'none')
+    const picked = await cdp.eval<string>(`(async () => {
+      const day = document.querySelector('.cal-day')
+      if (!(day instanceof HTMLButtonElement)) return 'missing-day'
+      const on = () => day.className.includes('bg-[#f19ba8]')
+      const clearShown = () => [...document.querySelectorAll('button')].some((button) => (button.textContent ?? '').includes('清除日期'))
+      day.click()
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      const selected = on() && clearShown()
+      day.click()
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      const deselected = !on() && !clearShown()
+      day.click()
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      const selects = [...document.querySelectorAll('select')]
+      if (selects.length < 2) return 'missing-select'
+      selects[0].value = '10'
+      selects[0].dispatchEvent(new Event('change', { bubbles: true }))
+      selects[1].value = '12'
+      selects[1].dispatchEvent(new Event('change', { bubbles: true }))
+      const apply = [...document.querySelectorAll('button')].find((button) => (button.textContent ?? '').includes('加入時間'))
+      if (!(apply instanceof HTMLButtonElement)) return 'missing-apply'
+      apply.click()
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const added = document.body.innerText.includes('10:00') && document.body.innerText.includes('12:00') && !document.body.innerText.includes('尚無時間')
+      const remove = document.querySelector('button[aria-label="移除"]')
+      if (!(remove instanceof HTMLButtonElement)) return 'missing-remove ' + JSON.stringify({ selected, deselected, added })
+      remove.click()
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const removed = document.body.innerText.includes('尚無時間') && document.querySelector('button[aria-label="移除"]') == null
+      const dayAgain = document.querySelector('.cal-day')
+      if (dayAgain instanceof HTMLButtonElement) dayAgain.click()
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      apply.click()
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const again = document.querySelector('button[aria-label="移除"]') != null && document.body.innerText.includes('10:00')
+      const ok = selected && deselected && added && removed && again
+      return ok ? 'restored' : JSON.stringify({ selected, deselected, added, removed, again })
     })()`)
-    assert(painted === 'painted', `availability drag did not paint NA (${painted})`)
+    assert(picked === 'restored', `availability picker did not select, apply, and remove (${picked})`)
     await shot(cdp, '/opt/cursor/artifacts/availability-mobile.png')
     const availOverflow = await overflow(cdp)
     assert(availOverflow.scrollWidth <= availOverflow.clientWidth + 1, `availability overflows: ${availOverflow.scrollWidth}`)
@@ -732,10 +746,10 @@ async function main() {
     assert(hubText.includes('活動') && hubText.includes('主辦人') && hubText.includes('參加者') && hubText.includes('結果'), `hub tabs were missing in "${hubText.slice(0, 180)}"`)
     assert(!hubText.includes('時間表') && !hubText.includes('編輯活動'), 'hub still uses the old schedule or edit label')
     assert(!hubText.includes('尚未有組別'), 'the hub shows an empty groups message')
-    assert((await cdp.eval<number>(`document.querySelectorAll('[data-drop-role="organizer"], [data-drop-role="admin"]').length`)) === 2, 'hub is missing organizer or admin drop targets')
-    const granted = await cdp.eval<string>(`(async () => {
-      const person = document.querySelector('[data-person-id]')
-      const target = document.querySelector('[data-drop-role="organizer"]')
+    assert((await cdp.eval<number>(`document.querySelectorAll('[data-drop-role]').length`)) === 0, 'participants tab still has role targets')
+    const moved = await cdp.eval<string>(`(async () => {
+      const person = document.querySelector('[data-group-id="g-a"] [data-person-id]')
+      const target = document.querySelector('[data-drop-group="all"]')
       if (!(person instanceof HTMLElement) || !(target instanceof HTMLElement)) return 'missing'
       const id = person.getAttribute('data-person-id')
       target.scrollIntoView({ block: 'center' })
@@ -746,34 +760,57 @@ async function main() {
       }
       person.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: from.left + 8, clientY: from.top + 8, pointerId: 3, pointerType: 'mouse', isPrimary: true, button: 0, buttons: 1 }))
       fire('pointermove', from.left + 40, from.top + 40)
-      fire('pointerup', to.left + to.width / 2, to.top + 24)
+      fire('pointerup', to.left + to.width / 2, to.top + to.height / 2)
       await new Promise((resolve) => setTimeout(resolve, 50))
-      const stillGrouped = document.querySelector('[data-person-id="' + id + '"]') != null
-      const organizer = document.querySelector('[data-organizer-person="' + id + '"]') != null
-      return stillGrouped && organizer ? 'kept' : 'lost grouped=' + stillGrouped + ' organizer=' + organizer
+      const leftGroup = document.querySelector('[data-group-id="g-a"] [data-person-id="' + id + '"]') == null
+      const inAll = document.querySelector('[data-drop-group="all"] [data-person-id="' + id + '"]') != null
+      return leftGroup && inAll ? 'moved' : 'lost left=' + leftGroup + ' all=' + inAll
     })()`)
-    assert(granted === 'kept', `dragging onto organizer did not keep the group (${granted})`)
-    const touchGrant = await cdp.eval<string>(`(async () => {
-      const person = document.querySelector('[data-person-id="dancer-jie"]')
-      const target = document.querySelector('[data-drop-role="admin"]')
+    assert(moved === 'moved', `dragging a name back to all participants failed (${moved})`)
+    const touchMove = await cdp.eval<string>(`(async () => {
+      const person = document.querySelector('[data-group-id="g-b"] [data-person-id]')
+      const target = document.querySelector('[data-drop-group="g-a"]')
       if (!(person instanceof HTMLElement) || !(target instanceof HTMLElement)) return 'missing'
+      const id = person.getAttribute('data-person-id')
       const from = person.getBoundingClientRect()
       person.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: from.left + 12, clientY: from.top + 12, pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0, buttons: 1 }))
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      await new Promise((resolve) => setTimeout(resolve, 400))
       const lifted = document.querySelector('[data-assign-ghost]') != null || document.querySelector('.assign-armed') != null
       target.scrollIntoView({ block: 'center' })
       const to = target.getBoundingClientRect()
       const fire = (type, x, y) => {
         window.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0, buttons: type === 'pointerup' ? 0 : 1 }))
       }
-      fire('pointermove', to.left + to.width / 2, to.top + 28)
-      fire('pointerup', to.left + to.width / 2, to.top + 28)
+      fire('pointermove', to.left + to.width / 2, to.top + 24)
+      fire('pointerup', to.left + to.width / 2, to.top + 24)
       await new Promise((resolve) => setTimeout(resolve, 80))
-      const chip = document.querySelector('[data-group-id="g-a"] [data-person-id="dancer-jie"]') != null
-      const admin = (document.body.innerText || '').includes('jie@example.com')
-      return lifted && chip && admin ? 'kept' : 'lost lifted=' + lifted + ' chip=' + chip + ' admin=' + admin
+      const joined = document.querySelector('[data-group-id="g-a"] [data-person-id="' + id + '"]') != null
+      const left = document.querySelector('[data-group-id="g-b"] [data-person-id="' + id + '"]') == null
+      return lifted && joined && left ? 'moved' : 'lost lifted=' + lifted + ' joined=' + joined + ' left=' + left
     })()`)
-    assert(touchGrant === 'kept', `touch drag onto admin did not keep the group (${touchGrant})`)
+    assert(touchMove === 'moved', `touch drag between groups failed (${touchMove})`)
+    await cdp.eval(`document.querySelector('[data-hub-step="organizers"]')?.click()`)
+    await delay(20)
+    await cdp.eval(`document.querySelector('[data-hub-step="organizers"]')?.click()`)
+    await delay(40)
+    const organizerTab = await cdp.eval<string>(`JSON.stringify({
+      roles: document.querySelectorAll('[data-drop-role]').length,
+      people: document.querySelectorAll('[data-person-id]').length,
+      time: document.querySelector('[data-role-time="organizer"]') != null && document.querySelector('[data-role-time="admin"]') != null,
+      stats: document.querySelector('[data-staff-stats]') != null,
+      participants: document.body.innerText.includes('全體參加者') || document.body.innerText.includes('管理參加者'),
+    })`)
+    const organizerParsed = JSON.parse(organizerTab) as { roles: number; people: number; time: boolean; stats: boolean; participants: boolean }
+    assert(organizerParsed.roles === 2 && organizerParsed.people === 0 && organizerParsed.time && organizerParsed.stats && !organizerParsed.participants, `organizers tab was ${organizerTab}`)
+    await cdp.eval(`document.querySelector('[data-role-time="organizer"]')?.click()`)
+    await delay(40)
+    const picker = await cdp.eval<string>(`JSON.stringify({
+      days: document.querySelectorAll('.cal-day').length,
+      paint: document.querySelectorAll('[data-avail-cell]').length,
+      apply: [...document.querySelectorAll('button')].some((button) => (button.textContent ?? '').includes('加入時間')),
+    })`)
+    const pickerParsed = JSON.parse(picker) as { days: number; paint: number; apply: boolean }
+    assert(pickerParsed.days > 0 && pickerParsed.paint === 0 && pickerParsed.apply, `organizer time did not open the old picker (${picker})`)
     await openPage(cdp, '/?preview=hub-settings&lang=zh', 1280, 900)
     const hubDesktop = await overflow(cdp)
     assert(hubDesktop.scrollWidth <= hubDesktop.clientWidth + 1, `hub desktop overflows: ${hubDesktop.scrollWidth}`)
