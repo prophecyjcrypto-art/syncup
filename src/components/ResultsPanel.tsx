@@ -39,6 +39,7 @@ export function ResultsPanel({
   canPin = true,
   canSetDuration = true,
   onSaveDuration,
+  embedded = false,
 }: {
   lang: Language
   isDarkMode: boolean
@@ -48,6 +49,7 @@ export function ResultsPanel({
   canPin?: boolean
   canSetDuration?: boolean
   onSaveDuration?: (hours: number) => void
+  embedded?: boolean
 }) {
   const organizers = organizersOf(campaign)
   const choreoKey = organizers.map((person) => person.id).join('|')
@@ -426,9 +428,11 @@ export function ResultsPanel({
     <div className="mx-auto w-full max-w-7xl space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
-          <button type="button" onClick={onBack} className={`min-h-11 self-start text-xs font-bold uppercase ${textMuted(isDarkMode)}`}>
-            ← {t(lang, 'roster')}
-          </button>
+          {embedded ? null : (
+            <button type="button" onClick={onBack} className={`min-h-11 self-start text-xs font-bold uppercase ${textMuted(isDarkMode)}`}>
+              ← {t(lang, 'roster')}
+            </button>
+          )}
           <InfoTip lang={lang} name="results" text={t(lang, 'guide_results')} />
         </div>
         <div className="chip-row">

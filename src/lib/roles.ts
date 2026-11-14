@@ -20,6 +20,19 @@ export interface RoleGrantResult {
   admins: RoleAdmin[]
 }
 
+/**
+ * Email to store on an admin grant.
+ * A person who already has an email keeps it. Otherwise the prompted value is used.
+ * Null means the grant should not be written.
+ */
+export function emailForAdminGrant(current: string, prompted: string | null): string | null {
+  const existing = current.trim().toLowerCase()
+  if (existing.includes('@')) return existing
+  if (prompted == null) return null
+  const next = prompted.trim().toLowerCase()
+  return next.includes('@') ? next : null
+}
+
 /** Grants a role without leaving a group or dropping participant status. */
 export function grantRole(input: {
   person: RolePerson

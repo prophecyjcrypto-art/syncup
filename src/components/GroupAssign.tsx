@@ -9,6 +9,7 @@ type Board = {
   selected: Selection | null
   overId: string | null
   dragging: boolean
+  dragId: string | null
   consumeDragClick: () => boolean
   toggleSelect: (personId: string, fromGroupId: string | null) => void
   move: (personId: string, fromGroupId: string | null, toGroupId: string | null) => void
@@ -54,6 +55,7 @@ export function AssignBoard({
   const [selected, setSelected] = useState<Selection | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
+  const [dragId, setDragId] = useState<string | null>(null)
   const [ghost, setGhost] = useState<{ name: string; x: number; y: number } | null>(null)
   const suppress = useRef(false)
   const dragRef = useRef<{ id: string; fromGroupId: string | null; moved: boolean } | null>(null)
@@ -79,32 +81,50 @@ export function AssignBoard({
   }
 
   function beginDrag(person: PersonRef, fromGroupId: string | null, event: ReactPointerEvent<HTMLButtonElement>) {
-    if (event.pointerType === 'touch' || event.button !== 0) return
+    if (event.pointerType === 'mouse' && event.button !== 0) return
     const pointerId = event.pointerId
     const originX = event.clientX
     const originY = event.clientY
+    const touch = event.pointerType === 'touch'
     dragRef.current = { id: person.id, fromGroupId, moved: false }
-    const onPointerMove = (ev: PointerEvent) => {
-      if (ev.pointerId !== pointerId || !dragRef.current) return
-      const dx = ev.clientX - originX
-      const dy = ev.clientY - originY
-      if (!dragRef.current.moved && dx * dx + dy * dy < 36) return
+    let listening = true
+
+    const place = (x: number, y: number) => {
+      if (!dragRef.current) return
       dragRef.current.moved = true
       setDragging(true)
-      setGhost({ name: person.name, x: ev.clientX, y: ev.clientY })
-      const drop = dropAt(ev.clientX, ev.clientY)
+      setDragId(person.id)
+      setGhost({ name: person.name, x, y })
+      const drop = dropAt(x, y)
       setOverId(drop.role ? `role:${drop.role}` : drop.group)
+      if (y < 88) window.scrollBy(0, -16)
+      else if (y > window.innerHeight - 88) window.scrollBy(0, 16)
     }
-    const onPointerUp = (ev: PointerEvent) => {
+
+    const hold = touch
+      ? window.setTimeout(() => {
+          if (listening && dragRef.current && !dragRef.current.moved) place(originX, originY)
+        }, 240)
+      : 0
+
+    const blockTouchScroll = (ev: TouchEvent) => {
+      if (dragRef.current?.moved) ev.preventDefault()
+    }
+
+    const end = (ev: PointerEvent) => {
       if (ev.pointerId !== pointerId) return
+      listening = false
+      window.clearTimeout(hold)
       window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerUp)
-      window.removeEventListener('pointercancel', onPointerUp)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+      window.removeEventListener('touchmove', blockTouchScroll)
       const drag = dragRef.current
       dragRef.current = null
       setGhost(null)
       setOverId(null)
       setDragging(false)
+      setDragId(null)
       if (!drag?.moved) return
       suppress.current = true
       const stopClick = (click: MouseEvent) => {
@@ -120,15 +140,28 @@ export function AssignBoard({
       }
       if (drop.group) move(drag.id, drag.fromGroupId, drop.group === 'all' ? null : drop.group)
     }
+
+    const onPointerMove = (ev: PointerEvent) => {
+      if (!listening || ev.pointerId !== pointerId || !dragRef.current) return
+      const dx = ev.clientX - originX
+      const dy = ev.clientY - originY
+      if (!dragRef.current.moved && dx * dx + dy * dy < (touch ? 64 : 36)) return
+      window.clearTimeout(hold)
+      if (touch) ev.preventDefault()
+      place(ev.clientX, ev.clientY)
+    }
+
+    if (touch) window.addEventListener('touchmove', blockTouchScroll, { passive: false })
     window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerUp)
-    window.addEventListener('pointercancel', onPointerUp)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
   }
 
   const board: Board = {
     selected,
     overId,
     dragging,
+    dragId,
     consumeDragClick,
     toggleSelect: (personId, fromGroupId) => {
       if (consumeDragClick()) return
@@ -259,13 +292,14 @@ export function AssignChips({
             data-from-group={fromGroupId ?? 'all'}
             aria-pressed={on}
             onPointerDown={(event) => board.beginDrag(person, fromGroupId, event)}
+            onContextMenu={(event) => event.preventDefault()}
             onClick={(event) => {
               event.stopPropagation()
               board.toggleSelect(person.id, fromGroupId)
             }}
-            className={`inline-flex min-h-11 max-w-full cursor-grab select-none items-center gap-1.5 truncate rounded-full px-3 text-sm font-semibold ${
-              on ? 'tone-fill-purple' : isDarkMode ? 'bg-white/10 text-white' : 'bg-black/[0.06] text-zinc-900'
-            }`}
+            className={`assign-chip inline-flex min-h-11 max-w-full cursor-grab select-none items-center gap-1.5 truncate rounded-full px-3 text-sm font-semibold touch-none ${
+              board.dragId === person.id ? 'opacity-40' : ''
+            } ${on ? 'tone-fill-purple' : isDarkMode ? 'bg-white/10 text-white' : 'bg-black/[0.06] text-zinc-900'}`}
           >
             <Grip />
             {person.name}

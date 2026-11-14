@@ -173,7 +173,6 @@ const hub = renderToStaticMarkup(
     canEditEvent: true,
     canRotateEvent: true,
     onBack: () => undefined,
-    onSchedule: () => undefined,
     onCopy: () => undefined,
     onSave: () => undefined,
     onCreateGroup: () => undefined,
@@ -193,10 +192,17 @@ assert(hub.includes('data-assign-tray'), 'dancers can be assigned from the hub')
 assert(!hub.includes('New code'), 'the hub does not offer a new invite code')
 assert(hub.includes('Copy code') && hub.includes('Copy link'), 'the hub still copies a code or its link')
 assert(hub.includes('data-hub-step="event"') && hub.includes('Event'), 'the hub opens event settings')
-assert(hub.includes('data-hub-step="organizers"') && hub.includes('Organizers'), 'the hub names the organizer step')
-assert(hub.includes('data-hub-step="participants"') && hub.includes('Participants'), 'the hub names the participant step')
-assert(hub.includes('data-hub-step="results"') && hub.includes('Results'), 'the schedule step is called Results')
-assert(!hub.includes('Schedule'), 'the hub does not call that step Schedule')
+assert(hub.includes('data-hub-step="organizers"') && hub.includes('Organizers'), 'the hub names the organizer tab')
+assert(hub.includes('data-hub-step="participants"') && hub.includes('Participants'), 'the hub names the participant tab')
+assert(hub.includes('data-hub-step="results"') && hub.includes('Results'), 'the schedule tab is called Results')
+assert(!hub.includes('Schedule'), 'the hub does not call that tab Schedule')
+assert(hub.includes('data-hub-tabs') && !hub.includes('data-hub-steps'), 'the hub has one tab bar')
+assert(!/step 1 of 4/i.test(hub), 'the hub does not count steps')
+for (const id of ['event', 'organizers', 'participants', 'results']) {
+  const button = hub.match(new RegExp(`<button\\b[^>]*data-hub-step="${id}"[^>]*>[\\s\\S]*?</button>`))?.[0] ?? ''
+  assert(button.length > 0, `missing the ${id} tab`)
+  assert(!/>\s*[1-4]\s*</.test(button), `the ${id} tab is numbered`)
+}
 assert(hub.includes('data-drop-role="organizer"') && hub.includes('data-drop-role="admin"'), 'organizer and admin boxes are drop targets')
 assert(hub.includes('data-grip'), 'people show a drag grip')
 assert(hub.includes('Drop here'), 'empty role boxes say where to drop')
@@ -208,7 +214,6 @@ const hubEvent = renderToStaticMarkup(
     canEditEvent: true,
     initialTab: 'event',
     onBack: () => undefined,
-    onSchedule: () => undefined,
     onCopy: () => undefined,
     onSave: () => undefined,
     onCreateGroup: () => undefined,
@@ -226,7 +231,6 @@ const hubZh = renderToStaticMarkup(
     campaign,
     canEditEvent: true,
     onBack: () => undefined,
-    onSchedule: () => undefined,
     onCopy: () => undefined,
     onSave: () => undefined,
     onCreateGroup: () => undefined,
@@ -235,9 +239,39 @@ const hubZh = renderToStaticMarkup(
     onToggleMember: () => undefined,
   }),
 )
-assert(hubZh.includes('活動') && hubZh.includes('主辦人') && hubZh.includes('參加者') && hubZh.includes('結果'), 'Chinese hub steps use 活動、主辦人、參加者、結果')
-assert(hubZh.includes('data-hub-step="results"'), 'the Chinese results step is the fourth hub step')
-assert(!hubZh.includes('時間表'), 'the Chinese hub does not call the step 時間表')
+assert(hubZh.includes('活動') && hubZh.includes('主辦人') && hubZh.includes('參加者') && hubZh.includes('結果'), 'Chinese hub tabs use 活動、主辦人、參加者、結果')
+assert(hubZh.includes('data-hub-step="results"'), 'the Chinese results tab stays on the hub bar')
+assert(!hubZh.includes('時間表'), 'the Chinese hub does not call the tab 時間表')
+assert(!hubZh.includes('尚未有組別'), 'an event with no groups does not show an empty groups message')
+assert(hubZh.includes('新增組別'), 'an event with no groups can start a group')
+assert(hubZh.includes('data-person-id="d1"'), 'people stay in all participants when there are no groups')
+assert(hubZh.includes('管理參加者'), 'manage participants stays in the participants area')
+const hubResults = renderToStaticMarkup(
+  withCalendar(
+    createElement(OrganizerPortal, {
+      lang: 'en',
+      isDarkMode: true,
+      campaign,
+      canEditEvent: true,
+      canPin: true,
+      canSetDuration: true,
+      initialTab: 'results',
+      onBack: () => undefined,
+      onCopy: () => undefined,
+      onSave: () => undefined,
+      onCreateGroup: () => undefined,
+      onRenameGroup: () => undefined,
+      onDeleteGroup: () => undefined,
+      onToggleMember: () => undefined,
+      onSaveSlots: () => undefined,
+      onSaveDuration: () => undefined,
+    }),
+  ),
+)
+assert(hubResults.includes('data-hub="results"') && hubResults.includes('data-hub-tabs'), 'results uses the hub tab bar')
+assert(hubResults.includes('data-hub-step="participants"') && hubResults.includes('Dancer overlap'), 'results stays under the same tabs')
+assert(!hubResults.includes('Connect Google Calendar'), 'the results tab keeps Google Calendar hidden')
+assert(!hubResults.includes('data-hub-steps'), 'results does not bring back the numbered steps')
 
 const results = renderToStaticMarkup(
   withCalendar(
@@ -463,7 +497,7 @@ assert((editor.match(/data-avail-cell/g) ?? []).length > 1, 'the grid has more t
 assert(editor.includes('data-day-label') && editor.includes('data-day="2026-11-12"'), 'dates in the grid can be dragged too')
 
 assert(GOOGLE_CALENDAR_ENABLED === false, 'the calendar flag stays off')
-assert(setup.includes('btn-primary') || existing.includes('btn-primary') || hub.includes('tone-fill-gold'), 'accents use the logo palette')
+assert(hub.includes('tone-fill-sage') || hub.includes('tone-fill-gold') || hub.includes('tone-fill-purple'), 'accents use the logo palette')
 assert(hub.includes('data-accent="gold"') && hub.includes('data-accent="sage"') && hub.includes('data-accent="purple"'), 'hub steps distinguish logo colors')
 assert(ownerDetail.includes('role-gold') && ownerDetail.includes('role-sage') && ownerDetail.includes('role-purple'), 'role cards use the logo colors')
 

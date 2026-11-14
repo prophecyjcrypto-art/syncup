@@ -202,7 +202,6 @@ function LivePreview({ name }: { name: string }) {
         canEditEvent
         initialTab={tab}
         onBack={() => undefined}
-        onSchedule={() => undefined}
         onCopy={() => undefined}
         onSave={() => undefined}
         onCreateGroup={(groupName) =>

@@ -5,8 +5,8 @@ import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, covered
 import { analyzeEvent } from '../src/lib/analysis.ts'
 import { devResultsAllowed, isDevResultsPath } from '../src/lib/devPreview.ts'
 import { membershipChanges } from '../src/lib/groups.ts'
-import { canSeeResults } from '../src/lib/access.ts'
-import { grantRole } from '../src/lib/roles.ts'
+import { canEditEvent, canSeeResults } from '../src/lib/access.ts'
+import { emailForAdminGrant, grantRole } from '../src/lib/roles.ts'
 import { paintBlocks, spansFromDrag } from '../src/lib/paint.ts'
 import { SHORT_CODE_ALPHABET, normalizeLongCode, normalizeShortCode, parseInviteInput, shortCodeFromPath } from '../src/lib/invites.ts'
 import { buildCampaign, sampleShortlist } from '../src/dev/resultsPreview.tsx'
@@ -593,6 +593,14 @@ assert(
   ),
   'an admin can see results',
 )
+const organizerViewer = { ...viewerCampaign, dancers: [{ ...viewerCampaign.dancers[0], isOrganizer: true }] }
+assert(canEditEvent(organizerViewer, 'ada', 'ada@example.com'), 'an organizer can edit event settings')
+assert(canEditEvent(viewerCampaign, 'owner', 'owner@example.com'), 'the owner can edit event settings')
+assert(!canEditEvent(viewerCampaign, 'ada', 'ada@example.com'), 'a participant cannot edit event settings')
+assert(emailForAdminGrant('ada@example.com', null) === 'ada@example.com', 'an admin grant keeps an existing email')
+assert(emailForAdminGrant('', 'Ada@Example.com') === 'ada@example.com', 'an admin grant can take a prompted email')
+assert(emailForAdminGrant('', null) === null, 'cancelling the email prompt does not grant admin')
+assert(emailForAdminGrant('ada@example.com', 'other@example.com') === 'ada@example.com', 'a prompted email does not replace one already stored')
 
 const privacyMigration = readFileSync(new URL('../supabase/migrations/20261114180000_role_grants_and_results_privacy.sql', import.meta.url), 'utf8')
 assert(privacyMigration.includes('is_organizer'), 'organizer grants are an added column')
@@ -606,6 +614,17 @@ assert(!/\bdrop\s+table\b/i.test(privacyMigration), 'the privacy migration does 
 assert(!/\btruncate\b/i.test(privacyMigration), 'the privacy migration does not truncate')
 assert(!/\bdelete\s+from\b/i.test(privacyMigration), 'the privacy migration does not delete rows')
 assert(!/update\s+public\.hupaak_/i.test(privacyMigration), 'the privacy migration does not rewrite existing rows')
+
+const portalMigration = readFileSync(new URL('../supabase/migrations/20261114210000_organizer_portal_parity.sql', import.meta.url), 'utf8')
+assert(portalMigration.includes('protect_campaign_update'), 'organizers can save event settings')
+assert(portalMigration.includes('can_edit_roster'), 'portal reads use the roster check organizers already pass')
+assert(!/policy hupaak_campaigns_delete/i.test(portalMigration), 'event delete stays on the existing policy')
+assert(!portalMigration.includes('rotate_hupaak'), 'the portal migration does not change invite issuance')
+assert(!portalMigration.includes('claim_hupaak'), 'the portal migration does not change invite claims')
+assert(!/\bdrop\s+table\b/i.test(portalMigration), 'the portal migration does not drop a table')
+assert(!/\btruncate\b/i.test(portalMigration), 'the portal migration does not truncate')
+assert(!/\bdelete\s+from\b/i.test(portalMigration), 'the portal migration does not delete rows')
+assert(!/update\s+public\.hupaak_/i.test(portalMigration), 'the portal migration does not rewrite existing rows')
 
 const palette = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')
 assert(palette.includes('--logo-sage: #92ba8c'), 'sage comes from the logo')

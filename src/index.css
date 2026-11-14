@@ -194,6 +194,13 @@ a:focus-visible {
   background: color-mix(in srgb, var(--logo-purple) 16%, transparent);
 }
 
+button.assign-chip {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 .assign-target.assign-armed {
   border: 1px dashed color-mix(in srgb, var(--logo-purple) 75%, transparent);
 }

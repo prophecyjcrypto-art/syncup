@@ -726,8 +726,12 @@ async function main() {
     const hubPhone = await overflow(cdp)
     assert(hubPhone.scrollWidth <= hubPhone.clientWidth + 1, `hub phone overflows: ${hubPhone.scrollWidth}`)
     const hubText = await cdp.eval<string>(`document.body.innerText`)
-    assert(hubText.includes('活動') && hubText.includes('主辦人') && hubText.includes('參加者') && hubText.includes('結果'), `hub steps were missing in "${hubText.slice(0, 180)}"`)
+    const hubTabs = await cdp.eval<string>(`[...document.querySelectorAll('[data-hub-step]')].map((node) => (node.textContent ?? '').trim()).join('|')`)
+    assert(hubTabs === '活動|主辦人|參加者|結果', `hub tabs were "${hubTabs}"`)
+    assert(await cdp.eval<boolean>(`document.querySelector('[data-hub-tabs]') != null && document.querySelector('[data-hub-steps]') == null`), 'the hub still has two navigations')
+    assert(hubText.includes('活動') && hubText.includes('主辦人') && hubText.includes('參加者') && hubText.includes('結果'), `hub tabs were missing in "${hubText.slice(0, 180)}"`)
     assert(!hubText.includes('時間表') && !hubText.includes('編輯活動'), 'hub still uses the old schedule or edit label')
+    assert(!hubText.includes('尚未有組別'), 'the hub shows an empty groups message')
     assert((await cdp.eval<number>(`document.querySelectorAll('[data-drop-role="organizer"], [data-drop-role="admin"]').length`)) === 2, 'hub is missing organizer or admin drop targets')
     const granted = await cdp.eval<string>(`(async () => {
       const person = document.querySelector('[data-person-id]')
@@ -749,6 +753,27 @@ async function main() {
       return stillGrouped && organizer ? 'kept' : 'lost grouped=' + stillGrouped + ' organizer=' + organizer
     })()`)
     assert(granted === 'kept', `dragging onto organizer did not keep the group (${granted})`)
+    const touchGrant = await cdp.eval<string>(`(async () => {
+      const person = document.querySelector('[data-person-id="dancer-jie"]')
+      const target = document.querySelector('[data-drop-role="admin"]')
+      if (!(person instanceof HTMLElement) || !(target instanceof HTMLElement)) return 'missing'
+      const from = person.getBoundingClientRect()
+      person.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: from.left + 12, clientY: from.top + 12, pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0, buttons: 1 }))
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      const lifted = document.querySelector('[data-assign-ghost]') != null || document.querySelector('.assign-armed') != null
+      target.scrollIntoView({ block: 'center' })
+      const to = target.getBoundingClientRect()
+      const fire = (type, x, y) => {
+        window.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0, buttons: type === 'pointerup' ? 0 : 1 }))
+      }
+      fire('pointermove', to.left + to.width / 2, to.top + 28)
+      fire('pointerup', to.left + to.width / 2, to.top + 28)
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      const chip = document.querySelector('[data-group-id="g-a"] [data-person-id="dancer-jie"]') != null
+      const admin = (document.body.innerText || '').includes('jie@example.com')
+      return lifted && chip && admin ? 'kept' : 'lost lifted=' + lifted + ' chip=' + chip + ' admin=' + admin
+    })()`)
+    assert(touchGrant === 'kept', `touch drag onto admin did not keep the group (${touchGrant})`)
     await openPage(cdp, '/?preview=hub-settings&lang=zh', 1280, 900)
     const hubDesktop = await overflow(cdp)
     assert(hubDesktop.scrollWidth <= hubDesktop.clientWidth + 1, `hub desktop overflows: ${hubDesktop.scrollWidth}`)
