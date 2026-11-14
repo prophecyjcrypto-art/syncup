@@ -18,7 +18,7 @@ const TABS: { id: HubTab; accent: string; tone: 'purple' | 'gold' | 'sage' }[] =
   { id: 'event', accent: 'tone-fill-purple', tone: 'purple' },
   { id: 'organizers', accent: 'tone-fill-gold', tone: 'gold' },
   { id: 'participants', accent: 'tone-fill-sage', tone: 'sage' },
-  { id: 'results', accent: 'tone-fill-purple', tone: 'purple' },
+  { id: 'results', accent: 'tone-fill-gold', tone: 'gold' },
 ]
 
 export function OrganizerPortal({

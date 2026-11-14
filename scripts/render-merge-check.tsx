@@ -320,9 +320,28 @@ const results = renderToStaticMarkup(
 )
 assert(results.includes('Dancer overlap'), 'results show the half-hour overlap heatmap')
 assert(results.includes('1 of 1 free'), 'heatmap cells count free dancers')
-assert(!/<select\b/.test(results), 'results length is a stepper, not a dropdown')
-const ownerUp = results.match(/<button\b[^>]*data-duration-step="up"[^>]*>/)
-const ownerDown = results.match(/<button\b[^>]*data-duration-step="down"[^>]*>/)
+assert(results.includes('data-pick="manual"') && results.includes('data-pick="suggest"'), 'results can switch between manual and suggested times')
+assert(!results.includes('data-duration-step'), 'the manual view does not include the suggestion stepper')
+assert(!/<select\b/.test(results), 'the manual view does not use a length dropdown')
+const suggested = renderToStaticMarkup(
+  withCalendar(
+    createElement(ResultsPanel, {
+      lang: 'en',
+      isDarkMode: true,
+      campaign,
+      onBack: () => undefined,
+      onSaveSlots: () => undefined,
+      canPin: true,
+      canSetDuration: true,
+      onSaveDuration: () => undefined,
+      initialPick: 'suggest',
+    }),
+  ),
+)
+assert(suggested.includes('Best times') && suggested.includes('data-earliest-start'), 'suggestions can be limited by when they start')
+assert(!suggested.includes('data-slot-grid'), 'suggestions are not the heatmap')
+const ownerUp = suggested.match(/<button\b[^>]*data-duration-step="up"[^>]*>/)
+const ownerDown = suggested.match(/<button\b[^>]*data-duration-step="down"[^>]*>/)
 assert(ownerUp != null && ownerDown != null, 'results include the hours stepper')
 assert(!/\sdisabled=/.test(ownerUp[0]), 'owners can lengthen the session')
 assert(/\sdisabled=/.test(ownerDown[0]), 'the stepper cannot go below the minimum before a length is chosen')
@@ -345,8 +364,23 @@ const memberResults = renderToStaticMarkup(
   ),
 )
 assert(memberResults.includes('參加者重疊'), 'members still see the overlap heatmap')
-assert(!/<select\b/.test(memberResults), 'members do not get a length dropdown')
-const memberSteps = memberResults.match(/<button\b[^>]*data-duration-step="(?:up|down)"[^>]*>/g) ?? []
+assert(!/<select\b/.test(memberResults), 'the manual view does not use a length dropdown')
+const memberSuggest = renderToStaticMarkup(
+  withCalendar(
+    createElement(ResultsPanel, {
+      lang: 'zh',
+      isDarkMode: false,
+      campaign,
+      onBack: () => undefined,
+      onSaveSlots: () => undefined,
+      canPin: false,
+      canSetDuration: false,
+      onSaveDuration: () => undefined,
+      initialPick: 'suggest',
+    }),
+  ),
+)
+const memberSteps = memberSuggest.match(/<button\b[^>]*data-duration-step="(?:up|down)"[^>]*>/g) ?? []
 assert(memberSteps.length === 2 && memberSteps.every((button) => /\sdisabled=/.test(button)), 'members cannot change the shared duration')
 assert(memberResults.includes('disabled=""'), 'members cannot pin the shortlist')
 assert(!memberResults.includes('用這個時段'), 'members do not get the shortlist button')
@@ -566,6 +600,13 @@ const portalView = renderToStaticMarkup(
 assert(portalView.includes('已定時段') && portalView.includes('出席時數'), 'participants see confirmed times and their attended hours')
 assert(portalView.includes('data-attended-hours="2"') && portalView.includes('data-confirmed-session'), 'the afternoon session counts as attended')
 assert(portalView.includes('OK') && !portalView.includes('參加者重疊') && !portalView.includes('data-slot-grid'), 'the participant portal is not the organizer results grid')
+assert(portalView.includes('data-confirmed-day="2026-11-12"') && portalView.includes('14:00'), 'confirmed times are marked on the calendar')
+function hubAccent(html: string, id: string): string {
+  const button = html.match(new RegExp(`<button\\b[^>]*data-hub-step="${id}"[^>]*>`))?.[0] ?? ''
+  return button.match(/data-accent="([^"]+)"/)?.[1] ?? ''
+}
+assert(hubAccent(hub, 'event') === 'purple' && hubAccent(hub, 'results') === 'gold', 'Event and Results use different logo colors')
+assert(hubAccent(hub, 'event') !== hubAccent(hub, 'results'), 'the selected Event and Results tabs do not share a fill')
 
 assert(GOOGLE_CALENDAR_ENABLED === false, 'the calendar flag stays off')
 assert(hub.includes('tone-fill-sage') || hub.includes('tone-fill-gold') || hub.includes('tone-fill-purple'), 'accents use the logo palette')

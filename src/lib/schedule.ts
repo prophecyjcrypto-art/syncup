@@ -312,6 +312,12 @@ export function markedHours(config: AppConfig, people: SchedulePerson[], kind: B
   return Math.round((ms / 3600000) * 10) / 10
 }
 
+/** True when a slot starts at or after `earliestHour`. A blank earliest hour matches every slot. */
+export function startsAtOrAfter(start: Date, earliestHour: number | null): boolean {
+  if (earliestHour == null) return true
+  return start.getHours() + start.getMinutes() / 60 >= earliestHour - 1e-6
+}
+
 /** Hours of the saved shortlist. Null when there is no shortlist or no session length. Does not write. */
 export function shortlistSessionHours(duration: number | null, savedSlots: string[]): number | null {
   const saved = new Set(savedSlots).size

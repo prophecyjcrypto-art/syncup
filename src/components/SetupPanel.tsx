@@ -3,6 +3,7 @@ import { formatHourCount, t } from '../i18n'
 import { formatHourOption, formatLongDate, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
 import { preferredInviteCode, preferredInviteLink, shortInviteUrl } from '../lib/invites'
 import { normalizeDurationHours } from '../lib/schedule'
+import { consumeDayClick } from '../lib/dayDrag'
 import { groupSurface, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { FieldLabel, InfoTip } from './Guide'
 import { InviteCode } from './InviteCode'
@@ -88,6 +89,7 @@ export function SetupPanel({
   }
 
   function toggleMark(iso: string) {
+    if (consumeDayClick()) return
     const update = (dates: string[]) => (dates.includes(iso) ? dates.filter((date) => date !== iso) : [...dates, iso].sort())
     if (markMode === 'show') setOnDays(update)
     else setCompulsoryDays(update)
@@ -272,6 +274,8 @@ export function SetupPanel({
             days={days}
             lang={lang}
             isDarkMode={isDarkMode}
+            selected={markMode === 'show' ? onDays : compulsoryDays}
+            onSelectRange={readOnly ? undefined : (next) => (markMode === 'show' ? setOnDays(next) : setCompulsoryDays(next))}
             renderDay={(day) => {
               const iso = toISODateString(day)
               const show = onDays.includes(iso)
@@ -280,6 +284,8 @@ export function SetupPanel({
                 <button
                   type="button"
                   disabled={readOnly}
+                  data-cal-iso={iso}
+                  data-day-on={show ? '' : undefined}
                   onClick={() => toggleMark(iso)}
                   aria-label={formatLongDate(day, lang)}
                   className={`cal-day glass-well flex w-full items-center justify-center rounded-lg text-sm font-medium leading-none ${

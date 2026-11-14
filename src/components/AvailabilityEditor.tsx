@@ -12,11 +12,16 @@ import {
   GoogleCalendarError,
   type BusyRange,
 } from '../lib/googleCalendar'
+import { consumeDayClick } from '../lib/dayDrag'
 import { uncoveredDays } from '../lib/schedule'
 import { cardClass, inputClass, primaryButton, textMuted, textPrimary } from '../lib/ui'
 import { InfoTip, MiniSteps } from './Guide'
 import type { AppConfig, BlockKind, Language, TimeBlock } from '../types'
 import { MonthBoards } from './MonthBoards'
+
+function clockLabel(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
 
 export function AvailabilityEditor({
   lang,
@@ -27,6 +32,7 @@ export function AvailabilityEditor({
   blocks,
   onChange,
   disabled = false,
+  confirmed = [],
 }: {
   lang: Language
   isDarkMode: boolean
@@ -36,6 +42,7 @@ export function AvailabilityEditor({
   blocks: TimeBlock[]
   onChange: (blocks: TimeBlock[]) => void
   disabled?: boolean
+  confirmed?: { start: Date; end: Date }[]
 }) {
   const [mode, setMode] = useState<BlockKind>('unavailable')
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -46,6 +53,17 @@ export function AvailabilityEditor({
     () => getDaysArray(parseISODate(config.startDate), parseISODate(config.endDate)),
     [config.startDate, config.endDate],
   )
+  const confirmedByDay = useMemo(() => {
+    const grouped = new Map<string, { start: Date; end: Date }[]>()
+    for (const session of confirmed) {
+      const iso = toISODateString(session.start)
+      const list = grouped.get(iso) ?? []
+      list.push(session)
+      grouped.set(iso, list)
+    }
+    for (const list of grouped.values()) list.sort((left, right) => left.start.getTime() - right.start.getTime())
+    return grouped
+  }, [confirmed])
   const hours = rangeOptions(config.dayStartHour, config.dayEndHour)
   const positive = mode === 'available'
   const calendar = useCalendar()
@@ -83,7 +101,7 @@ export function AvailabilityEditor({
   }, [calendar.token, config.startDate, config.endDate, config.dayStartHour, config.dayEndHour, lang])
 
   function toggleDate(iso: string) {
-    if (disabled) return
+    if (disabled || consumeDayClick()) return
     const next = new Set(selected)
     if (next.has(iso)) next.delete(iso)
     else next.add(iso)
@@ -225,17 +243,23 @@ export function AvailabilityEditor({
           days={days}
           lang={lang}
           isDarkMode={isDarkMode}
+          selected={[...selected]}
+          onSelectRange={disabled ? undefined : (next) => { setSelected(new Set(next)); setNote('') }}
           renderDay={(day) => {
             const iso = toISODateString(day)
             const chosen = selected.has(iso)
             const kinds = new Set(blocks.filter((block) => toISODateString(block.start) === iso).map((block) => block.kind))
+            const booked = confirmedByDay.get(iso) ?? []
+            const bookedLabel = booked.map((session) => clockLabel(session.start)).join(' · ')
             return (
               <button
                 type="button"
                 disabled={disabled}
                 onClick={() => toggleDate(iso)}
-                aria-label={formatLongDate(day, lang)}
+                data-cal-iso={iso}
+                aria-label={bookedLabel ? `${formatLongDate(day, lang)} ${bookedLabel}` : formatLongDate(day, lang)}
                 data-day-selected={chosen ? '' : undefined}
+                data-confirmed-day={booked.length > 0 ? iso : undefined}
                 className={`cal-day relative flex w-full flex-col items-center justify-center rounded-lg text-xs font-bold leading-none ${
                   chosen ? (positive ? 'tone-fill-sage' : 'tone-fill-pink') : `glass-well ${isDarkMode ? 'text-zinc-100' : 'text-zinc-800'}`
                 } ${onDays.includes(iso) ? 'ring-2 ring-[#f6cf7a]' : ''} ${
@@ -244,7 +268,13 @@ export function AvailabilityEditor({
               >
                 {onDays.includes(iso) ? '★' : ''}
                 {day.getDate()}
-                <span className="mt-1 flex gap-1">
+                {bookedLabel ? (
+                  <span className={`mt-0.5 text-[8px] font-semibold leading-none ${chosen ? 'opacity-90' : isDarkMode ? 'text-[color:var(--logo-gold)]' : 'text-[color:var(--logo-gold-ink)]'}`}>
+                    {bookedLabel}
+                  </span>
+                ) : null}
+                <span className="mt-0.5 flex gap-1">
+                  {booked.length > 0 ? <i className="h-1.5 w-1.5 rounded-full bg-[color:var(--logo-gold)]" /> : null}
                   {kinds.has('unavailable') && <i className="h-1.5 w-1.5 rounded-full bg-[#f19ba8]" />}
                   {kinds.has('available') && <i className="h-1.5 w-1.5 rounded-full bg-[#93ba8c]" />}
                 </span>

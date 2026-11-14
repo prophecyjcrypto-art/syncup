@@ -158,6 +158,7 @@ export function DancerPortal({
         blocks={blocks}
         onChange={setBlocks}
         disabled={locked}
+        confirmed={plan.sessions}
       />
       {!locked && (
         <div className="dock">

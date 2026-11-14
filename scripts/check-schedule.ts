@@ -8,6 +8,8 @@ import { membershipChanges } from '../src/lib/groups.ts'
 import { canEditEvent, canSeeResults } from '../src/lib/access.ts'
 import { emailForAdminGrant, grantRole } from '../src/lib/roles.ts'
 import { paintBlocks, spansFromDrag } from '../src/lib/paint.ts'
+import { datesInRange, paintRange } from '../src/lib/dayDrag.ts'
+import { startsAtOrAfter } from '../src/lib/schedule.ts'
 import { SHORT_CODE_ALPHABET, normalizeLongCode, normalizeShortCode, parseInviteInput, shortCodeFromPath } from '../src/lib/invites.ts'
 import { buildCampaign, sampleShortlist } from '../src/dev/resultsPreview.tsx'
 import { commitSessions, pinsToSave, type SessionRange } from '../src/lib/sessions.ts'
@@ -548,6 +550,12 @@ const dragSpans = spansFromDrag(
   'available',
 )
 assert(dragSpans.length === 2 && dragSpans.every((span) => span.startHour === 10 && span.endHour === 11.5), 'a drag across dates paints the same hours on each day')
+assert(datesInRange(['a', 'b', 'c', 'd'], 'c', 'a').join() === 'a,b,c', 'a day drag covers the days between the endpoints')
+assert(paintRange(new Set(['a']), ['a', 'b', 'c'], 'b', 'c', true).join() === 'a,b,c', 'dragging from an open day selects the range and keeps earlier days')
+assert(paintRange(new Set(['a', 'b', 'c']), ['a', 'b', 'c'], 'a', 'b', false).join() === 'c', 'dragging from a selected day clears that range')
+assert(startsAtOrAfter(setTime(parseISODate('2026-11-12'), 14), 14), 'a 2pm slot matches a 2pm start')
+assert(!startsAtOrAfter(setTime(parseISODate('2026-11-12'), 9), 14), 'a morning slot is hidden when sessions must start from 2pm')
+assert(startsAtOrAfter(setTime(parseISODate('2026-11-12'), 9), null), 'a blank start time keeps every slot')
 const headerSpans = spansFromDrag(
   { iso: paintDay, index: 0, header: true },
   { iso: paintDay, index: 0, header: true },

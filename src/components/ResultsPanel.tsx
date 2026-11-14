@@ -3,12 +3,13 @@ import { t } from '../i18n'
 import { useCalendar } from '../lib/calendarContext'
 import { buildIcs, formatSlotText } from '../lib/export'
 import { clearGoogleToken, createCalendarEvents, GOOGLE_CALENDAR_ENABLED, GoogleCalendarError } from '../lib/googleCalendar'
-import { formatLongDate, formatTime, getDaysArray, parseISODate, setTime, toISODateString } from '../lib/dates'
+import { formatHourOption, formatLongDate, formatTime, getDaysArray, parseISODate, rangeOptions, setTime, toISODateString } from '../lib/dates'
 import { durationHours, fitDuration, roundHour, SLOT_STEP } from '../lib/timeRange'
-import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, compulsoryReport, sharedFreeByDay, shortlistSessionHours, type MarkFilter } from '../lib/schedule'
+import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, compulsoryReport, sharedFreeByDay, shortlistSessionHours, startsAtOrAfter, type MarkFilter } from '../lib/schedule'
+import { consumeDayClick } from '../lib/dayDrag'
 import { commitSessions, pinsToSave, toggleSessionDay, type SessionRange } from '../lib/sessions'
 import { organizersOf } from '../lib/roles'
-import { cardClass, textMuted, textPrimary } from '../lib/ui'
+import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { InfoTip } from './Guide'
 import type { Campaign, Language, TimeSlot } from '../types'
 import { MonthBoards } from './MonthBoards'
@@ -40,6 +41,7 @@ export function ResultsPanel({
   canSetDuration = true,
   onSaveDuration,
   embedded = false,
+  initialPick = 'manual',
 }: {
   lang: Language
   isDarkMode: boolean
@@ -50,6 +52,7 @@ export function ResultsPanel({
   canSetDuration?: boolean
   onSaveDuration?: (hours: number) => void
   embedded?: boolean
+  initialPick?: 'manual' | 'suggest'
 }) {
   const organizers = organizersOf(campaign)
   const choreoKey = organizers.map((person) => person.id).join('|')
@@ -68,6 +71,8 @@ export function ResultsPanel({
   const [groupId, setGroupId] = useState<string | null>(null)
   const [markFilter, setMarkFilter] = useState<MarkFilter>('both')
   const [resultsView, setResultsView] = useState<'schedule' | 'analysis'>('schedule')
+  const [pickMode, setPickMode] = useState<'manual' | 'suggest'>(initialPick)
+  const [earliestStart, setEarliestStart] = useState<number | null>(null)
   const calendar = useCalendar()
   const saveSlotsRef = useRef(onSaveSlots)
   const armPin = useRef(false)
@@ -115,9 +120,10 @@ export function ResultsPanel({
     if (selectedDates.size > 0 && !selectedDates.has(iso)) return false
     return slot.attendanceScore >= minAttendance
   })
-  const listed = dated.filter(
-    (slot) => dancerFilter.length === 0 || dancerFilter.every((id) => slot.availableMembers.includes(id)),
-  )
+  const listed = dated.filter((slot) => {
+    if (dancerFilter.length > 0 && !dancerFilter.every((id) => slot.availableMembers.includes(id))) return false
+    return startsAtOrAfter(slot.start, earliestStart)
+  })
   const pinned = listed
     .filter((slot) => campaign.savedSlots.includes(slotKey(slot)))
     .sort((left, right) => left.start.getTime() - right.start.getTime())
@@ -209,7 +215,22 @@ export function ResultsPanel({
     syncDuration(block)
   }
 
+  function paintSessionDays(isos: string[]) {
+    const source = sessions.find((item) => item.id === focusId) ?? sessions[0]
+    if (!source) return
+    const wanted = new Set(isos)
+    setSessions((current) => {
+      const base = current.find((item) => item.id === source.id) ?? source
+      const others = current.filter((item) => item.startHour !== base.startHour || item.endHour !== base.endHour)
+      const kept = current.filter((item) => item.startHour === base.startHour && item.endHour === base.endHour && wanted.has(item.iso))
+      const have = new Set(kept.map((item) => item.iso))
+      const added = [...wanted].filter((iso) => !have.has(iso)).map((iso) => ({ ...base, id: crypto.randomUUID(), iso }))
+      return [...others, ...kept, ...added]
+    })
+  }
+
   function toggleDay(iso: string) {
+    if (consumeDayClick()) return
     const source = sessions.find((item) => item.id === focusId) ?? sessions[0]
     if (!source) return
     const exact = sessions.find((item) => item.iso === iso && item.startHour === source.startHour && item.endHour === source.endHour)
@@ -479,6 +500,30 @@ export function ResultsPanel({
       {canPin && resultsView === 'analysis' ? (
         <AnalysisPanel lang={lang} isDarkMode={isDarkMode} campaign={campaign} sessions={sessions} />
       ) : (
+      <>
+      <div className="inline-flex rounded-full p-0.5 glass-well" role="tablist" data-pick-mode={pickMode}>
+        <button
+          type="button"
+          role="tab"
+          data-pick="manual"
+          aria-selected={pickMode === 'manual'}
+          onClick={() => setPickMode('manual')}
+          className={`min-h-11 rounded-full px-4 text-xs font-bold ${pickMode === 'manual' ? 'chip-on' : ''}`}
+        >
+          {t(lang, 'pick_manual')}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          data-pick="suggest"
+          aria-selected={pickMode === 'suggest'}
+          onClick={() => setPickMode('suggest')}
+          className={`min-h-11 rounded-full px-4 text-xs font-bold ${pickMode === 'suggest' ? 'chip-on' : ''}`}
+        >
+          {t(lang, 'pick_suggest')}
+        </button>
+      </div>
+      {pickMode === 'manual' ? (
       <div className="grid gap-4 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] md:items-start">
         <div className="order-2 min-w-0 space-y-3 md:order-1">
           <section className={`${cardClass(isDarkMode)} space-y-3 rounded-[1.5rem] p-4 sm:p-5`}>
@@ -531,6 +576,8 @@ export function ResultsPanel({
               days={days}
               lang={lang}
               isDarkMode={isDarkMode}
+              selected={[...selectedDates]}
+              onSelectRange={(next) => setSelectedDates(new Set(next))}
               renderDay={(day) => {
                 const iso = toISODateString(day)
                 const score = scoreFor(iso)
@@ -538,8 +585,11 @@ export function ResultsPanel({
                 return (
                   <button
                     type="button"
+                    data-cal-iso={iso}
+                    data-day-on={selected ? '' : undefined}
                     aria-label={formatLongDate(day, lang)}
                     onClick={() => {
+                      if (consumeDayClick()) return
                       const next = new Set(selectedDates)
                       if (next.has(iso)) next.delete(iso)
                       else next.add(iso)
@@ -655,6 +705,7 @@ export function ResultsPanel({
             onCommit={commitSession}
             onFocus={focusSession}
             onToggleDay={toggleDay}
+            onPaintDays={paintSessionDays}
             onRemove={removeSession}
             onClearAll={() => {
               setSessions([])
@@ -701,12 +752,17 @@ export function ResultsPanel({
               <p className="text-xs text-zinc-500">{t(lang, 'no_shared_time', { n: closedDays })}</p>
             )}
           </div>
-          <div className="mt-8 border-t border-zinc-400/25 pt-6">
+        </section>
+      </div>
+      ) : (
+      <section className={`${cardClass(isDarkMode)} min-w-0 rounded-[1.5rem] p-4 sm:p-5`}>
+          <div>
             <h3 className={`font-serif text-xl sm:text-2xl ${textPrimary(isDarkMode)}`}>
               {selectedDates.size > 0 ? t(lang, 'dates_selected', { n: selectedDates.size }) : t(lang, 'rehearsal_recommendations')}
             </h3>
             {durationUnset ? null : <p className={`mt-1 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'found_slots', { n: listed.length })}</p>}
-            <div data-duration-hours="" className="mt-4 flex scroll-mt-24 items-center gap-3">
+            <div className="mt-4 flex flex-wrap items-end gap-4">
+            <div data-duration-hours="" className="flex scroll-mt-24 items-center gap-3">
               <p className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'rehearsal_length')}</p>
               <div className="inline-flex items-center gap-1">
                 <button
@@ -733,6 +789,21 @@ export function ResultsPanel({
                   +
                 </button>
               </div>
+            </div>
+            <label className="min-w-[10rem] space-y-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+              {t(lang, 'earliest_start')}
+              <select
+                data-earliest-start=""
+                value={earliestStart ?? ''}
+                onChange={(event) => setEarliestStart(event.target.value === '' ? null : Number(event.target.value))}
+                className={`w-full min-w-0 rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+              >
+                <option value="">{t(lang, 'any_time')}</option>
+                {rangeOptions(campaign.config.dayStartHour, Math.max(campaign.config.dayStartHour, campaign.config.dayEndHour - SLOT_STEP)).map((hour) => (
+                  <option key={hour} value={hour}>{formatHourOption(hour)}</option>
+                ))}
+              </select>
+            </label>
             </div>
             <div className="mt-6 space-y-4">
               {pinned.length > 0 && (
@@ -762,8 +833,9 @@ export function ResultsPanel({
               ) : null}
             </div>
           </div>
-        </section>
-      </div>
+      </section>
+      )}
+      </>
       )}
     </div>
   )

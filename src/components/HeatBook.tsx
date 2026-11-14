@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, ty
 import { t } from '../i18n'
 import { formatLongDate, formatTime, parseISODate, toISODateString } from '../lib/dates'
 import { rangesOverlap, type SessionRange } from '../lib/sessions'
+import { beginDayRangeDrag, consumeDayClick } from '../lib/dayDrag'
 import {
   SLOT_STEP,
   durationHours,
@@ -157,6 +158,7 @@ export function HeatBook({
   onCommit,
   onFocus,
   onToggleDay,
+  onPaintDays,
   onRemove,
   onClearAll,
   onToggleSaved,
@@ -181,6 +183,7 @@ export function HeatBook({
   onCommit: (block: SessionRange, sourceId: string | null) => void
   onFocus: (id: string) => void
   onToggleDay: (iso: string) => void
+  onPaintDays?: (isos: string[]) => void
   onRemove: (id: string) => void
   onClearAll: () => void
   onToggleSaved: (keys: string[]) => void
@@ -562,10 +565,33 @@ export function HeatBook({
                     type="button"
                     data-day-label=""
                     data-day-toggle={day.iso}
+                    data-cal-iso={day.iso}
                     data-selected-day={picked ? '' : undefined}
                     aria-pressed={picked}
                     disabled={sessions.length === 0 && !preview}
-                    onClick={() => onToggleDay(day.iso)}
+                    onPointerDown={(event) => {
+                      if (!onPaintDays || !focused) return
+                      const selectedDays = heat
+                        .filter((item) =>
+                          sessions.some((entry) => entry.iso === item.iso && entry.startHour === focused.startHour && entry.endHour === focused.endHour),
+                        )
+                        .map((item) => item.iso)
+                      beginDayRangeDrag({
+                        pointerId: event.pointerId,
+                        pointerType: event.pointerType,
+                        button: event.button,
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                        iso: day.iso,
+                        ordered: heat.map((item) => item.iso),
+                        selected: new Set(selectedDays),
+                        onRange: onPaintDays,
+                      })
+                    }}
+                    onClick={() => {
+                      if (consumeDayClick()) return
+                      onToggleDay(day.iso)
+                    }}
                     className={`heat-day ${picked ? 'heat-day-on' : textPrimary(isDarkMode)}`}
                     style={place}
                   >
