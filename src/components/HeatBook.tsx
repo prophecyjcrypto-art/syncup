@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { t } from '../i18n'
 import { formatLongDate, formatTime, parseISODate, toISODateString } from '../lib/dates'
 import { rangesOverlap, type SessionRange } from '../lib/sessions'
+import { beginDayRangeDrag, consumeDayClick } from '../lib/dayDrag'
 import {
   SLOT_STEP,
   durationHours,
@@ -16,7 +18,6 @@ import {
   type HourRange,
 } from '../lib/timeRange'
 import { textMuted, textPrimary } from '../lib/ui'
-import { InfoTip } from './Guide'
 import type { Language, TimeSlot } from '../types'
 import type { MarkFilter, OverlapCell } from '../lib/schedule'
 
@@ -150,17 +151,15 @@ export function HeatBook({
   markFilter,
   durationHours: chosenHours,
   editable,
-  canPin,
   windowStart,
   windowEnd,
   nameOf,
   onCommit,
   onFocus,
   onToggleDay,
+  onPaintDays,
   onRemove,
   onClearAll,
-  onToggleSaved,
-  sheet,
   filter,
 }: {
   lang: Language
@@ -174,17 +173,15 @@ export function HeatBook({
   markFilter: MarkFilter
   durationHours: number | null
   editable: boolean
-  canPin: boolean
   windowStart: number
   windowEnd: number
   nameOf: (id: string) => string
   onCommit: (block: SessionRange, sourceId: string | null) => void
   onFocus: (id: string) => void
   onToggleDay: (iso: string) => void
+  onPaintDays?: (isos: string[]) => void
   onRemove: (id: string) => void
   onClearAll: () => void
-  onToggleSaved: (keys: string[]) => void
-  sheet?: ReactNode
   filter?: ReactNode
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -212,16 +209,9 @@ export function HeatBook({
   }, [focused?.id, focused?.iso, focused?.startHour, focused?.endHour])
 
   const summary = sessionSummary(shown, lang)
-  const heatHelp = [t(lang, 'drag_hint'), t(lang, 'grid_gesture'), sessions.length > 0 ? t(lang, 'multi_day_hint') : '']
-    .filter(Boolean)
-    .join('\n')
   const header = heat[0]?.cells ?? []
   const cols = header.length
-  const chosenSlots = sessions
-    .map((item) => slots.find((slot) => slotMatchesSession(slot, item)) ?? null)
-    .filter((slot): slot is TimeSlot => slot != null)
   const matching = !preview && focused ? slots.find((slot) => slotMatchesSession(slot, focused)) ?? null : null
-  const saved = chosenSlots.length > 0 && chosenSlots.every((slot) => savedSlots.includes(slot.start.toISOString()))
   const countLabel = markFilter === 'na' ? 'heat_na' : markFilter === 'ok' ? 'heat_ok' : 'heat_free'
 
   useEffect(() => {
@@ -229,6 +219,15 @@ export function HeatBook({
     return () => {
       document.body.style.overflow = ''
     }
+  }, [full])
+
+  useEffect(() => {
+    if (!full) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFull(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [full])
 
   useEffect(() => {
@@ -466,30 +465,15 @@ export function HeatBook({
         ) : (
           <p className="text-xs text-[#f19ba8]">{t(lang, 'slot_blocked')}</p>
         )}
-        {chosenSlots.length > 0 && canPin ? (
-          <button
-            type="button"
-            onClick={() => onToggleSaved(chosenSlots.map((slot) => slot.start.toISOString()))}
-            className="min-h-11 rounded-full btn-glow bg-[#7c7bb9] px-4 text-xs font-bold text-white"
-          >
-            {saved ? t(lang, 'on_shortlist') : chosenSlots.length > 1 ? t(lang, 'use_these_times') : t(lang, 'use_this_time')}
-          </button>
-        ) : null}
       </div>
     )
   }
 
   const cell = `${(2.25 * zoom).toFixed(3)}rem`
   const column = `${Math.max(3.2, 5.1 * zoom).toFixed(3)}rem`
-  return (
+  const view = (
     <div className={full ? 'heat-full' : 'mt-4 space-y-3'} data-grid-full={full ? '' : undefined}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h4 id="overlap-heading" className={`inline-flex items-center gap-2 font-bold ${textPrimary(isDarkMode)}`}>
-            {t(lang, 'heat_title')}
-            <InfoTip lang={lang} name="heat" text={heatHelp} />
-          </h4>
-        </div>
+      <div className="flex items-center justify-end gap-3">
         {dancers.length > 0 && cols > 0 ? (
           <button
             type="button"
@@ -497,14 +481,15 @@ export function HeatBook({
             aria-pressed={full}
             aria-label={t(lang, full ? 'grid_collapse' : 'grid_expand')}
             onClick={() => setFull((value) => !value)}
-            className="glass-well flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+            className="glass-well inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full px-4 text-sm font-bold"
           >
-            {full ? '↓' : '↗'}
+            <span aria-hidden="true">{full ? '↓' : '↗'}</span>
+            {t(lang, full ? 'grid_collapse' : 'grid_expand')}
           </button>
         ) : null}
       </div>
       {filter ? (
-        <div role="group" aria-labelledby="overlap-heading" aria-controls={dancers.length > 0 && cols > 0 ? 'overlap-grid' : undefined}>
+        <div role="group" aria-controls={dancers.length > 0 && cols > 0 ? 'overlap-grid' : undefined}>
           {filter}
         </div>
       ) : null}
@@ -538,7 +523,7 @@ export function HeatBook({
             data-heat-zoom={zoom}
             role="grid"
             tabIndex={editable ? 0 : -1}
-            aria-label={t(lang, 'heat_title')}
+            aria-label={t(lang, 'pick_manual')}
             onKeyDown={onKeyDown}
             style={{ ['--heat-cell' as string]: cell, ['--heat-col' as string]: column, ['--heat-gap' as string]: '2px' }}
           >
@@ -556,21 +541,59 @@ export function HeatBook({
                 const picked = sessions.some((item) => item.iso === day.iso) || preview?.block.iso === day.iso
                 const label = formatLongDate(parseISODate(day.iso), lang)
                 const place = { gridColumn: dayIndex + 2, gridRow: 1 }
+                const canCopy = Boolean(focused)
                 return editable ? (
-                  <button
+                  <div
                     key={day.iso}
-                    type="button"
                     data-day-label=""
-                    data-day-toggle={day.iso}
-                    data-selected-day={picked ? '' : undefined}
-                    aria-pressed={picked}
-                    disabled={sessions.length === 0 && !preview}
-                    onClick={() => onToggleDay(day.iso)}
                     className={`heat-day ${picked ? 'heat-day-on' : textPrimary(isDarkMode)}`}
                     style={place}
                   >
-                    {label}
-                  </button>
+                    <button
+                      type="button"
+                      data-duplicate-day={day.iso}
+                      aria-label={t(lang, 'duplicate_day')}
+                      disabled={!canCopy}
+                      onClick={() => onToggleDay(day.iso)}
+                      className="tone-fill-sage flex h-6 w-6 items-center justify-center rounded-full text-base font-bold leading-none disabled:opacity-40"
+                    >
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      data-day-toggle={day.iso}
+                      data-cal-iso={day.iso}
+                      data-selected-day={picked ? '' : undefined}
+                      aria-pressed={picked}
+                      disabled={sessions.length === 0 && !preview}
+                      onPointerDown={(event) => {
+                        if (!onPaintDays || !focused) return
+                        const selectedDays = heat
+                          .filter((item) =>
+                            sessions.some((entry) => entry.iso === item.iso && entry.startHour === focused.startHour && entry.endHour === focused.endHour),
+                          )
+                          .map((item) => item.iso)
+                        beginDayRangeDrag({
+                          pointerId: event.pointerId,
+                          pointerType: event.pointerType,
+                          button: event.button,
+                          clientX: event.clientX,
+                          clientY: event.clientY,
+                          iso: day.iso,
+                          ordered: heat.map((item) => item.iso),
+                          selected: new Set(selectedDays),
+                          onRange: onPaintDays,
+                        })
+                      }}
+                      onClick={() => {
+                        if (consumeDayClick()) return
+                        onToggleDay(day.iso)
+                      }}
+                      className="min-h-6 w-full bg-transparent text-[0.62rem] font-bold leading-tight"
+                    >
+                      {label}
+                    </button>
+                  </div>
                 ) : (
                   <span key={day.iso} className={`heat-day ${picked ? 'heat-day-on' : textPrimary(isDarkMode)}`} data-day-label="" style={place}>
                     {label}
@@ -649,11 +672,8 @@ export function HeatBook({
         </>
       )}
       {detail}
-      {full ? (
-        <div className="heat-full-sheet" data-grid-sheet="">
-          {sheet}
-        </div>
-      ) : null}
     </div>
   )
+  if (full && typeof document !== 'undefined') return createPortal(view, document.body)
+  return view
 }

@@ -212,6 +212,29 @@ export function classifySessionWindow(
   }
 }
 
+/** Copy and calendar export rows for the official final times. Known slots win. A missing key uses `hoursForKey`, then `fallbackHours`. */
+export function finalCopySlots(
+  keys: readonly string[],
+  known: readonly TimeSlot[],
+  people: readonly SchedulePerson[],
+  fallbackHours: number | null,
+  toleranceHours: number,
+  hoursForKey?: (key: string) => number | null,
+): TimeSlot[] {
+  const byStart = new Map(known.map((slot) => [slot.start.toISOString(), slot]))
+  return keys.flatMap((key) => {
+    const found = byStart.get(key)
+    if (found) return [found]
+    const start = new Date(key)
+    const custom = hoursForKey?.(key)
+    const hours = custom != null && custom > 0 ? custom : fallbackHours
+    if (Number.isNaN(start.getTime()) || hours == null || hours <= 0) return []
+    const end = new Date(start.getTime() + hours * 3600000)
+    if (end.getTime() <= start.getTime()) return []
+    return [classifySessionWindow([...people], start, end, toleranceHours)]
+  }).sort((left, right) => left.start.getTime() - right.start.getTime())
+}
+
 export function calculateBestSlots(
   config: AppConfig,
   choreographers: SchedulePerson[],
@@ -310,6 +333,12 @@ export function markedHours(config: AppConfig, people: SchedulePerson[], kind: B
     }
   }
   return Math.round((ms / 3600000) * 10) / 10
+}
+
+/** True when a slot starts at or after `earliestHour`. A blank earliest hour matches every slot. */
+export function startsAtOrAfter(start: Date, earliestHour: number | null): boolean {
+  if (earliestHour == null) return true
+  return start.getHours() + start.getMinutes() / 60 >= earliestHour - 1e-6
 }
 
 /** Hours of the saved shortlist. Null when there is no shortlist or no session length. Does not write. */

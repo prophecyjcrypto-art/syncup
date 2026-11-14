@@ -1,13 +1,19 @@
 import { readFileSync } from 'node:fs'
 import { formatHourCount, formatPeopleCount } from '../src/i18n.ts'
 import { getDaysArray, groupByMonth, parseISODate, setTime, toISODateString } from '../src/lib/dates.ts'
-import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, coveredMs, freeIntervals, markedBlockCount, markedHours, normalizeDurationHours, plannedSessionHours, responseCount, shortlistSessionHours, uncoveredDays } from '../src/lib/schedule.ts'
+import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, coveredMs, finalCopySlots, freeIntervals, markedBlockCount, markedHours, normalizeDurationHours, plannedSessionHours, responseCount, shortlistSessionHours, uncoveredDays } from '../src/lib/schedule.ts'
 import { analyzeEvent } from '../src/lib/analysis.ts'
-import { devResultsAllowed, isDevResultsPath } from '../src/lib/devPreview.ts'
+import { devResultsAllowed, isDevHubPath, isDevResultsPath } from '../src/lib/devPreview.ts'
 import { membershipChanges } from '../src/lib/groups.ts'
-import { canSeeResults } from '../src/lib/access.ts'
-import { grantRole } from '../src/lib/roles.ts'
+import { canEditEvent, canSeeResults } from '../src/lib/access.ts'
+import { emailForAdminGrant, grantRole } from '../src/lib/roles.ts'
 import { paintBlocks, spansFromDrag } from '../src/lib/paint.ts'
+import { datesInRange, paintRange } from '../src/lib/dayDrag.ts'
+import { startsAtOrAfter } from '../src/lib/schedule.ts'
+import { publishedSlotKeys, readSessionNotes } from '../src/lib/sessionNotes.ts'
+import { conflictingSessionKeys, mergeKeepingSessions, proposeMissedSession } from '../src/lib/changeRequests.ts'
+import { makeBlock } from '../src/lib/blocks.ts'
+import { classifySessionAttendance } from '../src/lib/schedule.ts'
 import { SHORT_CODE_ALPHABET, normalizeLongCode, normalizeShortCode, parseInviteInput, shortCodeFromPath } from '../src/lib/invites.ts'
 import { buildCampaign, sampleShortlist } from '../src/dev/resultsPreview.tsx'
 import { commitSessions, pinsToSave, type SessionRange } from '../src/lib/sessions.ts'
@@ -312,7 +318,10 @@ assert(devResultsAllowed(false, 'preview') === true, 'a Vercel preview build can
 assert(devResultsAllowed(false, 'production') === false, 'production cannot open the results preview')
 assert(devResultsAllowed(false, undefined) === false, 'a build without Vercel preview cannot open the results preview')
 assert(isDevResultsPath('/dev/results') && isDevResultsPath('/dev/results/'), 'the preview lives at /dev/results')
-assert(!isDevResultsPath('/') && !isDevResultsPath('/dev/results/extra'), 'other paths are not the preview')
+assert(!isDevResultsPath('/') && !isDevResultsPath('/dev/results/extra') && !isDevResultsPath('/dev'), 'other paths are not the results preview')
+assert(isDevHubPath('/dev') && isDevHubPath('/dev/'), 'the login-free mock lives at /dev')
+assert(!isDevHubPath('/dev/results') && !isDevHubPath('/') && !isDevHubPath('/dev/extra'), 'only /dev opens the product mock')
+assert(shortCodeFromPath('/dev') === null, 'the mock path is not an invite')
 
 const sample = buildCampaign('zh', sampleShortlist(), 2)
 assert(sample.groups.map((group) => group.name).join() === '主力,後備', 'the sample has a main group and a reserve group')
@@ -321,6 +330,20 @@ assert(new Set(sample.savedSlots.map((key) => toISODateString(new Date(key)))).s
 assert(sample.dancers.some((dancer) => dancer.blocks.length === 0), 'one dancer has not responded')
 assert(sample.dancers.some((dancer) => dancer.blocks.some((block) => block.kind === 'unavailable')), 'the sample includes NA')
 assert(sample.dancers.some((dancer) => dancer.blocks.some((block) => block.kind === 'available')), 'the sample includes OK')
+const suggestionList = calculateBestSlots(sample.config, sample.choreographers, sample.dancers)
+const copiedFinals = finalCopySlots(sample.savedSlots, suggestionList, sample.dancers, sample.config.durationHours, sample.config.attendanceTolerance)
+assert(suggestionList.length > sample.savedSlots.length, 'the demo has more suggestions than final cards')
+assert(copiedFinals.length === sample.savedSlots.length, 'copy and export use only the final cards when the shortlist is empty')
+assert(
+  copiedFinals.map((slot) => slot.start.toISOString()).join('|') === [...sample.savedSlots].sort().join('|'),
+  'those copy rows are the saved final sessions',
+)
+const outside = setTime(parseISODate('2026-11-12'), 14).toISOString()
+const built = finalCopySlots([outside], suggestionList.filter((slot) => slot.start.toISOString() !== outside), [], 2, 0)
+assert(built.length === 1 && built[0].end.getTime() - built[0].start.getTime() === 2 * 3600000, 'a final time missing from the suggestions is built from the session length')
+const resultsPanel = readFileSync(new URL('../src/components/ResultsPanel.tsx', import.meta.url), 'utf8')
+assert(resultsPanel.includes('finalCopySlots(\n      cardKeys,'), 'copy and calendar export read the final cards')
+assert(!resultsPanel.includes('pinned.length > 0 ? pinned : listed'), 'copy does not fall through to every suggestion')
 
 const previewSource = readFileSync(new URL('../src/dev/resultsPreview.tsx', import.meta.url), 'utf8')
 assert(!previewSource.includes('lib/db') && !previewSource.includes('lib/supabase') && !previewSource.includes('fetchCampaigns'), 'the preview cannot read or write live events')
@@ -328,6 +351,10 @@ const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8
 assert(!appSource.includes('/dev/results'), 'the signed-in app does not link to the preview')
 const mainSource = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8')
 assert(mainSource.includes('__SYNCUP_DEV_RESULTS__') && !/searchParams\.get\(\s*['"]dev['"]\s*\)/.test(mainSource), 'the preview is not unlocked by a public query secret')
+assert(mainSource.includes('isDevHubPath') && mainSource.includes("mockAllowed && (previewName || hubPath)"), 'the product mock uses the same preview build gate')
+assert(!mainSource.includes('import.meta.env.DEV'), 'a hosted preview is not limited to the Vite dev server')
+const fixtureSource = readFileSync(new URL('../src/dev/fixture.tsx', import.meta.url), 'utf8')
+assert(!fixtureSource.includes('lib/db') && !fixtureSource.includes('lib/supabase') && !fixtureSource.includes('fetchCampaigns'), 'the product mock cannot read or write live events')
 const viteConfig = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8')
 assert(viteConfig.includes('devResultsAllowed'), 'the Vite build uses the same preview gate')
 
@@ -541,6 +568,25 @@ const dragSpans = spansFromDrag(
   'available',
 )
 assert(dragSpans.length === 2 && dragSpans.every((span) => span.startHour === 10 && span.endHour === 11.5), 'a drag across dates paints the same hours on each day')
+assert(datesInRange(['a', 'b', 'c', 'd'], 'c', 'a').join() === 'a,b,c', 'a day drag covers the days between the endpoints')
+assert(paintRange(new Set(['a']), ['a', 'b', 'c'], 'b', 'c', true).join() === 'a,b,c', 'dragging from an open day selects the range and keeps earlier days')
+assert(paintRange(new Set(['a', 'b', 'c']), ['a', 'b', 'c'], 'a', 'b', false).join() === 'c', 'dragging from a selected day clears that range')
+assert(startsAtOrAfter(setTime(parseISODate('2026-11-12'), 14), 14), 'a 2pm slot matches a 2pm start')
+assert(!startsAtOrAfter(setTime(parseISODate('2026-11-12'), 9), 14), 'a morning slot is hidden when sessions must start from 2pm')
+assert(startsAtOrAfter(setTime(parseISODate('2026-11-12'), 9), null), 'a blank start time keeps every slot')
+const publishedNotes = readSessionNotes({ '2026-11-12T06:00:00.000Z': { venue: '二號舞蹈室', remarks: '' } })
+assert(publishedNotes['2026-11-12T06:00:00.000Z']?.venue === '二號舞蹈室' && publishedNotes['2026-11-12T06:00:00.000Z']?.remarks === '', 'a published session keeps its venue when remarks are blank')
+assert(publishedSlotKeys([], publishedNotes).length === 1, 'participants read published times from the notes when the shortlist is hidden')
+assert(publishedSlotKeys(['saved'], publishedNotes)[0] === 'saved', 'organizers keep the saved shortlist')
+const sessionStart = setTime(parseISODate('2026-11-12'), 14)
+const sessionEnd = setTime(parseISODate('2026-11-12'), 16)
+const publishedWindow = { key: sessionStart.toISOString(), start: sessionStart, end: sessionEnd }
+const morningNa = makeBlock('2026-11-12', 9, 12, 'unavailable', false)
+assert(conflictingSessionKeys([], [morningNa], [publishedWindow], 0).length === 0, 'a morning NA does not conflict with an afternoon session')
+const missed = proposeMissedSession([], sessionStart, sessionEnd)
+assert(conflictingSessionKeys([], missed, [publishedWindow], 0).length === 1, 'covering a published session with NA is a change request')
+const kept = mergeKeepingSessions([], missed, [publishedWindow])
+assert(classifySessionAttendance({ id: 'p', blocks: kept }, sessionStart.getTime(), sessionEnd.getTime(), 0).status !== 'na', 'the conflicting NA is not applied before it is accepted')
 const headerSpans = spansFromDrag(
   { iso: paintDay, index: 0, header: true },
   { iso: paintDay, index: 0, header: true },
@@ -593,6 +639,14 @@ assert(
   ),
   'an admin can see results',
 )
+const organizerViewer = { ...viewerCampaign, dancers: [{ ...viewerCampaign.dancers[0], isOrganizer: true }] }
+assert(canEditEvent(organizerViewer, 'ada', 'ada@example.com'), 'an organizer can edit event settings')
+assert(canEditEvent(viewerCampaign, 'owner', 'owner@example.com'), 'the owner can edit event settings')
+assert(!canEditEvent(viewerCampaign, 'ada', 'ada@example.com'), 'a participant cannot edit event settings')
+assert(emailForAdminGrant('ada@example.com', null) === 'ada@example.com', 'an admin grant keeps an existing email')
+assert(emailForAdminGrant('', 'Ada@Example.com') === 'ada@example.com', 'an admin grant can take a prompted email')
+assert(emailForAdminGrant('', null) === null, 'cancelling the email prompt does not grant admin')
+assert(emailForAdminGrant('ada@example.com', 'other@example.com') === 'ada@example.com', 'a prompted email does not replace one already stored')
 
 const privacyMigration = readFileSync(new URL('../supabase/migrations/20261114180000_role_grants_and_results_privacy.sql', import.meta.url), 'utf8')
 assert(privacyMigration.includes('is_organizer'), 'organizer grants are an added column')
@@ -606,6 +660,17 @@ assert(!/\bdrop\s+table\b/i.test(privacyMigration), 'the privacy migration does 
 assert(!/\btruncate\b/i.test(privacyMigration), 'the privacy migration does not truncate')
 assert(!/\bdelete\s+from\b/i.test(privacyMigration), 'the privacy migration does not delete rows')
 assert(!/update\s+public\.hupaak_/i.test(privacyMigration), 'the privacy migration does not rewrite existing rows')
+
+const portalMigration = readFileSync(new URL('../supabase/migrations/20261114210000_organizer_portal_parity.sql', import.meta.url), 'utf8')
+assert(portalMigration.includes('protect_campaign_update'), 'organizers can save event settings')
+assert(portalMigration.includes('can_edit_roster'), 'portal reads use the roster check organizers already pass')
+assert(!/policy hupaak_campaigns_delete/i.test(portalMigration), 'event delete stays on the existing policy')
+assert(!portalMigration.includes('rotate_hupaak'), 'the portal migration does not change invite issuance')
+assert(!portalMigration.includes('claim_hupaak'), 'the portal migration does not change invite claims')
+assert(!/\bdrop\s+table\b/i.test(portalMigration), 'the portal migration does not drop a table')
+assert(!/\btruncate\b/i.test(portalMigration), 'the portal migration does not truncate')
+assert(!/\bdelete\s+from\b/i.test(portalMigration), 'the portal migration does not delete rows')
+assert(!/update\s+public\.hupaak_/i.test(portalMigration), 'the portal migration does not rewrite existing rows')
 
 const palette = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')
 assert(palette.includes('--logo-sage: #92ba8c'), 'sage comes from the logo')

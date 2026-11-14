@@ -2,14 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import type { User } from '@supabase/supabase-js'
 import { CampaignList } from './components/CampaignList'
 import { DancerPortal } from './components/DancerPortal'
-import { FlowSteps, InfoTip, type FlowStep } from './components/Guide'
+import { InfoTip } from './components/Guide'
 import { Landing } from './components/Landing'
 import { OrganizerPortal, type HubTab } from './components/OrganizerPortal'
-import { ResultsPanel } from './components/ResultsPanel'
 import { RosterPanel } from './components/RosterPanel'
 import { SetupPanel } from './components/SetupPanel'
 import { LANGUAGES, t } from './i18n'
-import { canManageRoster, canSeeResults, isAdmin, isChoreographer } from './lib/access'
+import { canEditEvent, canManageRoster, canSeeResults, isAdmin, isChoreographer } from './lib/access'
 import {
   campaignNeedsShortCodes,
   claimAnyInvite,
@@ -33,6 +32,7 @@ import {
   setSavedSlots,
   updateCampaign,
 } from './lib/db'
+import { restoreBlocks } from './lib/changeRequests'
 import { parseInviteInput, shortCodeFromPath } from './lib/invites'
 import type { ClaimedInvite } from './lib/db'
 import {
@@ -43,6 +43,7 @@ import {
   readGoogleToken,
 } from './lib/googleCalendar'
 import { CalendarProvider } from './lib/calendarContext'
+import { emailForAdminGrant } from './lib/roles'
 import { supabase, supabaseConfigError } from './lib/supabase'
 import { cardClass, inputClass, primaryButton, textMuted, textPrimary } from './lib/ui'
 import type { AppStep, Campaign, CampaignInput, Language, PersonRole } from './types'
@@ -96,6 +97,24 @@ function pendingInvite(state: ReturnType<typeof readUrl>): string | null {
   return parseInviteInput(raw)?.code ?? null
 }
 
+function readHubTab(campaignId: string): HubTab {
+  try {
+    const saved = sessionStorage.getItem(`syncup-hub-${campaignId}`)
+    if (saved === 'event' || saved === 'organizers' || saved === 'participants' || saved === 'results') return saved
+  } catch {
+    /* keep the default tab */
+  }
+  return 'event'
+}
+
+function writeHubTab(campaignId: string, tab: HubTab) {
+  try {
+    sessionStorage.setItem(`syncup-hub-${campaignId}`, tab)
+  } catch {
+    /* the open tab still changes in memory */
+  }
+}
+
 function clearInviteLocation() {
   const next = new URL(window.location.href)
   next.pathname = '/'
@@ -133,8 +152,7 @@ export default function App() {
   const didRoute = useRef(false)
   const hasLoaded = useRef(false)
   const mintedShort = useRef(false)
-  const [resultsFromHub, setResultsFromHub] = useState(false)
-  const [hubTab, setHubTab] = useState<HubTab>('participants')
+  const [hubTab, setHubTab] = useState<HubTab>('event')
   const [portalIntent, setPortalIntent] = useState<'participant' | 'organizer' | 'admin'>('participant')
   const reloadRef = useRef<() => Promise<void>>(async () => {})
   const active = campaigns.find((campaign) => campaign.id === activeId)
@@ -301,7 +319,7 @@ export default function App() {
         setPortalIntent(openedAsOrganizer ? 'organizer' : 'participant')
         setStep('portal')
       } else if (canSeeResults(target, user.id, user.email)) {
-        setHubTab('participants')
+        setHubTab(readHubTab(target.id))
         setStep('hub')
       } else {
         setPortalRole('dancer')
@@ -330,16 +348,6 @@ export default function App() {
     setAuthMode(mode)
     setAuthNote('')
     document.getElementById('account')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }
-
-  function jumpFlow(next: FlowStep) {
-    if (next !== 'setup' && !active) return
-    if (next === 'results' && active && user && !canSeeResults(active, user.id, user.email)) return
-    if (next === 'setup' && active) {
-      setEditing(active)
-      setReadOnly(!isAdmin(active, user?.id ?? '', user?.email ?? ''))
-    }
-    setStep(next)
   }
 
   function goHome() {
@@ -508,21 +516,6 @@ export default function App() {
             )}
           </div>
         </div>
-        {user && active && canSeeResults(active, user.id, user.email) && (step === 'setup' || step === 'choreographers' || step === 'dancers' || step === 'results') && (
-          <div className="mx-auto max-w-6xl px-3 pb-1 sm:px-6">
-            <FlowSteps
-              lang={lang}
-              current={step}
-              enabled={{
-                setup: true,
-                choreographers: true,
-                dancers: true,
-                results: true,
-              }}
-              onJump={jumpFlow}
-            />
-          </div>
-        )}
       </header>
 
       <main className="mx-auto w-full max-w-6xl px-3 py-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-8">
@@ -578,8 +571,9 @@ export default function App() {
                 return
               }
               setActiveId(campaign.id)
-              setResultsFromHub(false)
-              setStep('results')
+              writeHubTab(campaign.id, 'results')
+              setHubTab('results')
+              setStep('hub')
             }}
             onPortal={(campaign, role, intent) => {
               setActiveId(campaign.id)
@@ -588,14 +582,16 @@ export default function App() {
               setStep('portal')
             }}
             onHub={(campaign, tab) => {
+              const next = tab ?? readHubTab(campaign.id)
               setActiveId(campaign.id)
-              setHubTab(tab && tab !== 'results' ? tab : 'participants')
+              writeHubTab(campaign.id, next)
+              setHubTab(next)
               setStep('hub')
             }}
             onCopy={(value, kind) => copyValue(value, kind)}
             onJoinAdmin={(value) => void joinWithInvite(value)}
           />
-        ) : step === 'setup' || step === 'choreographers' || step === 'dancers' || step === 'results' ? (
+        ) : step === 'setup' || step === 'choreographers' || step === 'dancers' || (step === 'results' && !(active && canManageRoster(active, user.id, user.email))) ? (
           <>
             {step === 'setup' ? (
               <SetupPanel
@@ -633,7 +629,11 @@ export default function App() {
                 campaign={active}
                 variant="dancer"
                 onBack={() => setStep('choreographers')}
-                onNext={() => setStep('results')}
+                onNext={() => {
+                  writeHubTab(active.id, 'results')
+                  setHubTab('results')
+                  setStep('hub')
+                }}
                 onSave={(input) => run(() => saveRosterPerson({ campaignId: active.id, ...input }))}
                 onDelete={async (personId) => {
                   await run(() => deletePerson(personId))
@@ -643,36 +643,6 @@ export default function App() {
                 onDeleteGroup={(groupId) => run(() => deleteDanceGroup(groupId))}
                 onToggleMember={(groupId, personId, included) => run(() => setDanceGroupMember(groupId, personId, included))}
                 onCopy={(value, kind) => copyValue(value, kind)}
-              />
-            ) : step === 'results' && active && canSeeResults(active, user.id, user.email) ? (
-              <ResultsPanel
-                key={active.id}
-                lang={lang}
-                isDarkMode={isDarkMode}
-                campaign={active}
-                onBack={() => setStep(resultsFromHub ? 'hub' : 'dancers')}
-                canPin={canManageRoster(active, user.id, user.email)}
-                canSetDuration={isAdmin(active, user.id, user.email)}
-                onSaveSlots={(slots) => {
-                  if (!canManageRoster(active, user.id, user.email)) return
-                  setCampaigns((current) => current.map((campaign) => (campaign.id === active.id ? { ...campaign, savedSlots: slots } : campaign)))
-                  void run(() => setSavedSlots(active.id, slots))
-                }}
-                onSaveDuration={(hours) => {
-                  if (!isAdmin(active, user.id, user.email)) return
-                  const config = { ...active.config, durationHours: hours }
-                  setCampaigns((current) => current.map((campaign) => (campaign.id === active.id ? { ...campaign, config } : campaign)))
-                  void run(() =>
-                    updateCampaign(active.id, {
-                      name: active.name,
-                      remarks: active.remarks,
-                      config,
-                      expiryDate: active.expiryDate,
-                      onDays: active.onDays,
-                      compulsoryDays: active.compulsoryDays,
-                    }),
-                  )
-                }}
               />
             ) : step === 'results' && active ? (
               <DancerPortal
@@ -696,24 +666,108 @@ export default function App() {
                     }),
                   )
                 }
+                onSubmitRequest={(next) => {
+                  const config = { ...active.config, changeRequests: next }
+                  setCampaigns((current) => current.map((campaign) => (campaign.id === active.id ? { ...campaign, config } : campaign)))
+                  void run(() => updateCampaign(active.id, {
+                    name: active.name,
+                    remarks: active.remarks,
+                    config,
+                    expiryDate: active.expiryDate,
+                    onDays: active.onDays,
+                    compulsoryDays: active.compulsoryDays,
+                  }))
+                }}
               />
             ) : null}
           </>
-        ) : step === 'hub' && active && canManageRoster(active, user.id, user.email) ? (
+        ) : (step === 'hub' || step === 'results') && active && canManageRoster(active, user.id, user.email) ? (
           <OrganizerPortal
-            key={`${active.id}-${hubTab}`}
+            key={active.id}
             lang={lang}
             isDarkMode={isDarkMode}
             campaign={active}
-            canEditEvent={isAdmin(active, user.id, user.email)}
-            initialTab={hubTab}
+            canEditEvent={canEditEvent(active, user.id, user.email)}
+            canPin
+            canSetDuration
+            initialTab={step === 'results' ? 'results' : hubTab}
             onBack={goHome}
-            onSchedule={() => {
-              setResultsFromHub(true)
-              setStep('results')
+            onTab={(next) => {
+              writeHubTab(active.id, next)
+              setHubTab(next)
             }}
             onCopy={copyValue}
             onSave={(input) => void saveSetup(input, [], active.id)}
+            onSaveSlots={(slots) => {
+              if (!canManageRoster(active, user.id, user.email)) return
+              setCampaigns((current) => current.map((campaign) => (campaign.id === active.id ? { ...campaign, savedSlots: slots } : campaign)))
+              void run(() => setSavedSlots(active.id, slots))
+            }}
+            onPublish={(slots, notes) => {
+              if (!canManageRoster(active, user.id, user.email)) return
+              const config = { ...active.config, sessionNotes: notes }
+              setCampaigns((current) => current.map((campaign) => (campaign.id === active.id ? { ...campaign, savedSlots: slots, config } : campaign)))
+              void run(async () => {
+                await setSavedSlots(active.id, slots)
+                await updateCampaign(active.id, {
+                  name: active.name,
+                  remarks: active.remarks,
+                  config,
+                  expiryDate: active.expiryDate,
+                  onDays: active.onDays,
+                  compulsoryDays: active.compulsoryDays,
+                })
+              })
+            }}
+            onResolveRequest={(id, decision) => {
+              const request = (active.config.changeRequests ?? []).find((item) => item.id === id)
+              if (!request || request.status !== 'pending') return
+              const changeRequests = (active.config.changeRequests ?? []).map((item) => (item.id === id ? { ...item, status: decision } : item))
+              const config = { ...active.config, changeRequests }
+              const person = [...active.dancers, ...active.choreographers].find((item) => item.id === request.personId)
+              const blocks = decision === 'accepted' && person ? restoreBlocks(request.proposedBlocks) : null
+              setCampaigns((current) => current.map((campaign) => {
+                if (campaign.id !== active.id) return campaign
+                const apply = (people: typeof campaign.dancers) => (
+                  blocks && person ? people.map((item) => (item.id === person.id ? { ...item, blocks } : item)) : people
+                )
+                return { ...campaign, config, dancers: apply(campaign.dancers), choreographers: apply(campaign.choreographers) }
+              }))
+              void run(async () => {
+                if (blocks && person) {
+                  await saveRosterPerson({
+                    campaignId: active.id,
+                    personId: person.id,
+                    name: person.name,
+                    role: person.role,
+                    blocks,
+                  })
+                }
+                await updateCampaign(active.id, {
+                  name: active.name,
+                  remarks: active.remarks,
+                  config,
+                  expiryDate: active.expiryDate,
+                  onDays: active.onDays,
+                  compulsoryDays: active.compulsoryDays,
+                })
+              })
+            }}
+            onSaveDuration={(hours) => {
+              if (!canEditEvent(active, user.id, user.email)) return
+              const config = { ...active.config, durationHours: hours }
+              setCampaigns((current) => current.map((campaign) => (campaign.id === active.id ? { ...campaign, config } : campaign)))
+              void run(() =>
+                updateCampaign(active.id, {
+                  name: active.name,
+                  remarks: active.remarks,
+                  config,
+                  expiryDate: active.expiryDate,
+                  onDays: active.onDays,
+                  compulsoryDays: active.compulsoryDays,
+                }),
+              )
+            }}
             onCreateGroup={(name) => void run(() => createDanceGroup(active.id, name))}
             onRenameGroup={(groupId, name) => void run(() => renameDanceGroup(groupId, name))}
             onDeleteGroup={(groupId) => void run(() => deleteDanceGroup(groupId))}
@@ -726,11 +780,14 @@ export default function App() {
                 if (person.role === 'choreographer' || person.isOrganizer) return
                 return run(() => setPersonOrganizer(person.id, true))
               }
-              if (!person.email.includes('@')) return run(async () => {
-                throw new Error(t(lang, 'admin_needs_email'))
-              })
-              if (active.admins.some((admin) => admin.email.toLowerCase() === person.email.toLowerCase())) return
-              return run(() => grantAdmin(active.id, person.email, person.userId))
+              const prompted = person.email.includes('@') ? null : window.prompt(t(lang, 'admin_needs_email'))
+              const email = emailForAdminGrant(person.email, prompted)
+              if (!email) {
+                if (prompted != null && prompted.trim() !== '') setBanner(t(lang, 'admin_needs_email'))
+                return
+              }
+              if (active.admins.some((admin) => admin.email.toLowerCase() === email)) return
+              return run(() => grantAdmin(active.id, email, person.userId))
             }}
             onOrganizerTime={() => {
               setPortalRole('choreographer')
@@ -764,6 +821,18 @@ export default function App() {
                 }),
               )
             }
+            onSubmitRequest={(next) => {
+              const config = { ...active.config, changeRequests: next }
+              setCampaigns((current) => current.map((campaign) => (campaign.id === active.id ? { ...campaign, config } : campaign)))
+              void run(() => updateCampaign(active.id, {
+                name: active.name,
+                remarks: active.remarks,
+                config,
+                expiryDate: active.expiryDate,
+                onDays: active.onDays,
+                compulsoryDays: active.compulsoryDays,
+              }))
+            }}
           />
         ) : loadFailed ? (
           <div className="py-24 text-center">

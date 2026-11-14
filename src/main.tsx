@@ -1,24 +1,24 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
-import { isDevResultsPath } from './lib/devPreview'
+import { isDevHubPath, isDevResultsPath } from './lib/devPreview'
 import './index.css'
 
-const devResults = __SYNCUP_DEV_RESULTS__ && isDevResultsPath(window.location.pathname)
-const preview = import.meta.env.DEV ? new URLSearchParams(window.location.search).get('preview') : null
+const mockAllowed = __SYNCUP_DEV_RESULTS__
+const previewName = mockAllowed ? new URLSearchParams(window.location.search).get('preview') : null
+const hubPath = isDevHubPath(window.location.pathname)
+const resultsPath = isDevResultsPath(window.location.pathname)
 
-if (devResults) {
+if (mockAllowed && resultsPath && !previewName) {
   void import('./dev/resultsPreview').then(({ mountDevResults }) => {
     mountDevResults()
   })
-} else if (preview) {
+} else if (mockAllowed && (previewName || hubPath)) {
   void import('./dev/fixture').then(({ mountFixture }) => {
-    mountFixture(preview)
+    mountFixture(previewName || 'hub')
   })
 } else {
-  if (isDevResultsPath(window.location.pathname)) {
-    window.history.replaceState({}, '', '/')
-  }
+  if (resultsPath || hubPath) window.history.replaceState({}, '', '/')
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App />

@@ -12,7 +12,8 @@ import { SetupPanel } from '../components/SetupPanel'
 import { CalendarProvider } from '../lib/calendarContext'
 import { parseISODate, setTime } from '../lib/dates'
 import { textMuted, textPrimary } from '../lib/ui'
-import type { BlockKind, Campaign, Language, TimeBlock } from '../types'
+import { proposeMissedSession, restoreBlocks, storeBlocks } from '../lib/changeRequests'
+import type { BlockKind, Campaign, ChangeRequest, Language, SessionNote, TimeBlock } from '../types'
 
 const previewParams = new URLSearchParams(window.location.search)
 const lang: Language = previewParams.get('lang') === 'en' ? 'en' : 'zh'
@@ -115,6 +116,37 @@ const campaign: Campaign = {
   ],
 }
 
+const confirmedSessions = ['2026-11-12', '2026-11-14', '2026-11-16'].map((iso, index) =>
+  setTime(parseISODate(iso), index === 1 ? 15 : 14).toISOString(),
+)
+
+const demoNotes: Record<string, SessionNote> = Object.fromEntries(
+  confirmedSessions.map((key) => [key, {
+    venue: lang === 'zh' ? '二號舞蹈室' : 'Studio 2',
+    remarks: '',
+  }]),
+)
+
+const jieBlocks = campaign.dancers.find((person) => person.id === 'dancer-jie')?.blocks ?? []
+const missedStart = new Date(confirmedSessions[2])
+const demoRequest: ChangeRequest = {
+  id: 'demo-request',
+  personId: 'dancer-jie',
+  personName: '小杰',
+  sessionKeys: [confirmedSessions[2]],
+  previousBlocks: storeBlocks(jieBlocks),
+  proposedBlocks: storeBlocks(proposeMissedSession(jieBlocks, missedStart, new Date(missedStart.getTime() + 2 * 3600000))),
+  status: 'pending',
+  createdAt: '2026-11-14T09:00:00.000Z',
+}
+
+const demoEvent: Campaign = {
+  ...campaign,
+  config: { ...campaign.config, durationHours: 2, sessionNotes: demoNotes, changeRequests: [demoRequest] },
+  savedSlots: confirmedSessions,
+  dancers: campaign.dancers.map((person) => (person.id === 'dancer-jie' ? { ...person, userId: 'jie' } : person)),
+}
+
 function Shell({ children, flow }: { children: ReactNode; flow?: boolean }) {
   return (
     <div className="theme-dark min-h-dvh" data-preview="">
@@ -161,8 +193,10 @@ function Shell({ children, flow }: { children: ReactNode; flow?: boolean }) {
 }
 
 function LivePreview({ name }: { name: string }) {
-  const tab: HubTab = name === 'hub-settings' ? 'event' : 'participants'
-  const [event, setEvent] = useState(campaign)
+  const tab: HubTab = name === 'hub-settings' ? 'event' : name === 'hub-organizers' ? 'organizers' : 'participants'
+  const [event, setEvent] = useState(demoEvent)
+  const [timing, setTiming] = useState(false)
+  const [blocks, setBlocks] = useState<TimeBlock[]>([])
   if (name === 'setup-event') {
     return (
       <Shell>
@@ -193,6 +227,24 @@ function LivePreview({ name }: { name: string }) {
       </Shell>
     )
   }
+  if (timing) {
+    return (
+      <Shell>
+        <button type="button" onClick={() => setTiming(false)} className={`mb-4 text-xs font-bold uppercase ${textMuted(true)}`}>
+          ← {lang === 'zh' ? '主辦工作台' : 'Organizer hub'}
+        </button>
+        <AvailabilityEditor
+          lang={lang}
+          isDarkMode
+          config={event.config}
+          onDays={event.onDays}
+          compulsoryDays={event.compulsoryDays}
+          blocks={blocks}
+          onChange={setBlocks}
+        />
+      </Shell>
+    )
+  }
   return (
     <Shell>
       <OrganizerPortal
@@ -202,7 +254,8 @@ function LivePreview({ name }: { name: string }) {
         canEditEvent
         initialTab={tab}
         onBack={() => undefined}
-        onSchedule={() => undefined}
+        onOrganizerTime={() => setTiming(true)}
+        onAdminTime={() => setTiming(true)}
         onCopy={() => undefined}
         onSave={() => undefined}
         onCreateGroup={(groupName) =>
@@ -219,6 +272,27 @@ function LivePreview({ name }: { name: string }) {
         }
         onDeleteGroup={(groupId) =>
           setEvent((current) => ({ ...current, groups: current.groups.filter((group) => group.id !== groupId) }))
+        }
+        onPublish={(slots, notes) =>
+          setEvent((current) => ({
+            ...current,
+            savedSlots: slots,
+            config: { ...current.config, sessionNotes: notes },
+          }))
+        }
+        onResolveRequest={(id, decision) =>
+          setEvent((current) => {
+            const requests = current.config.changeRequests ?? []
+            const request = requests.find((item) => item.id === id)
+            if (!request || request.status !== 'pending') return current
+            const changeRequests = requests.map((item) => (item.id === id ? { ...item, status: decision } : item))
+            const dancers = decision === 'accepted'
+              ? current.dancers.map((person) => (
+                  person.id === request.personId ? { ...person, blocks: restoreBlocks(request.proposedBlocks) } : person
+                ))
+              : current.dancers
+            return { ...current, dancers, config: { ...current.config, changeRequests } }
+          })
         }
         onToggleMember={(groupId, personId, included) =>
           setEvent((current) => ({
@@ -368,9 +442,9 @@ function Preview({ name }: { name: string }) {
         <DancerPortal
           lang={lang}
           isDarkMode
-          campaign={campaign}
-          userId="guest"
-          email="guest@example.com"
+          campaign={demoEvent}
+          userId="jie"
+          email="jie@example.com"
           linkRole="dancer"
           onBack={() => undefined}
           onSave={async () => true}

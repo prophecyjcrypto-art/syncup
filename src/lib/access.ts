@@ -26,3 +26,8 @@ export function canManageRoster(campaign: Campaign, userId: string, email: strin
 export function canSeeResults(campaign: Campaign, userId: string, email: string): boolean {
   return canManageRoster(campaign, userId, email)
 }
+
+/** Event settings in the admin portal. Organizers and admins share this. */
+export function canEditEvent(campaign: Campaign, userId: string, email: string): boolean {
+  return canManageRoster(campaign, userId, email)
+}

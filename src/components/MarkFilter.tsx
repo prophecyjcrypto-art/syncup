@@ -21,7 +21,7 @@ export function MarkFilterControl({
       <div className={`${wide ? 'flex min-w-0 flex-1' : 'inline-flex'} rounded-full p-0.5 glass-well`} data-mark-filter={value}>
         {MODES.map((mode) => {
           const on = value === mode
-          const tone = mode === 'na' ? 'bg-[#f19ba8] text-white' : mode === 'ok' ? 'bg-[#93ba8c] text-white' : 'bg-[#7c7bb9] text-white'
+          const tone = mode === 'na' ? 'tone-fill-pink' : mode === 'ok' ? 'tone-fill-sage' : 'chip-on'
           return (
             <button
               key={mode}

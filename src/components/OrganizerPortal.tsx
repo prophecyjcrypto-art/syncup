@@ -3,15 +3,24 @@ import { t } from '../i18n'
 import { analyzeEvent } from '../lib/analysis'
 import { membershipChanges, peopleForTray } from '../lib/groups'
 import { preferredInviteCode, preferredInviteLink, shortInviteUrl } from '../lib/invites'
-import { cardClass, groupSurface, inputClass, textMuted, textPrimary } from '../lib/ui'
-import type { Campaign, CampaignInput, Language } from '../types'
+import { groupSurface, inputClass, textMuted, textPrimary } from '../lib/ui'
+import type { Campaign, CampaignInput, Language, SessionNote } from '../types'
 import { AssignBoard, AssignChips, AssignRoleTarget, AssignTarget, AssignTray, useAssigning } from './GroupAssign'
 import { organizersOf, type RoleGrantKind } from '../lib/roles'
 import { InfoTip } from './Guide'
 import { InviteCode } from './InviteCode'
+import { ChangeRequestList } from './ChangeRequests'
+import { ResultsPanel } from './ResultsPanel'
 import { SetupPanel } from './SetupPanel'
 
 export type HubTab = 'event' | 'organizers' | 'participants' | 'results'
+
+const TABS: { id: HubTab; accent: string; tone: 'purple' | 'gold' | 'sage' }[] = [
+  { id: 'event', accent: 'tone-fill-purple', tone: 'purple' },
+  { id: 'organizers', accent: 'tone-fill-gold', tone: 'gold' },
+  { id: 'participants', accent: 'tone-fill-sage', tone: 'sage' },
+  { id: 'results', accent: 'tone-fill-gold', tone: 'gold' },
+]
 
 export function OrganizerPortal({
   lang,
@@ -20,7 +29,7 @@ export function OrganizerPortal({
   canEditEvent,
   initialTab = 'participants',
   onBack,
-  onSchedule,
+  onTab,
   onCopy,
   onSave,
   onCreateGroup,
@@ -31,6 +40,12 @@ export function OrganizerPortal({
   onGrantRole,
   onOrganizerTime,
   onAdminTime,
+  onSaveSlots,
+  onSaveDuration,
+  onPublish,
+  onResolveRequest,
+  canPin = true,
+  canSetDuration = true,
 }: {
   lang: Language
   isDarkMode: boolean
@@ -38,7 +53,7 @@ export function OrganizerPortal({
   canEditEvent: boolean
   initialTab?: HubTab
   onBack: () => void
-  onSchedule: () => void
+  onTab?: (tab: HubTab) => void
   onCopy: (value: string, kind: 'code' | 'link') => void
   onSave: (input: CampaignInput) => void
   onCreateGroup: (name: string) => void
@@ -49,9 +64,16 @@ export function OrganizerPortal({
   onGrantRole?: (personId: string, role: RoleGrantKind) => void | Promise<unknown>
   onOrganizerTime?: () => void
   onAdminTime?: () => void
+  onSaveSlots?: (slots: string[]) => void
+  onSaveDuration?: (hours: number) => void
+  onPublish?: (slots: string[], notes: Record<string, SessionNote>) => void
+  onResolveRequest?: (id: string, decision: 'accepted' | 'declined') => void
+  canPin?: boolean
+  canSetDuration?: boolean
 }) {
-  const [tab, setTab] = useState<HubTab>(initialTab === 'results' ? 'participants' : initialTab)
+  const [tab, setTab] = useState<HubTab>(initialTab)
   const [groupName, setGroupName] = useState('')
+  const [composing, setComposing] = useState(false)
   const report = useMemo(
     () =>
       analyzeEvent({
@@ -66,12 +88,27 @@ export function OrganizerPortal({
   )
   const dancerById = useMemo(() => new Map(campaign.dancers.map((person) => [person.id, person])), [campaign.dancers])
   const organizers = useMemo(() => organizersOf(campaign), [campaign])
-  const steps: { id: HubTab; label: string; accent: string }[] = [
-    { id: 'event', label: t(lang, 'flow_event'), accent: 'tone-fill-purple' },
-    { id: 'organizers', label: t(lang, 'manage_leadership'), accent: 'tone-fill-gold' },
-    { id: 'participants', label: t(lang, 'manage_members'), accent: 'tone-fill-sage' },
-    { id: 'results', label: t(lang, 'results'), accent: 'tone-fill-purple' },
-  ]
+  const staff = useMemo(() => {
+    const map = new Map(organizers.map((person) => [person.id, person]))
+    const everyone = [...campaign.choreographers, ...campaign.dancers]
+    for (const admin of campaign.admins) {
+      const person = everyone.find((item) => item.email.toLowerCase() === admin.email.toLowerCase())
+      if (person) map.set(person.id, person)
+    }
+    return [...map.values()]
+  }, [campaign, organizers])
+  const staffById = useMemo(() => new Map(staff.map((person) => [person.id, person])), [staff])
+  const labels: Record<HubTab, string> = {
+    event: t(lang, 'flow_event'),
+    organizers: t(lang, 'manage_leadership'),
+    participants: t(lang, 'manage_members'),
+    results: t(lang, 'results'),
+  }
+
+  function select(next: HubTab) {
+    setTab(next)
+    onTab?.(next)
+  }
 
   function addGroup(event: FormEvent) {
     event.preventDefault()
@@ -79,6 +116,7 @@ export function OrganizerPortal({
     if (!name) return
     onCreateGroup(name)
     setGroupName('')
+    setComposing(false)
   }
 
   function copyInvite(code: string | null, link: string, kind: 'code' | 'link') {
@@ -96,8 +134,120 @@ export function OrganizerPortal({
     void onGrantRole(personId, role)
   }
 
+  function roleCards() {
+    return (
+      <>
+        <div className={groupSurface('space-y-3')} data-organizer-block="">
+          <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
+            {t(lang, 'choreographer')}
+            <InfoTip lang={lang} name="organizer" text={t(lang, 'organizer_link_hint')} />
+          </h3>
+          <InviteCode
+            lang={lang}
+            isDarkMode={isDarkMode}
+            label=""
+            code={preferredInviteCode(campaign.organizerShort, campaign.organizerCode)}
+            empty={t(lang, 'organizer_after_create')}
+            onCopy={(_value, kind) =>
+              copyInvite(
+                preferredInviteCode(campaign.organizerShort, campaign.organizerCode),
+                preferredInviteLink(campaign.organizerShort, campaign.organizerCode, 'organizer'),
+                kind,
+              )
+            }
+          />
+          {onOrganizerTime ? (
+            <button type="button" data-role-time="organizer" onClick={onOrganizerTime} className="glass-well min-h-11 w-full rounded-full px-4 text-sm font-medium">
+              {t(lang, 'organizer_time')}
+            </button>
+          ) : null}
+          <AssignRoleTarget role="organizer" ariaLabel={t(lang, 'choreographer')} hint={organizers.length === 0 ? t(lang, 'drop_here') : undefined}>
+            {organizers.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5 px-1">
+                {organizers.map((person) => (
+                  <span key={person.id} data-organizer-person={person.id} className={`inline-flex min-h-11 items-center rounded-full px-3 text-sm font-semibold ${isDarkMode ? 'bg-white/10' : 'bg-black/[0.06]'}`}>
+                    {person.name}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </AssignRoleTarget>
+        </div>
+        <div className={groupSurface('space-y-3')} data-admins-block="">
+          <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
+            {t(lang, 'admins_label')}
+            <InfoTip lang={lang} name="admins" text={t(lang, 'invite_admin_hint')} />
+          </h3>
+          <InviteCode
+            lang={lang}
+            isDarkMode={isDarkMode}
+            label=""
+            code={preferredInviteCode(campaign.adminShort, campaign.adminCode)}
+            empty={t(lang, 'invite_after_create')}
+            onCopy={(_value, kind) =>
+              copyInvite(
+                preferredInviteCode(campaign.adminShort, campaign.adminCode),
+                preferredInviteLink(campaign.adminShort, campaign.adminCode, 'admin'),
+                kind,
+              )
+            }
+          />
+          {onAdminTime ? (
+            <button type="button" data-role-time="admin" onClick={onAdminTime} className="glass-well min-h-11 w-full rounded-full px-4 text-sm font-medium">
+              {t(lang, 'admin_time')}
+            </button>
+          ) : null}
+          <AssignRoleTarget role="admin" ariaLabel={t(lang, 'admins_label')} hint={campaign.admins.length === 0 ? t(lang, 'drop_here') : undefined}>
+            {campaign.admins.map((admin) => (
+              <div key={admin.id} className="glass-well flex items-center justify-between rounded-xl px-4 py-3">
+                <div className="min-w-0">
+                  <p className={`truncate font-bold ${textPrimary(isDarkMode)}`}>{admin.email}</p>
+                  <p className="text-[10px] font-bold uppercase text-zinc-400">{t(lang, 'admin_joined')}</p>
+                </div>
+                {onRemoveAdmin ? (
+                  <button type="button" onClick={() => onRemoveAdmin(admin.id)} className="text-sm font-bold text-[#f19ba8]">
+                    {t(lang, 'remove')}
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </AssignRoleTarget>
+        </div>
+      </>
+    )
+  }
+
+  function groupComposer() {
+    if (composing) {
+      return (
+        <form onSubmit={addGroup} className="flex gap-2">
+          <input
+            value={groupName}
+            onChange={(event) => setGroupName(event.target.value)}
+            placeholder={t(lang, 'group_placeholder')}
+            aria-label={t(lang, 'group_placeholder')}
+            className={`min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+          />
+          <button type="submit" disabled={!groupName.trim()} className="tone-fill-sage min-h-11 shrink-0 rounded-full px-4 text-sm font-bold disabled:opacity-40">
+            {t(lang, 'add_group')}
+          </button>
+        </form>
+      )
+    }
+    return (
+      <button
+        type="button"
+        data-start-groups=""
+        onClick={() => setComposing(true)}
+        className={`min-h-11 self-start px-1 text-sm font-medium ${textMuted(isDarkMode)}`}
+      >
+        {t(lang, 'start_groups')}
+      </button>
+    )
+  }
+
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6" data-hub={tab}>
+    <div className={`mx-auto w-full space-y-6 ${tab === 'results' ? 'max-w-7xl' : 'max-w-3xl'}`} data-hub={tab}>
       <div className="flex items-center justify-between gap-3">
         <button type="button" onClick={onBack} className={`text-xs font-bold uppercase ${textMuted(isDarkMode)}`}>
           ← {t(lang, 'back_home')}
@@ -112,77 +262,63 @@ export function OrganizerPortal({
           {t(lang, 'stats_responses')} {report.responses}/{report.people}
         </p>
       </div>
-      <div data-hub-steps="" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {steps.map((item, index) => {
-          const active = item.id !== 'results' && tab === item.id
+      <div data-hub-tabs="" role="tablist" aria-label={t(lang, 'hub_open')} className="grid w-full grid-cols-4 gap-1 rounded-full p-1 glass-well">
+        {TABS.map((item) => {
+          const active = tab === item.id
           return (
             <button
               key={item.id}
               type="button"
+              role="tab"
+              id={`hub-tab-${item.id}`}
+              aria-controls={`hub-panel-${item.id}`}
+              aria-selected={active}
               data-hub-step={item.id}
-              data-accent={item.id === 'organizers' ? 'gold' : item.id === 'participants' ? 'sage' : 'purple'}
-              aria-current={active ? 'page' : undefined}
-              onClick={() => {
-                if (item.id === 'results') onSchedule()
-                else setTab(item.id)
-              }}
-              className={`flex min-h-11 items-center justify-center gap-2 rounded-2xl px-2 text-sm font-semibold ${active ? item.accent : 'glass-well'}`}
+              data-accent={item.tone}
+              onClick={() => select(item.id)}
+              className={`flex min-h-11 min-w-0 items-center justify-center overflow-hidden rounded-full px-0.5 text-center text-[11px] font-semibold leading-tight tracking-tight sm:text-sm sm:tracking-normal ${active ? item.accent : ''}`}
             >
-              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] ${active ? '' : item.accent}`}>{index + 1}</span>
-              {item.label}
+              {labels[item.id]}
             </button>
           )
         })}
       </div>
 
-      {tab === 'participants' || tab === 'organizers' ? (
-        <div className="space-y-4">
-          <div className="space-y-3" data-codes-section="">
-            <AssignBoard onMove={(personId, fromGroupId, toGroupId) => void moveDancer(personId, fromGroupId, toGroupId)} onGrant={grantRole}>
-              <div className="space-y-3" data-participants-block="" style={{ order: tab === 'organizers' ? 2 : 0 }}>
-                <h3 className={`inline-flex items-center gap-2 px-1 text-base font-semibold ${textPrimary(isDarkMode)}`}>
-                  {t(lang, 'participants_label')}
-                  <InfoTip lang={lang} name="participants" text={t(lang, 'participants_hint')} />
-                </h3>
-                <div className={groupSurface('space-y-3')}>
-                  <InviteCode
-                    lang={lang}
+      <div role="tabpanel" id={`hub-panel-${tab}`} aria-labelledby={`hub-tab-${tab}`} className="space-y-4">
+        {tab === 'participants' ? (
+          <AssignBoard onMove={(personId, fromGroupId, toGroupId) => void moveDancer(personId, fromGroupId, toGroupId)}>
+            <div className="space-y-3" data-participants-block="" data-manage="participants">
+              <h3 className={`inline-flex items-center gap-2 px-1 text-base font-semibold ${textPrimary(isDarkMode)}`}>
+                {t(lang, 'manage_participants')}
+                <InfoTip lang={lang} name="participants" text={t(lang, 'participants_hint')} />
+              </h3>
+              <div className={groupSurface('space-y-3')}>
+                <InviteCode
+                  lang={lang}
+                  isDarkMode={isDarkMode}
+                  label={t(lang, 'all_participants')}
+                  code={preferredInviteCode(campaign.participantShort, campaign.participantCode)}
+                  empty={t(lang, 'organizer_after_create')}
+                  onCopy={(_value, kind) =>
+                    copyInvite(
+                      preferredInviteCode(campaign.participantShort, campaign.participantCode),
+                      preferredInviteLink(campaign.participantShort, campaign.participantCode, 'participant'),
+                      kind,
+                    )
+                  }
+                />
+                {campaign.dancers.length > 0 ? (
+                  <AssignTray
+                    targetId={null}
+                    people={peopleForTray(campaign.dancers, campaign.groups, null)}
                     isDarkMode={isDarkMode}
-                    label={t(lang, 'all_participants')}
-                    code={preferredInviteCode(campaign.participantShort, campaign.participantCode)}
-                    empty={t(lang, 'organizer_after_create')}
-                    onCopy={(_value, kind) =>
-                      copyInvite(
-                        preferredInviteCode(campaign.participantShort, campaign.participantCode),
-                        preferredInviteLink(campaign.participantShort, campaign.participantCode, 'participant'),
-                        kind,
-                      )
-                    }
+                    ariaLabel={t(lang, 'all_participants')}
                   />
-                  {campaign.groups.length > 0 && campaign.dancers.length > 0 ? (
-                    <AssignTray
-                      targetId={null}
-                      people={peopleForTray(campaign.dancers, campaign.groups, null)}
-                      isDarkMode={isDarkMode}
-                      ariaLabel={t(lang, 'all_participants')}
-                    />
-                  ) : null}
-                </div>
-                <div className="space-y-3">
+                ) : null}
+              </div>
+              {campaign.groups.length > 0 ? (
+                <div className="ml-3 space-y-3 sm:ml-5">
                   <p className={`px-1 text-[13px] font-medium ${textMuted(isDarkMode)}`}>{t(lang, 'groups_label')}</p>
-                  <form onSubmit={addGroup} className="flex gap-2">
-                    <input
-                      value={groupName}
-                      onChange={(event) => setGroupName(event.target.value)}
-                      placeholder={t(lang, 'group_placeholder')}
-                      aria-label={t(lang, 'group_placeholder')}
-                      className={`min-w-0 flex-1 rounded-2xl px-4 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
-                    />
-                    <button type="submit" disabled={!groupName.trim()} className="btn-primary min-h-11 shrink-0 rounded-full px-4 text-sm font-bold disabled:opacity-40">
-                      {t(lang, 'add_group')}
-                    </button>
-                  </form>
-                  {campaign.groups.length === 0 ? <p className={`px-1 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_groups')}</p> : null}
                   {campaign.groups.map((danceGroup) => (
                     <div key={danceGroup.id} className={groupSurface('space-y-1.5')} data-group-id={danceGroup.id}>
                       <AssignTarget targetId={danceGroup.id} ariaLabel={danceGroup.name}>
@@ -216,90 +352,51 @@ export function OrganizerPortal({
                       </AssignTarget>
                     </div>
                   ))}
+                  {groupComposer()}
                 </div>
-              </div>
-            <div className={groupSurface('space-y-3')} data-organizer-block="" style={{ order: tab === 'organizers' ? 0 : 1 }}>
-              <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
-                {t(lang, 'choreographer')}
-                <InfoTip lang={lang} name="organizer" text={t(lang, 'organizer_link_hint')} />
-              </h3>
-              <InviteCode
+              ) : (
+                groupComposer()
+              )}
+            </div>
+          </AssignBoard>
+        ) : null}
+
+        {tab === 'organizers' ? (
+          <>
+            <AssignBoard onMove={() => undefined} onGrant={grantRole}>
+              {roleCards()}
+            </AssignBoard>
+            <ChangeRequestList
+              lang={lang}
+              isDarkMode={isDarkMode}
+              requests={campaign.config.changeRequests ?? []}
+              onResolve={onResolveRequest}
+            />
+            <section className={groupSurface('space-y-4')} data-staff-stats="">
+              <PeopleList
                 lang={lang}
                 isDarkMode={isDarkMode}
-                label=""
-                code={preferredInviteCode(campaign.organizerShort, campaign.organizerCode)}
-                empty={t(lang, 'organizer_after_create')}
-                onCopy={(_value, kind) =>
-                  copyInvite(
-                    preferredInviteCode(campaign.organizerShort, campaign.organizerCode),
-                    preferredInviteLink(campaign.organizerShort, campaign.organizerCode, 'organizer'),
-                    kind,
-                  )
-                }
+                title={t(lang, 'stats_responses')}
+                ids={staff.filter((person) => person.blocks.length > 0).map((person) => person.id)}
+                names={new Map(staff.map((person) => [person.id, person.name]))}
+                dancerById={staffById}
+                groups={[]}
               />
-              {onOrganizerTime ? (
-                <button type="button" data-role-time="organizer" onClick={onOrganizerTime} className="glass-well min-h-11 w-full rounded-full px-4 text-sm font-medium">
-                  {t(lang, 'organizer_time')}
-                </button>
-              ) : null}
-              <AssignRoleTarget role="organizer" ariaLabel={t(lang, 'choreographer')} hint={organizers.length === 0 ? t(lang, 'drop_here') : undefined}>
-                {organizers.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5 px-1">
-                    {organizers.map((person) => (
-                      <span key={person.id} data-organizer-person={person.id} className={`inline-flex min-h-11 items-center rounded-full px-3 text-sm font-semibold ${isDarkMode ? 'bg-white/10' : 'bg-black/[0.06]'}`}>
-                        {person.name}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </AssignRoleTarget>
-            </div>
-            <div className={groupSurface('space-y-3')} data-admins-block="" style={{ order: tab === 'organizers' ? 1 : 2 }}>
-              <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
-                {t(lang, 'admins_label')}
-                <InfoTip lang={lang} name="admins" text={t(lang, 'invite_admin_hint')} />
-              </h3>
-              {campaign.adminShort || campaign.adminCode ? (
-                <InviteCode
-                  lang={lang}
-                  isDarkMode={isDarkMode}
-                  label=""
-                  code={preferredInviteCode(campaign.adminShort, campaign.adminCode)}
-                  empty={t(lang, 'invite_after_create')}
-                  onCopy={(_value, kind) =>
-                    copyInvite(
-                      preferredInviteCode(campaign.adminShort, campaign.adminCode),
-                      preferredInviteLink(campaign.adminShort, campaign.adminCode, 'admin'),
-                      kind,
-                    )
-                  }
-                />
-              ) : null}
-              {onAdminTime ? (
-                <button type="button" data-role-time="admin" onClick={onAdminTime} className="glass-well min-h-11 w-full rounded-full px-4 text-sm font-medium">
-                  {t(lang, 'admin_time')}
-                </button>
-              ) : null}
-              <AssignRoleTarget role="admin" ariaLabel={t(lang, 'admins_label')} hint={campaign.admins.length === 0 ? t(lang, 'drop_here') : undefined}>
-              {campaign.admins.map((admin) => (
-                <div key={admin.id} className="glass-well flex items-center justify-between rounded-xl px-4 py-3">
-                  <div className="min-w-0">
-                    <p className={`truncate font-bold ${textPrimary(isDarkMode)}`}>{admin.email}</p>
-                    <p className="text-[10px] font-bold uppercase text-zinc-400">{t(lang, 'admin_joined')}</p>
-                  </div>
-                  {onRemoveAdmin ? (
-                    <button type="button" onClick={() => onRemoveAdmin(admin.id)} className="text-sm font-bold text-[#f19ba8]">
-                      {t(lang, 'remove')}
-                    </button>
-                  ) : null}
-                </div>
-              ))}
-              </AssignRoleTarget>
-            </div>
-            </AssignBoard>
-          </div>
+              <PeopleList
+                lang={lang}
+                isDarkMode={isDarkMode}
+                title={t(lang, 'analysis_waiting')}
+                ids={staff.filter((person) => person.blocks.length === 0).map((person) => person.id)}
+                names={new Map(staff.map((person) => [person.id, person.name]))}
+                dancerById={staffById}
+                groups={[]}
+              />
+            </section>
+          </>
+        ) : null}
 
-          <section className={`${cardClass(isDarkMode)} space-y-4 rounded-[1.5rem] p-4 sm:p-5`}>
+        {tab === 'participants' ? (
+          <section className={groupSurface('space-y-4')}>
             <PeopleList
               lang={lang}
               isDarkMode={isDarkMode}
@@ -319,23 +416,39 @@ export function OrganizerPortal({
               groups={campaign.groups}
             />
           </section>
-        </div>
-      ) : null}
+        ) : null}
 
-      {tab === 'event' ? (
-        <SetupPanel
-          lang={lang}
-          isDarkMode={isDarkMode}
-          initial={campaign}
-          readOnly={!canEditEvent}
-          embedded
-          showGroups={false}
-          showInvites={false}
-          onCancel={() => setTab('participants')}
-          onConfirm={onSave}
-          onRemoveAdmin={canEditEvent ? onRemoveAdmin : undefined}
-        />
-      ) : null}
+        {tab === 'event' ? (
+          <SetupPanel
+            lang={lang}
+            isDarkMode={isDarkMode}
+            initial={campaign}
+            readOnly={!canEditEvent}
+            embedded
+            showGroups={false}
+            showInvites={false}
+            onCancel={() => select('participants')}
+            onConfirm={onSave}
+            onRemoveAdmin={canEditEvent ? onRemoveAdmin : undefined}
+          />
+        ) : null}
+
+        {tab === 'results' ? (
+          <ResultsPanel
+            lang={lang}
+            isDarkMode={isDarkMode}
+            campaign={campaign}
+            embedded
+            onBack={onBack}
+            canPin={canPin}
+            canSetDuration={canSetDuration}
+            onSaveSlots={onSaveSlots ?? (() => undefined)}
+            onSaveDuration={onSaveDuration}
+            onPublish={onPublish}
+            onResolveRequest={onResolveRequest}
+          />
+        ) : null}
+      </div>
     </div>
   )
 }

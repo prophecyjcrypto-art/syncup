@@ -1,11 +1,13 @@
 import { createElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { AvailabilityEditor } from '../src/components/AvailabilityEditor.tsx'
+import { DancerPortal } from '../src/components/DancerPortal.tsx'
 import { CampaignList } from '../src/components/CampaignList.tsx'
 import { ResultsPanel } from '../src/components/ResultsPanel.tsx'
 import { OrganizerPortal } from '../src/components/OrganizerPortal.tsx'
 import { SetupPanel } from '../src/components/SetupPanel.tsx'
 import { CalendarProvider } from '../src/lib/calendarContext.tsx'
+import { parseISODate, setTime } from '../src/lib/dates.ts'
 import { GOOGLE_CALENDAR_ENABLED } from '../src/lib/googleCalendar.ts'
 import type { Campaign, TimeBlock } from '../src/types.ts'
 
@@ -173,7 +175,6 @@ const hub = renderToStaticMarkup(
     canEditEvent: true,
     canRotateEvent: true,
     onBack: () => undefined,
-    onSchedule: () => undefined,
     onCopy: () => undefined,
     onSave: () => undefined,
     onCreateGroup: () => undefined,
@@ -184,22 +185,58 @@ const hub = renderToStaticMarkup(
     },
   }),
 )
-const hubParticipants = hub.slice(hub.indexOf('data-participants-block'), hub.indexOf('data-organizer-block'))
+const hubParticipants = hub.slice(hub.indexOf('data-participants-block'))
 assert(hubParticipants.includes('All participants') && hubParticipants.indexOf('All participants') < hubParticipants.indexOf('Groups'), 'hub lists all participants before groups')
 assert(hubParticipants.includes('2K7MQ9H') && hubParticipants.includes('data-person-id="d1"'), 'a group shows its code and its dancers')
 assert(!hub.slice(hub.indexOf('data-drop-group="all"'), hub.indexOf('data-drop-group="g1"')).includes('d1'), 'grouped dancers stay out of all participants')
-assert(!hubParticipants.includes('7K2MQ9P'), 'the hub keeps the organizer code outside participants')
+assert(!hub.includes('7K2MQ9P') && !hub.includes('4H8K2MQ'), 'the participants tab hides organizer and admin invites')
+assert(!hub.includes('data-drop-role') && !hub.includes('data-organizer-block') && !hub.includes('data-admins-block'), 'the participants tab has no role targets')
+assert(!hub.includes('data-role-time'), 'organizer and admin time stay off the participants tab')
 assert(hub.includes('data-assign-tray'), 'dancers can be assigned from the hub')
 assert(!hub.includes('New code'), 'the hub does not offer a new invite code')
 assert(hub.includes('Copy code') && hub.includes('Copy link'), 'the hub still copies a code or its link')
 assert(hub.includes('data-hub-step="event"') && hub.includes('Event'), 'the hub opens event settings')
-assert(hub.includes('data-hub-step="organizers"') && hub.includes('Organizers'), 'the hub names the organizer step')
-assert(hub.includes('data-hub-step="participants"') && hub.includes('Participants'), 'the hub names the participant step')
-assert(hub.includes('data-hub-step="results"') && hub.includes('Results'), 'the schedule step is called Results')
-assert(!hub.includes('Schedule'), 'the hub does not call that step Schedule')
-assert(hub.includes('data-drop-role="organizer"') && hub.includes('data-drop-role="admin"'), 'organizer and admin boxes are drop targets')
+assert(hub.includes('data-hub-step="organizers"') && hub.includes('Organizers'), 'the hub names the organizer tab')
+assert(hub.includes('data-hub-step="participants"') && hub.includes('Participants'), 'the hub names the participant tab')
+assert(hub.includes('data-hub-step="results"') && hub.includes('Results'), 'the schedule tab is called Results')
+assert(!hub.includes('Schedule'), 'the hub does not call that tab Schedule')
+assert(hub.includes('data-hub-tabs') && !hub.includes('data-hub-steps'), 'the hub has one tab bar')
+assert(!/step 1 of 4/i.test(hub), 'the hub does not count steps')
+for (const id of ['event', 'organizers', 'participants', 'results']) {
+  const button = hub.match(new RegExp(`<button\\b[^>]*data-hub-step="${id}"[^>]*>[\\s\\S]*?</button>`))?.[0] ?? ''
+  assert(button.length > 0, `missing the ${id} tab`)
+  assert(!/>\s*[1-4]\s*</.test(button), `the ${id} tab is numbered`)
+}
 assert(hub.includes('data-grip'), 'people show a drag grip')
-assert(hub.includes('Drop here'), 'empty role boxes say where to drop')
+const hubOrganizers = renderToStaticMarkup(
+  createElement(OrganizerPortal, {
+    lang: 'en',
+    isDarkMode: true,
+    campaign: {
+      ...campaign,
+      groups: [{ id: 'g1', name: 'Main', memberIds: ['d1'], inviteCode: '2K7MQ9H' }],
+    },
+    canEditEvent: true,
+    initialTab: 'organizers',
+    onBack: () => undefined,
+    onCopy: () => undefined,
+    onSave: () => undefined,
+    onCreateGroup: () => undefined,
+    onRenameGroup: () => undefined,
+    onDeleteGroup: () => undefined,
+    onToggleMember: () => undefined,
+    onOrganizerTime: () => undefined,
+    onAdminTime: () => undefined,
+  }),
+)
+assert(hubOrganizers.includes('data-hub-tabs') && hubOrganizers.includes('data-hub="organizers"'), 'organizers stay on the same tab bar')
+assert(hubOrganizers.includes('data-drop-role="organizer"') && hubOrganizers.includes('data-drop-role="admin"'), 'organizer and admin boxes are on the organizers tab')
+assert(hubOrganizers.includes('Drop here'), 'empty role boxes say where to drop')
+assert(hubOrganizers.includes('7K2MQ9P') && hubOrganizers.includes('4H8K2MQ'), 'organizer and admin invites stay on their tab')
+assert(hubOrganizers.includes('data-role-time="organizer"') && hubOrganizers.includes('data-role-time="admin"'), 'each role can open its own time entry')
+assert(hubOrganizers.includes('data-staff-stats'), 'organizers and admins have their own stats')
+assert(!hubOrganizers.includes('data-participants-block') && !hubOrganizers.includes('data-person-id'), 'the organizers tab does not list participants')
+assert(!hubOrganizers.includes('2K7MQ9H') && !hubOrganizers.includes('All participants'), 'the organizers tab does not assign groups')
 const hubEvent = renderToStaticMarkup(
   createElement(OrganizerPortal, {
     lang: 'en',
@@ -208,7 +245,6 @@ const hubEvent = renderToStaticMarkup(
     canEditEvent: true,
     initialTab: 'event',
     onBack: () => undefined,
-    onSchedule: () => undefined,
     onCopy: () => undefined,
     onSave: () => undefined,
     onCreateGroup: () => undefined,
@@ -226,7 +262,6 @@ const hubZh = renderToStaticMarkup(
     campaign,
     canEditEvent: true,
     onBack: () => undefined,
-    onSchedule: () => undefined,
     onCopy: () => undefined,
     onSave: () => undefined,
     onCreateGroup: () => undefined,
@@ -235,9 +270,39 @@ const hubZh = renderToStaticMarkup(
     onToggleMember: () => undefined,
   }),
 )
-assert(hubZh.includes('活動') && hubZh.includes('主辦人') && hubZh.includes('參加者') && hubZh.includes('結果'), 'Chinese hub steps use 活動、主辦人、參加者、結果')
-assert(hubZh.includes('data-hub-step="results"'), 'the Chinese results step is the fourth hub step')
-assert(!hubZh.includes('時間表'), 'the Chinese hub does not call the step 時間表')
+assert(hubZh.includes('活動') && hubZh.includes('主辦人') && hubZh.includes('參加者') && hubZh.includes('結果'), 'Chinese hub tabs use 活動、主辦人、參加者、結果')
+assert(hubZh.includes('data-hub-step="results"'), 'the Chinese results tab stays on the hub bar')
+assert(!hubZh.includes('時間表'), 'the Chinese hub does not call the tab 時間表')
+assert(!hubZh.includes('尚未有組別'), 'an event with no groups does not show an empty groups message')
+assert(hubZh.includes('新增組別'), 'an event with no groups can start a group')
+assert(hubZh.includes('data-person-id="d1"'), 'people stay in all participants when there are no groups')
+assert(hubZh.includes('管理參加者'), 'manage participants stays in the participants area')
+const hubResults = renderToStaticMarkup(
+  withCalendar(
+    createElement(OrganizerPortal, {
+      lang: 'en',
+      isDarkMode: true,
+      campaign,
+      canEditEvent: true,
+      canPin: true,
+      canSetDuration: true,
+      initialTab: 'results',
+      onBack: () => undefined,
+      onCopy: () => undefined,
+      onSave: () => undefined,
+      onCreateGroup: () => undefined,
+      onRenameGroup: () => undefined,
+      onDeleteGroup: () => undefined,
+      onToggleMember: () => undefined,
+      onSaveSlots: () => undefined,
+      onSaveDuration: () => undefined,
+    }),
+  ),
+)
+assert(hubResults.includes('data-hub="results"') && hubResults.includes('data-hub-tabs'), 'results uses the hub tab bar')
+assert(hubResults.includes('data-hub-step="participants"') && hubResults.includes('data-slot-grid'), 'results stays under the same tabs')
+assert(!hubResults.includes('Connect Google Calendar'), 'the results tab keeps Google Calendar hidden')
+assert(!hubResults.includes('data-hub-steps'), 'results does not bring back the numbered steps')
 
 const results = renderToStaticMarkup(
   withCalendar(
@@ -253,11 +318,33 @@ const results = renderToStaticMarkup(
     }),
   ),
 )
-assert(results.includes('Dancer overlap'), 'results show the half-hour overlap heatmap')
+assert(results.includes('data-slot-grid') && results.includes('data-duplicate-day') && !results.includes('Dancer overlap'), 'results show the heatmap without the overlap heading')
+assert(!results.includes('data-attendance') && !results.includes('data-suggest-dates'), 'date and attendance filters stay in Suggest')
 assert(results.includes('1 of 1 free'), 'heatmap cells count free dancers')
-assert(!/<select\b/.test(results), 'results length is a stepper, not a dropdown')
-const ownerUp = results.match(/<button\b[^>]*data-duration-step="up"[^>]*>/)
-const ownerDown = results.match(/<button\b[^>]*data-duration-step="down"[^>]*>/)
+assert(results.includes('data-pick="manual"') && results.includes('data-pick="suggest"'), 'results can switch between manual and suggested times')
+assert(!results.includes('data-duration-step'), 'the manual view does not include the suggestion stepper')
+assert(!/<select\b/.test(results), 'the manual view does not use a length dropdown')
+const suggested = renderToStaticMarkup(
+  withCalendar(
+    createElement(ResultsPanel, {
+      lang: 'en',
+      isDarkMode: true,
+      campaign,
+      onBack: () => undefined,
+      onSaveSlots: () => undefined,
+      canPin: true,
+      canSetDuration: true,
+      onSaveDuration: () => undefined,
+      initialPick: 'suggest',
+    }),
+  ),
+)
+assert(suggested.includes('Best times') && suggested.includes('data-earliest-start'), 'suggestions can be limited by when they start')
+assert(suggested.includes('Minimum availability') && suggested.includes('data-attendance') && suggested.includes('data-suggest-dates'), 'suggestions can be limited by date and attendance')
+assert(suggested.includes('data-dancer-id="all"') && suggested.includes('data-dancer-id="d1"'), 'suggestions can be limited to selected dancers')
+assert(!suggested.includes('data-slot-grid'), 'suggestions are not the heatmap')
+const ownerUp = suggested.match(/<button\b[^>]*data-duration-step="up"[^>]*>/)
+const ownerDown = suggested.match(/<button\b[^>]*data-duration-step="down"[^>]*>/)
 assert(ownerUp != null && ownerDown != null, 'results include the hours stepper')
 assert(!/\sdisabled=/.test(ownerUp[0]), 'owners can lengthen the session')
 assert(/\sdisabled=/.test(ownerDown[0]), 'the stepper cannot go below the minimum before a length is chosen')
@@ -279,12 +366,67 @@ const memberResults = renderToStaticMarkup(
     }),
   ),
 )
-assert(memberResults.includes('參加者重疊'), 'members still see the overlap heatmap')
-assert(!/<select\b/.test(memberResults), 'members do not get a length dropdown')
-const memberSteps = memberResults.match(/<button\b[^>]*data-duration-step="(?:up|down)"[^>]*>/g) ?? []
+assert(memberResults.includes('data-slot-grid') && !memberResults.includes('參加者重疊'), 'members still see the heatmap without the overlap heading')
+assert(!/<select\b/.test(memberResults), 'the manual view does not use a length dropdown')
+const memberSuggest = renderToStaticMarkup(
+  withCalendar(
+    createElement(ResultsPanel, {
+      lang: 'zh',
+      isDarkMode: false,
+      campaign,
+      onBack: () => undefined,
+      onSaveSlots: () => undefined,
+      canPin: false,
+      canSetDuration: false,
+      onSaveDuration: () => undefined,
+      initialPick: 'suggest',
+    }),
+  ),
+)
+const memberSteps = memberSuggest.match(/<button\b[^>]*data-duration-step="(?:up|down)"[^>]*>/g) ?? []
 assert(memberSteps.length === 2 && memberSteps.every((button) => /\sdisabled=/.test(button)), 'members cannot change the shared duration')
 assert(memberResults.includes('disabled=""'), 'members cannot pin the shortlist')
-assert(!memberResults.includes('用這個時段'), 'members do not get the shortlist button')
+assert(!memberResults.includes('用這個時段') && !memberResults.includes('用這些時段') && !memberResults.includes('發佈'), 'members do not get the publish button')
+const publishedSlot = setTime(parseISODate('2026-11-12'), 14).toISOString()
+const publishManual = renderToStaticMarkup(
+  withCalendar(
+    createElement(ResultsPanel, {
+      lang: 'zh',
+      isDarkMode: true,
+      campaign: { ...campaign, savedSlots: [publishedSlot], config: { ...config, durationHours: 2, sessionNotes: { [publishedSlot]: { venue: '二號舞蹈室', remarks: '' } } } },
+      onBack: () => undefined,
+      onSaveSlots: () => undefined,
+      canPin: true,
+      canSetDuration: true,
+      onSaveDuration: () => undefined,
+    }),
+  ),
+)
+const publishSuggest = renderToStaticMarkup(
+  withCalendar(
+    createElement(ResultsPanel, {
+      lang: 'en',
+      isDarkMode: true,
+      campaign: { ...campaign, savedSlots: [publishedSlot], config: { ...config, durationHours: 2 } },
+      onBack: () => undefined,
+      onSaveSlots: () => undefined,
+      canPin: true,
+      canSetDuration: true,
+      onSaveDuration: () => undefined,
+      initialPick: 'suggest',
+    }),
+  ),
+)
+assert(publishManual.includes('data-publish') && publishManual.includes('發佈') && publishManual.includes('data-selected-card') && publishManual.includes('data-edit-slot') && publishManual.includes('二號舞蹈室'), 'manual publish lists the selected time as a card')
+assert(publishManual.indexOf('data-selected-slots') < publishManual.indexOf('data-pick-mode'), 'selected times sit above manual and suggest')
+assert(!publishManual.includes('data-session-draft') && !publishManual.includes('請準時到達'), 'venue and remarks are not inline fields or filler')
+assert(!publishManual.includes('用這些時段') && !publishManual.includes('用這些時間') && !publishManual.includes('發佈給所有人'), 'publish does not use the old shortlist wording')
+assert(publishSuggest.includes('data-publish') && publishSuggest.includes('Publish') && publishSuggest.includes('data-selected-card') && publishSuggest.includes('data-edit-slot'), 'suggest uses the same selected-time cards')
+const shortlistAt = publishSuggest.indexOf('data-shortlist')
+const optionsAt = publishSuggest.indexOf('data-all-options')
+const shortlistBlock = shortlistAt >= 0 && optionsAt > shortlistAt ? publishSuggest.slice(shortlistAt, optionsAt) : publishSuggest
+assert(publishSuggest.includes('data-confirm-shortlist') && /data-confirm-shortlist=""[^>]*disabled=/.test(publishSuggest), 'confirm stays disabled until something is shortlisted')
+assert(!shortlistBlock.includes('data-slot-card'), 'published times are not duplicated in the shortlist')
 
 const list = renderToStaticMarkup(
   createElement(CampaignList, {
@@ -457,13 +599,66 @@ const editor = renderToStaticMarkup(
 )
 assert(!editor.includes('Connect Google Calendar'), 'availability editor hides Google Calendar')
 assert(!editor.includes(calendar.token), 'a stored calendar token is not rendered')
-assert(editor.includes('OK'), 'availability entry stays')
-assert(editor.includes('data-avail-grid') && editor.includes('data-avail-cell') && editor.includes('09:00'), 'availability uses a results-style time grid')
-assert((editor.match(/data-avail-cell/g) ?? []).length > 1, 'the grid has more than one paintable cell')
-assert(editor.includes('data-day-label') && editor.includes('data-day="2026-11-12"'), 'dates in the grid can be dragged too')
+assert(editor.includes('OK') && !editor.includes('Avail'), 'availability opposite NA stays OK')
+assert(!editor.includes('data-avail-grid') && !editor.includes('data-avail-cell'), 'personal availability is not a paint grid')
+assert(editor.includes('cal-day') && editor.includes('<select') && editor.includes('9:00 AM'), 'availability uses a month calendar and time ranges')
+assert(editor.includes('Add times') && editor.includes('Whole day OK') && editor.includes('Whole day NA'), 'a range or a whole day can be applied')
+assert(editor.includes('Tap the days') && editor.includes('My times'), 'the steps and the submissions list stay')
+assert(!editor.includes('Clear all'), 'clear all stays hidden until a time is saved')
+const portalSession = setTime(parseISODate('2026-11-12'), 14)
+const portalView = renderToStaticMarkup(
+  createElement(DancerPortal, {
+    lang: 'zh',
+    isDarkMode: false,
+    campaign: {
+      ...campaign,
+      config: {
+        ...config,
+        durationHours: 2,
+        dayEndHour: 22,
+        sessionNotes: { [portalSession.toISOString()]: { venue: '二號舞蹈室', remarks: '' } },
+      },
+      savedSlots: [portalSession.toISOString()],
+      dancers: [
+        {
+          ...dancer,
+          id: 'jie',
+          userId: 'jie',
+          name: '小杰',
+          email: 'jie@example.com',
+          blocks: [
+            {
+              id: 'na',
+              kind: 'unavailable' as const,
+              start: setTime(parseISODate('2026-11-12'), 18),
+              end: setTime(parseISODate('2026-11-12'), 22),
+              wholeDay: false,
+            },
+          ],
+        },
+      ],
+    },
+    userId: 'jie',
+    email: 'jie@example.com',
+    linkRole: 'dancer',
+    onBack: () => undefined,
+    onSave: async () => true,
+  }),
+)
+assert(portalView.includes('已定時段') && portalView.includes('出席時數'), 'participants see confirmed times and their attended hours')
+assert(portalView.includes('data-attended-hours="2"') && portalView.includes('data-confirmed-session'), 'the afternoon session counts as attended')
+assert(portalView.includes('OK') && !portalView.includes('參加者重疊') && !portalView.includes('data-slot-grid'), 'the participant portal is not the organizer results grid')
+assert(portalView.includes('data-confirmed-day="2026-11-12"') && portalView.includes('14:00'), 'confirmed times are marked on the calendar')
+assert(portalView.includes('二號舞蹈室') && portalView.includes('data-venue="二號舞蹈室"') && !portalView.includes('請準時到達'), 'participants see the venue, and the demo remarks stay empty')
+function hubAccent(html: string, id: string): string {
+  const button = html.match(new RegExp(`<button\\b[^>]*data-hub-step="${id}"[^>]*>`))?.[0] ?? ''
+  return button.match(/data-accent="([^"]+)"/)?.[1] ?? ''
+}
+assert(hubAccent(hub, 'event') === 'purple' && hubAccent(hub, 'results') === 'gold', 'Event and Results use different logo colors')
+assert(hubAccent(hub, 'event') !== hubAccent(hub, 'results'), 'the selected Event and Results tabs do not share a fill')
 
 assert(GOOGLE_CALENDAR_ENABLED === false, 'the calendar flag stays off')
-assert(setup.includes('btn-primary') || existing.includes('btn-primary') || hub.includes('tone-fill-gold'), 'accents use the logo palette')
+assert(hub.includes('tone-fill-sage') || hub.includes('tone-fill-gold') || hub.includes('tone-fill-purple'), 'accents use the logo palette')
 assert(hub.includes('data-accent="gold"') && hub.includes('data-accent="sage"') && hub.includes('data-accent="purple"'), 'hub steps distinguish logo colors')
 assert(ownerDetail.includes('role-gold') && ownerDetail.includes('role-sage') && ownerDetail.includes('role-purple'), 'role cards use the logo colors')
 

@@ -3,6 +3,7 @@ import { formatHourCount, t } from '../i18n'
 import { formatHourOption, formatLongDate, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
 import { preferredInviteCode, preferredInviteLink, shortInviteUrl } from '../lib/invites'
 import { normalizeDurationHours } from '../lib/schedule'
+import { consumeDayClick } from '../lib/dayDrag'
 import { groupSurface, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { FieldLabel, InfoTip } from './Guide'
 import { InviteCode } from './InviteCode'
@@ -73,7 +74,7 @@ export function SetupPanel({
   const lock = readOnly ? 'pointer-events-none opacity-70' : ''
   const durationOptional = !initial || initial.config.durationHours == null
   const labelClass = `text-[13px] font-medium leading-5 ${textMuted(isDarkMode)}`
-  const fieldClass = `w-full rounded-xl px-3 py-2.5 text-[15px] font-medium leading-5 ${inputClass(isDarkMode)} ${lock}`
+  const fieldClass = `w-full min-w-0 max-w-full box-border rounded-xl px-3 py-2.5 text-[15px] font-medium leading-5 ${inputClass(isDarkMode)} ${lock}`
   const sectionTitle = `inline-flex items-center gap-1.5 text-[15px] font-semibold leading-5 ${textPrimary(isDarkMode)}`
   const group = groupSurface('space-y-4')
 
@@ -88,6 +89,7 @@ export function SetupPanel({
   }
 
   function toggleMark(iso: string) {
+    if (consumeDayClick()) return
     const update = (dates: string[]) => (dates.includes(iso) ? dates.filter((date) => date !== iso) : [...dates, iso].sort())
     if (markMode === 'show') setOnDays(update)
     else setCompulsoryDays(update)
@@ -156,7 +158,7 @@ export function SetupPanel({
           </label>
           <div className="space-y-1.5">
             <span className={labelClass}>{t(lang, 'rehearsal_range')}</span>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
               <input
                 type="date"
                 disabled={readOnly}
@@ -178,7 +180,7 @@ export function SetupPanel({
           </div>
           <div className="space-y-1.5">
             <FieldLabel lang={lang} label={t(lang, 'daily_availability')} tip={t(lang, 'tip_daily')} className={labelClass} />
-            <div className="flex gap-2">
+            <div className="grid min-w-0 grid-cols-2 gap-2">
               <select
                 disabled={readOnly}
                 value={config.dayStartHour}
@@ -201,7 +203,7 @@ export function SetupPanel({
               </select>
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2" data-timing-length="">
+          <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2" data-timing-length="">
             <label className="space-y-1.5">
               <FieldLabel
                 lang={lang}
@@ -272,6 +274,8 @@ export function SetupPanel({
             days={days}
             lang={lang}
             isDarkMode={isDarkMode}
+            selected={markMode === 'show' ? onDays : compulsoryDays}
+            onSelectRange={readOnly ? undefined : (next) => (markMode === 'show' ? setOnDays(next) : setCompulsoryDays(next))}
             renderDay={(day) => {
               const iso = toISODateString(day)
               const show = onDays.includes(iso)
@@ -280,6 +284,8 @@ export function SetupPanel({
                 <button
                   type="button"
                   disabled={readOnly}
+                  data-cal-iso={iso}
+                  data-day-on={show ? '' : undefined}
                   onClick={() => toggleMark(iso)}
                   aria-label={formatLongDate(day, lang)}
                   className={`cal-day glass-well flex w-full items-center justify-center rounded-lg text-sm font-medium leading-none ${
@@ -338,7 +344,7 @@ export function SetupPanel({
                       aria-label={t(lang, 'group_placeholder')}
                       className={`min-w-0 flex-1 ${fieldClass}`}
                     />
-                    <button type="submit" disabled={!draftGroup.trim()} className="min-h-11 shrink-0 rounded-full bg-[#7c7bb9] px-4 text-sm font-medium text-white disabled:opacity-40">
+                    <button type="submit" disabled={!draftGroup.trim()} className="tone-fill-sage min-h-11 shrink-0 rounded-full px-4 text-sm font-medium disabled:opacity-40">
                       {t(lang, 'add_group')}
                     </button>
                   </form>
@@ -504,12 +510,12 @@ export function SetupPanel({
           {t(lang, 'cancel')}
         </button>
         {readOnly && onEdit ? (
-          <button type="button" onClick={onEdit} className="min-h-11 rounded-full btn-glow bg-[#7c7bb9] px-6 text-sm font-medium text-white">
+          <button type="button" onClick={onEdit} className="btn-glow btn-primary min-h-11 rounded-full px-6 text-sm font-medium">
             {t(lang, 'edit_event')}
           </button>
         ) : (
           !readOnly && (
-            <button type="button" disabled={!name.trim()} onClick={confirm} className="min-h-11 rounded-full btn-glow bg-[#7c7bb9] px-6 text-sm font-medium text-white disabled:opacity-40">
+            <button type="button" disabled={!name.trim()} onClick={confirm} className="btn-glow btn-primary min-h-11 rounded-full px-6 text-sm font-medium disabled:opacity-40">
               {initial ? t(lang, 'save_campaign') : t(lang, 'create_campaign')}
             </button>
           )
