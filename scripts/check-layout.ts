@@ -686,6 +686,27 @@ async function main() {
     assert(!devParsed.google && !devParsed.avail, 'dev results showed calendar or Avail')
     const scheduleHours = await cdp.eval<string>(`document.querySelector('[data-shortlist-hours]')?.textContent ?? ''`)
     assert(scheduleHours.includes('練習時數') && scheduleHours.includes('4'), `schedule shortlist hours were "${scheduleHours}"`)
+    const shortlistFlow = await cdp.eval<string>(`(async () => {
+      const before = document.querySelectorAll('[data-selected-card]').length
+      document.querySelector('[data-pick="suggest"]')?.click()
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      const pin = document.querySelector('[data-pin-slot]')
+      if (!(pin instanceof HTMLElement)) return 'missing-pin'
+      pin.click()
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      const starred = document.querySelectorAll('[data-selected-card]').length
+      const listed = document.querySelector('[data-shortlist] [data-slot-card]') != null
+      const confirm = document.querySelector('[data-confirm-shortlist]')
+      if (!(confirm instanceof HTMLButtonElement) || confirm.disabled) return 'missing-confirm ' + listed
+      confirm.click()
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      const after = document.querySelectorAll('[data-selected-card]').length
+      const cleared = document.querySelector('[data-shortlist] [data-slot-card]') == null
+      return starred === before && listed && after === before + 1 && cleared ? 'confirmed' : JSON.stringify({ before, starred, listed, after, cleared })
+    })()`)
+    assert(shortlistFlow === 'confirmed', `shortlist confirm flow was ${shortlistFlow}`)
+    await cdp.eval(`document.querySelector('[data-pick="manual"]')?.click()`)
+    await delay(40)
     const pan = await cdp.eval<string>(`(async () => {
       const cell = document.querySelector('.heat-cell')
       const touchAction = cell ? getComputedStyle(cell).touchAction : ''
@@ -868,6 +889,17 @@ async function main() {
     })`)
     const tabParsed = JSON.parse(tabColors) as { event: string; results: string }
     assert(tabParsed.event === 'purple' && tabParsed.results === 'gold' && tabParsed.event !== tabParsed.results, `tab colors were ${tabColors}`)
+    const requestSeen = await cdp.eval<boolean>(`document.querySelector('[data-change-request]') != null && document.body.innerText.includes('小杰') && document.body.innerText.includes('接受')`)
+    assert(requestSeen, 'organizers cannot see the seeded change request')
+    await cdp.eval(`document.querySelector('[data-accept-request]')?.click()`)
+    await delay(40)
+    const requestGone = await cdp.eval<boolean>(`document.querySelector('[data-change-request]') == null`)
+    await cdp.eval(`document.querySelector('[data-hub-step="results"]')?.click()`)
+    await delay(40)
+    const stillPublished = await cdp.eval<number>(`document.querySelectorAll('[data-selected-card]').length`)
+    assert(requestGone && stillPublished >= 1, `accept removed the session or left the request (${requestGone}, ${stillPublished})`)
+    await cdp.eval(`document.querySelector('[data-hub-step="organizers"]')?.click()`)
+    await delay(40)
     await cdp.eval(`document.querySelector('[data-role-time="organizer"]')?.click()`)
     await delay(40)
     const picker = await cdp.eval<string>(`JSON.stringify({
@@ -904,6 +936,44 @@ async function main() {
       participantParsed.sessions >= 2 && participantParsed.marked >= 2 && Number(participantParsed.attended) > 0 && participantParsed.label && !participantParsed.grid && participantParsed.days > 0 && participantParsed.paint === 0,
       `participant portal was ${participantPlan}`,
     )
+    const sessionSheet = await cdp.eval<string>(`(async () => {
+      const plain = [...document.querySelectorAll('.cal-day')].find((day) => !day.hasAttribute('data-confirmed-day'))
+      if (!(plain instanceof HTMLElement)) return 'missing-plain'
+      plain.click()
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      const selects = [...document.querySelectorAll('select')]
+      if (selects.length < 2) return 'missing-select'
+      selects[0].value = '10'
+      selects[0].dispatchEvent(new Event('change', { bubbles: true }))
+      selects[1].value = '12'
+      selects[1].dispatchEvent(new Event('change', { bubbles: true }))
+      const apply = [...document.querySelectorAll('button')].find((button) => (button.textContent ?? '').includes('加入時間'))
+      if (!(apply instanceof HTMLButtonElement)) return 'missing-apply'
+      apply.click()
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      const save = [...document.querySelectorAll('button')].find((button) => (button.textContent ?? '').includes('儲存我的時間'))
+      if (!(save instanceof HTMLButtonElement)) return 'missing-save'
+      save.click()
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      const harmless = document.body.innerText.includes('10:00') && !document.body.innerText.includes('已送出申請')
+      const day = document.querySelector('[data-confirmed-day]')
+      const opener = document.querySelector('[data-open-session]')
+      if (!(opener instanceof HTMLElement) || !(day instanceof HTMLElement)) return 'missing-session'
+      const selectedBefore = day.hasAttribute('data-day-selected')
+      opener.click()
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      const sheet = document.querySelector('[data-session-sheet]') != null
+      const selectedAfter = day.hasAttribute('data-day-selected')
+      const cant = document.querySelector('[data-cant-make]')
+      if (!(cant instanceof HTMLElement)) return 'missing-cant'
+      cant.click()
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      const sent = document.body.innerText.includes('已送出申請')
+      const stillOk = document.body.innerText.includes('OK')
+      const closed = document.querySelector('[data-session-sheet]') == null
+      return harmless && sheet && selectedBefore === selectedAfter && sent && stillOk && closed ? 'requested' : JSON.stringify({ harmless, sheet, selectedBefore, selectedAfter, sent, stillOk, closed })
+    })()`)
+    assert(sessionSheet === 'requested', `published session request flow was ${sessionSheet}`)
     const dayRange = await cdp.eval<string>(`(async () => {
       document.querySelector('[data-month-board]')?.scrollIntoView({ block: 'center' })
       const days = [...document.querySelectorAll('[data-month-board] [data-cal-iso]')]

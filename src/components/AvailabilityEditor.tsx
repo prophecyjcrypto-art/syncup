@@ -33,6 +33,7 @@ export function AvailabilityEditor({
   onChange,
   disabled = false,
   confirmed = [],
+  onOpenConfirmed,
 }: {
   lang: Language
   isDarkMode: boolean
@@ -42,7 +43,8 @@ export function AvailabilityEditor({
   blocks: TimeBlock[]
   onChange: (blocks: TimeBlock[]) => void
   disabled?: boolean
-  confirmed?: { start: Date; end: Date; venue?: string; remarks?: string }[]
+  confirmed?: { id?: string; start: Date; end: Date; venue?: string; remarks?: string }[]
+  onOpenConfirmed?: (session: { id?: string; start: Date; end: Date; venue?: string; remarks?: string }) => void
 }) {
   const [mode, setMode] = useState<BlockKind>('unavailable')
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -54,7 +56,7 @@ export function AvailabilityEditor({
     [config.startDate, config.endDate],
   )
   const confirmedByDay = useMemo(() => {
-    const grouped = new Map<string, { start: Date; end: Date; venue?: string; remarks?: string }[]>()
+    const grouped = new Map<string, { id?: string; start: Date; end: Date; venue?: string; remarks?: string }[]>()
     for (const session of confirmed) {
       const iso = toISODateString(session.start)
       const list = grouped.get(iso) ?? []
@@ -250,41 +252,46 @@ export function AvailabilityEditor({
             const chosen = selected.has(iso)
             const kinds = new Set(blocks.filter((block) => toISODateString(block.start) === iso).map((block) => block.kind))
             const booked = confirmedByDay.get(iso) ?? []
-            const bookedLabel = booked.map((session) => clockLabel(session.start)).join(' · ')
             const venueLabel = booked.map((session) => session.venue).filter(Boolean).join(' · ')
-            const remarksLabel = booked.map((session) => session.remarks).filter(Boolean).join(' · ')
             return (
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => toggleDate(iso)}
-                data-cal-iso={iso}
-                aria-label={bookedLabel ? `${formatLongDate(day, lang)} ${bookedLabel}` : formatLongDate(day, lang)}
-                data-day-selected={chosen ? '' : undefined}
-                data-confirmed-day={booked.length > 0 ? iso : undefined}
-                data-venue={venueLabel || undefined}
-                data-remarks={remarksLabel || undefined}
-                className={`cal-day relative flex w-full flex-col items-center justify-center rounded-lg text-xs font-bold leading-none ${
-                  chosen ? (positive ? 'tone-fill-sage' : 'tone-fill-pink') : `glass-well ${isDarkMode ? 'text-zinc-100' : 'text-zinc-800'}`
-                } ${onDays.includes(iso) ? 'ring-2 ring-[#f6cf7a]' : ''} ${
-                  compulsoryDays.includes(iso) ? 'outline outline-2 outline-[#f19ba8]' : ''
-                }`}
-              >
-                {onDays.includes(iso) ? '★' : ''}
-                {day.getDate()}
-                {bookedLabel ? (
-                  <span className={`mt-0.5 max-w-full truncate text-[8px] font-semibold leading-none ${chosen ? 'opacity-90' : isDarkMode ? 'text-[color:var(--logo-gold)]' : 'text-[color:var(--logo-gold-ink)]'}`}>
-                    {bookedLabel}
-                    {venueLabel ? ` ${venueLabel}` : ''}
-                    {remarksLabel ? ` ${remarksLabel}` : ''}
+              <div key={iso} className="flex flex-col items-stretch gap-0.5">
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => toggleDate(iso)}
+                  data-cal-iso={iso}
+                  aria-label={formatLongDate(day, lang)}
+                  data-day-selected={chosen ? '' : undefined}
+                  data-confirmed-day={booked.length > 0 ? iso : undefined}
+                  data-venue={venueLabel || undefined}
+                  className={`cal-day relative flex w-full flex-col items-center justify-center rounded-lg text-xs font-bold leading-none ${
+                    chosen ? (positive ? 'tone-fill-sage' : 'tone-fill-pink') : `glass-well ${isDarkMode ? 'text-zinc-100' : 'text-zinc-800'}`
+                  } ${onDays.includes(iso) ? 'ring-2 ring-[#f6cf7a]' : ''} ${
+                    compulsoryDays.includes(iso) ? 'outline outline-2 outline-[#f19ba8]' : ''
+                  }`}
+                >
+                  {onDays.includes(iso) ? '★' : ''}
+                  {day.getDate()}
+                  <span className="mt-0.5 flex gap-1">
+                    {booked.length > 0 ? <i className="h-1.5 w-1.5 rounded-full bg-[color:var(--logo-gold)]" /> : null}
+                    {kinds.has('unavailable') && <i className="h-1.5 w-1.5 rounded-full bg-[#f19ba8]" />}
+                    {kinds.has('available') && <i className="h-1.5 w-1.5 rounded-full bg-[#93ba8c]" />}
                   </span>
-                ) : null}
-                <span className="mt-0.5 flex gap-1">
-                  {booked.length > 0 ? <i className="h-1.5 w-1.5 rounded-full bg-[color:var(--logo-gold)]" /> : null}
-                  {kinds.has('unavailable') && <i className="h-1.5 w-1.5 rounded-full bg-[#f19ba8]" />}
-                  {kinds.has('available') && <i className="h-1.5 w-1.5 rounded-full bg-[#93ba8c]" />}
-                </span>
-              </button>
+                </button>
+                {booked.map((session) => (
+                  <button
+                    key={session.id ?? session.start.toISOString()}
+                    type="button"
+                    data-open-session={session.id ?? session.start.toISOString()}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => onOpenConfirmed?.(session)}
+                    className={`max-w-full truncate rounded-md px-0.5 text-[8px] font-semibold leading-tight ${isDarkMode ? 'text-[color:var(--logo-gold)]' : 'text-[color:var(--logo-gold-ink)]'}`}
+                  >
+                    {clockLabel(session.start)}
+                    {session.venue ? ` ${session.venue}` : ''}
+                  </button>
+                ))}
+              </div>
             )
           }}
         />

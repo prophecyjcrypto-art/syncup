@@ -32,6 +32,7 @@ import {
   setSavedSlots,
   updateCampaign,
 } from './lib/db'
+import { restoreBlocks } from './lib/changeRequests'
 import { parseInviteInput, shortCodeFromPath } from './lib/invites'
 import type { ClaimedInvite } from './lib/db'
 import {
@@ -665,6 +666,18 @@ export default function App() {
                     }),
                   )
                 }
+                onSubmitRequest={(next) => {
+                  const config = { ...active.config, changeRequests: next }
+                  setCampaigns((current) => current.map((campaign) => (campaign.id === active.id ? { ...campaign, config } : campaign)))
+                  void run(() => updateCampaign(active.id, {
+                    name: active.name,
+                    remarks: active.remarks,
+                    config,
+                    expiryDate: active.expiryDate,
+                    onDays: active.onDays,
+                    compulsoryDays: active.compulsoryDays,
+                  }))
+                }}
               />
             ) : null}
           </>
@@ -696,6 +709,40 @@ export default function App() {
               setCampaigns((current) => current.map((campaign) => (campaign.id === active.id ? { ...campaign, savedSlots: slots, config } : campaign)))
               void run(async () => {
                 await setSavedSlots(active.id, slots)
+                await updateCampaign(active.id, {
+                  name: active.name,
+                  remarks: active.remarks,
+                  config,
+                  expiryDate: active.expiryDate,
+                  onDays: active.onDays,
+                  compulsoryDays: active.compulsoryDays,
+                })
+              })
+            }}
+            onResolveRequest={(id, decision) => {
+              const request = (active.config.changeRequests ?? []).find((item) => item.id === id)
+              if (!request || request.status !== 'pending') return
+              const changeRequests = (active.config.changeRequests ?? []).map((item) => (item.id === id ? { ...item, status: decision } : item))
+              const config = { ...active.config, changeRequests }
+              const person = [...active.dancers, ...active.choreographers].find((item) => item.id === request.personId)
+              const blocks = decision === 'accepted' && person ? restoreBlocks(request.proposedBlocks) : null
+              setCampaigns((current) => current.map((campaign) => {
+                if (campaign.id !== active.id) return campaign
+                const apply = (people: typeof campaign.dancers) => (
+                  blocks && person ? people.map((item) => (item.id === person.id ? { ...item, blocks } : item)) : people
+                )
+                return { ...campaign, config, dancers: apply(campaign.dancers), choreographers: apply(campaign.choreographers) }
+              }))
+              void run(async () => {
+                if (blocks && person) {
+                  await saveRosterPerson({
+                    campaignId: active.id,
+                    personId: person.id,
+                    name: person.name,
+                    role: person.role,
+                    blocks,
+                  })
+                }
                 await updateCampaign(active.id, {
                   name: active.name,
                   remarks: active.remarks,
@@ -774,6 +821,18 @@ export default function App() {
                 }),
               )
             }
+            onSubmitRequest={(next) => {
+              const config = { ...active.config, changeRequests: next }
+              setCampaigns((current) => current.map((campaign) => (campaign.id === active.id ? { ...campaign, config } : campaign)))
+              void run(() => updateCampaign(active.id, {
+                name: active.name,
+                remarks: active.remarks,
+                config,
+                expiryDate: active.expiryDate,
+                onDays: active.onDays,
+                compulsoryDays: active.compulsoryDays,
+              }))
+            }}
           />
         ) : loadFailed ? (
           <div className="py-24 text-center">

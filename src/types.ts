@@ -16,6 +16,25 @@ export interface SessionNote {
   remarks: string
 }
 
+export interface StoredBlock {
+  id: string
+  kind: BlockKind
+  start: string
+  end: string
+  wholeDay: boolean
+}
+
+export interface ChangeRequest {
+  id: string
+  personId: string
+  personName: string
+  sessionKeys: string[]
+  previousBlocks: StoredBlock[]
+  proposedBlocks: StoredBlock[]
+  status: 'pending' | 'accepted' | 'declined'
+  createdAt: string
+}
+
 export interface AppConfig {
   startDate: string
   endDate: string
@@ -25,6 +44,8 @@ export interface AppConfig {
   attendanceTolerance: number
   /** Published session details, keyed by the slot start ISO. Readable with the event. */
   sessionNotes?: Record<string, SessionNote>
+  /** In-app requests to miss a published session. Additive. */
+  changeRequests?: ChangeRequest[]
 }
 
 export interface TimeBlock {

@@ -422,6 +422,11 @@ assert(publishManual.indexOf('data-selected-slots') < publishManual.indexOf('dat
 assert(!publishManual.includes('data-session-draft') && !publishManual.includes('請準時到達'), 'venue and remarks are not inline fields or filler')
 assert(!publishManual.includes('用這些時段') && !publishManual.includes('用這些時間') && !publishManual.includes('發佈給所有人'), 'publish does not use the old shortlist wording')
 assert(publishSuggest.includes('data-publish') && publishSuggest.includes('Publish') && publishSuggest.includes('data-selected-card') && publishSuggest.includes('data-edit-slot'), 'suggest uses the same selected-time cards')
+const shortlistAt = publishSuggest.indexOf('data-shortlist')
+const optionsAt = publishSuggest.indexOf('data-all-options')
+const shortlistBlock = shortlistAt >= 0 && optionsAt > shortlistAt ? publishSuggest.slice(shortlistAt, optionsAt) : publishSuggest
+assert(publishSuggest.includes('data-confirm-shortlist') && /data-confirm-shortlist=""[^>]*disabled=/.test(publishSuggest), 'confirm stays disabled until something is shortlisted')
+assert(!shortlistBlock.includes('data-slot-card'), 'published times are not duplicated in the shortlist')
 
 const list = renderToStaticMarkup(
   createElement(CampaignList, {

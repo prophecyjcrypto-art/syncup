@@ -12,7 +12,8 @@ import { SetupPanel } from '../components/SetupPanel'
 import { CalendarProvider } from '../lib/calendarContext'
 import { parseISODate, setTime } from '../lib/dates'
 import { textMuted, textPrimary } from '../lib/ui'
-import type { BlockKind, Campaign, Language, SessionNote, TimeBlock } from '../types'
+import { proposeMissedSession, restoreBlocks, storeBlocks } from '../lib/changeRequests'
+import type { BlockKind, Campaign, ChangeRequest, Language, SessionNote, TimeBlock } from '../types'
 
 const previewParams = new URLSearchParams(window.location.search)
 const lang: Language = previewParams.get('lang') === 'en' ? 'en' : 'zh'
@@ -126,9 +127,22 @@ const demoNotes: Record<string, SessionNote> = Object.fromEntries(
   }]),
 )
 
+const jieBlocks = campaign.dancers.find((person) => person.id === 'dancer-jie')?.blocks ?? []
+const missedStart = new Date(confirmedSessions[2])
+const demoRequest: ChangeRequest = {
+  id: 'demo-request',
+  personId: 'dancer-jie',
+  personName: '小杰',
+  sessionKeys: [confirmedSessions[2]],
+  previousBlocks: storeBlocks(jieBlocks),
+  proposedBlocks: storeBlocks(proposeMissedSession(jieBlocks, missedStart, new Date(missedStart.getTime() + 2 * 3600000))),
+  status: 'pending',
+  createdAt: '2026-11-14T09:00:00.000Z',
+}
+
 const demoEvent: Campaign = {
   ...campaign,
-  config: { ...campaign.config, durationHours: 2, sessionNotes: demoNotes },
+  config: { ...campaign.config, durationHours: 2, sessionNotes: demoNotes, changeRequests: [demoRequest] },
   savedSlots: confirmedSessions,
   dancers: campaign.dancers.map((person) => (person.id === 'dancer-jie' ? { ...person, userId: 'jie' } : person)),
 }
@@ -265,6 +279,20 @@ function LivePreview({ name }: { name: string }) {
             savedSlots: slots,
             config: { ...current.config, sessionNotes: notes },
           }))
+        }
+        onResolveRequest={(id, decision) =>
+          setEvent((current) => {
+            const requests = current.config.changeRequests ?? []
+            const request = requests.find((item) => item.id === id)
+            if (!request || request.status !== 'pending') return current
+            const changeRequests = requests.map((item) => (item.id === id ? { ...item, status: decision } : item))
+            const dancers = decision === 'accepted'
+              ? current.dancers.map((person) => (
+                  person.id === request.personId ? { ...person, blocks: restoreBlocks(request.proposedBlocks) } : person
+                ))
+              : current.dancers
+            return { ...current, dancers, config: { ...current.config, changeRequests } }
+          })
         }
         onToggleMember={(groupId, personId, included) =>
           setEvent((current) => ({

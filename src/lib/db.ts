@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AppConfig, BlockKind, Campaign, CampaignInput, DanceGroup, Person, PersonRole, TimeBlock } from '../types'
 import { canSeeResults } from './access'
+import { readChangeRequests } from './changeRequests'
 import { readSessionNotes } from './sessionNotes'
 import type { InviteKind } from './invites'
 import { sortBlocks } from './blocks'
@@ -85,6 +86,7 @@ function asConfig(value: unknown): AppConfig {
     dayEndHour: Number(config.dayEndHour ?? 22),
     attendanceTolerance: Number(config.attendanceTolerance ?? 0),
     sessionNotes: readSessionNotes((config as { sessionNotes?: unknown }).sessionNotes),
+    changeRequests: readChangeRequests((config as { changeRequests?: unknown }).changeRequests),
   }
 }
 

@@ -11,6 +11,9 @@ import { paintBlocks, spansFromDrag } from '../src/lib/paint.ts'
 import { datesInRange, paintRange } from '../src/lib/dayDrag.ts'
 import { startsAtOrAfter } from '../src/lib/schedule.ts'
 import { publishedSlotKeys, readSessionNotes } from '../src/lib/sessionNotes.ts'
+import { conflictingSessionKeys, mergeKeepingSessions, proposeMissedSession } from '../src/lib/changeRequests.ts'
+import { makeBlock } from '../src/lib/blocks.ts'
+import { classifySessionAttendance } from '../src/lib/schedule.ts'
 import { SHORT_CODE_ALPHABET, normalizeLongCode, normalizeShortCode, parseInviteInput, shortCodeFromPath } from '../src/lib/invites.ts'
 import { buildCampaign, sampleShortlist } from '../src/dev/resultsPreview.tsx'
 import { commitSessions, pinsToSave, type SessionRange } from '../src/lib/sessions.ts'
@@ -561,6 +564,15 @@ const publishedNotes = readSessionNotes({ '2026-11-12T06:00:00.000Z': { venue: '
 assert(publishedNotes['2026-11-12T06:00:00.000Z']?.venue === '二號舞蹈室' && publishedNotes['2026-11-12T06:00:00.000Z']?.remarks === '', 'a published session keeps its venue when remarks are blank')
 assert(publishedSlotKeys([], publishedNotes).length === 1, 'participants read published times from the notes when the shortlist is hidden')
 assert(publishedSlotKeys(['saved'], publishedNotes)[0] === 'saved', 'organizers keep the saved shortlist')
+const sessionStart = setTime(parseISODate('2026-11-12'), 14)
+const sessionEnd = setTime(parseISODate('2026-11-12'), 16)
+const publishedWindow = { key: sessionStart.toISOString(), start: sessionStart, end: sessionEnd }
+const morningNa = makeBlock('2026-11-12', 9, 12, 'unavailable', false)
+assert(conflictingSessionKeys([], [morningNa], [publishedWindow], 0).length === 0, 'a morning NA does not conflict with an afternoon session')
+const missed = proposeMissedSession([], sessionStart, sessionEnd)
+assert(conflictingSessionKeys([], missed, [publishedWindow], 0).length === 1, 'covering a published session with NA is a change request')
+const kept = mergeKeepingSessions([], missed, [publishedWindow])
+assert(classifySessionAttendance({ id: 'p', blocks: kept }, sessionStart.getTime(), sessionEnd.getTime(), 0).status !== 'na', 'the conflicting NA is not applied before it is accepted')
 const headerSpans = spansFromDrag(
   { iso: paintDay, index: 0, header: true },
   { iso: paintDay, index: 0, header: true },

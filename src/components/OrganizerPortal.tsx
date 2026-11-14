@@ -9,6 +9,7 @@ import { AssignBoard, AssignChips, AssignRoleTarget, AssignTarget, AssignTray, u
 import { organizersOf, type RoleGrantKind } from '../lib/roles'
 import { InfoTip } from './Guide'
 import { InviteCode } from './InviteCode'
+import { ChangeRequestList } from './ChangeRequests'
 import { ResultsPanel } from './ResultsPanel'
 import { SetupPanel } from './SetupPanel'
 
@@ -42,6 +43,7 @@ export function OrganizerPortal({
   onSaveSlots,
   onSaveDuration,
   onPublish,
+  onResolveRequest,
   canPin = true,
   canSetDuration = true,
 }: {
@@ -65,6 +67,7 @@ export function OrganizerPortal({
   onSaveSlots?: (slots: string[]) => void
   onSaveDuration?: (hours: number) => void
   onPublish?: (slots: string[], notes: Record<string, SessionNote>) => void
+  onResolveRequest?: (id: string, decision: 'accepted' | 'declined') => void
   canPin?: boolean
   canSetDuration?: boolean
 }) {
@@ -363,6 +366,12 @@ export function OrganizerPortal({
             <AssignBoard onMove={() => undefined} onGrant={grantRole}>
               {roleCards()}
             </AssignBoard>
+            <ChangeRequestList
+              lang={lang}
+              isDarkMode={isDarkMode}
+              requests={campaign.config.changeRequests ?? []}
+              onResolve={onResolveRequest}
+            />
             <section className={groupSurface('space-y-4')} data-staff-stats="">
               <PeopleList
                 lang={lang}
@@ -436,6 +445,7 @@ export function OrganizerPortal({
             onSaveSlots={onSaveSlots ?? (() => undefined)}
             onSaveDuration={onSaveDuration}
             onPublish={onPublish}
+            onResolveRequest={onResolveRequest}
           />
         ) : null}
       </div>

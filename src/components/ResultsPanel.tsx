@@ -15,6 +15,7 @@ import { InfoTip } from './Guide'
 import type { Campaign, Language, SessionNote, TimeSlot } from '../types'
 import { MonthBoards } from './MonthBoards'
 import { AnalysisPanel } from './AnalysisPanel'
+import { ChangeRequestList } from './ChangeRequests'
 import { HeatBook, slotMatchesSession } from './HeatBook'
 import { MarkFilterControl } from './MarkFilter'
 
@@ -42,6 +43,7 @@ export function ResultsPanel({
   canSetDuration = true,
   onSaveDuration,
   onPublish,
+  onResolveRequest,
   embedded = false,
   initialPick = 'manual',
 }: {
@@ -54,6 +56,7 @@ export function ResultsPanel({
   canSetDuration?: boolean
   onSaveDuration?: (hours: number) => void
   onPublish?: (slots: string[], notes: Record<string, SessionNote>) => void
+  onResolveRequest?: (id: string, decision: 'accepted' | 'declined') => void
   embedded?: boolean
   initialPick?: 'manual' | 'suggest'
 }) {
@@ -77,7 +80,8 @@ export function ResultsPanel({
   const [pickMode, setPickMode] = useState<'manual' | 'suggest'>(initialPick)
   const [earliestStart, setEarliestStart] = useState<number | null>(null)
   const [notes, setNotes] = useState<Record<string, SessionNote>>(() => ({ ...(campaign.config.sessionNotes ?? {}) }))
-  const [draftPins, setDraftPins] = useState<string[]>(campaign.savedSlots)
+  const [shortlist, setShortlist] = useState<string[]>([])
+  const [finalKeys, setFinalKeys] = useState<string[]>(campaign.savedSlots)
   const [cardChecks, setCardChecks] = useState<Set<string>>(new Set())
   const [noteEditor, setNoteEditor] = useState<string[] | null>(null)
   const [editorVenue, setEditorVenue] = useState('')
@@ -99,7 +103,7 @@ export function ResultsPanel({
     setNotes({ ...(campaign.config.sessionNotes ?? {}) })
   }, [notesKey])
   useEffect(() => {
-    setDraftPins(campaign.savedSlots)
+    setFinalKeys(campaign.savedSlots)
   }, [savedKey])
 
   const days = useMemo(
@@ -135,17 +139,17 @@ export function ResultsPanel({
     if (dancerFilter.length > 0 && !dancerFilter.every((id) => slot.availableMembers.includes(id))) return false
     return startsAtOrAfter(slot.start, earliestStart)
   })
-  const pinned = listed
-    .filter((slot) => draftPins.includes(slotKey(slot)))
+  const pinned = shownSlots
+    .filter((slot) => shortlist.includes(slotKey(slot)))
     .sort((left, right) => left.start.getTime() - right.start.getTime())
-  const others = listed.filter((slot) => !draftPins.includes(slotKey(slot)))
+  const others = listed.filter((slot) => !shortlist.includes(slotKey(slot)))
   const cardKeys = useMemo(() => {
     const painted = sessions.map((session) => setTime(parseISODate(session.iso), session.startHour).toISOString())
-    return [...new Set([...draftPins, ...painted])]
-  }, [draftPins, sessions])
+    return [...new Set([...finalKeys, ...painted])]
+  }, [finalKeys, sessions])
 
   const heatDates = (onDaysOnly ? campaign.onDays : days.map((day) => toISODateString(day))).sort()
-  const listedHours = shortlistSessionHours(campaign.config.durationHours, campaign.savedSlots)
+  const listedHours = shortlistSessionHours(campaign.config.durationHours, cardKeys)
   const overlap = sharedFreeByDay(campaign.config, required, heatDates)
   const heat = availabilityHeatmap(campaign.config, dancers, heatDates, markFilter)
   useEffect(() => {
@@ -180,9 +184,26 @@ export function ResultsPanel({
     return daySlots.reduce((sum, slot) => sum + slot.attendanceScore, 0) / daySlots.length
   }
 
-  function toggleDraft(key: string) {
-    if (!canPin) return
-    setDraftPins((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]))
+  function toggleShortlist(key: string) {
+    if (!canPin || cardKeys.includes(key)) return
+    setShortlist((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]))
+  }
+
+  function confirmShortlist() {
+    if (!canPin || shortlist.length === 0) return
+    setFinalKeys((current) => [...new Set([...current, ...shortlist])])
+    setShortlist([])
+  }
+
+  function removeFinal(key: string) {
+    setFinalKeys((current) => current.filter((item) => item !== key))
+    setShortlist((current) => current.filter((item) => item !== key))
+    setSessions((current) => current.filter((session) => setTime(parseISODate(session.iso), session.startHour).toISOString() !== key))
+    setCardChecks((current) => {
+      const next = new Set(current)
+      next.delete(key)
+      return next
+    })
   }
 
   const maxHours = roundHour(Math.max(SLOT_STEP, campaign.config.dayEndHour - campaign.config.dayStartHour))
@@ -397,15 +418,23 @@ export function ResultsPanel({
           </button>
           <div className="flex items-center gap-2">
             <span className="rounded-xl bg-[#93ba8c] px-2 py-1 text-xs font-bold text-white">{slot.attendanceScore}%</span>
-            <button
-              type="button"
-              title={t(lang, 'pin_hint')}
-              disabled={!canPin}
-              onClick={() => toggleDraft(key)}
-              className={`flex h-11 w-11 items-center justify-center text-xl disabled:cursor-default ${draftPins.includes(key) ? 'text-[#f6cf7a]' : 'text-zinc-500'}`}
-            >
-              {draftPins.includes(key) ? '★' : '☆'}
-            </button>
+            {cardKeys.includes(key) ? (
+              <span data-final-mark="" className="px-2 text-xs font-bold text-[#f6cf7a]">{t(lang, 'final_mark')}</span>
+            ) : (
+              <button
+                type="button"
+                data-pin-slot=""
+                title={t(lang, 'pin_hint')}
+                disabled={!canPin}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  toggleShortlist(key)
+                }}
+                className={`flex h-11 w-11 items-center justify-center text-xl disabled:cursor-default ${shortlist.includes(key) ? 'text-[#f6cf7a]' : 'text-zinc-500'}`}
+              >
+                {shortlist.includes(key) ? '★' : '☆'}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -598,8 +627,11 @@ export function ResultsPanel({
                       {note.venue ? <p data-card-venue="" className={`mt-1 text-sm ${textPrimary(isDarkMode)}`}>{note.venue}</p> : null}
                       {note.remarks ? <p data-card-remarks="" className={`mt-1 whitespace-pre-wrap text-xs ${textMuted(isDarkMode)}`}>{note.remarks}</p> : null}
                     </div>
-                    <button type="button" data-edit-slot="" aria-label={t(lang, 'edit_details')} onClick={() => openNoteEditor([key])} className="glass-well flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold">
+                    <button type="button" data-edit-slot="" aria-label={t(lang, 'edit_details')} onClick={() => openNoteEditor([key])} className="glass-well flex h-11 shrink-0 items-center justify-center rounded-full px-3 text-sm font-bold">
                       {t(lang, 'edit_details')}
+                    </button>
+                    <button type="button" data-remove-final="" aria-label={t(lang, 'remove')} onClick={() => removeFinal(key)} className="min-h-11 shrink-0 px-2 text-sm font-bold text-[#f19ba8]">
+                      {t(lang, 'remove')}
                     </button>
                   </div>
                 </article>
@@ -624,6 +656,14 @@ export function ResultsPanel({
         </div>
       </div>
       {selectedSlots()}
+      {canPin ? (
+        <ChangeRequestList
+          lang={lang}
+          isDarkMode={isDarkMode}
+          requests={campaign.config.changeRequests ?? []}
+          onResolve={onResolveRequest}
+        />
+      ) : null}
       {notice && <p className="text-sm font-medium text-[#93ba8c]">{notice}</p>}
       {canPin ? (
         <div className="inline-flex rounded-full p-0.5 glass-well" role="tablist" data-results-tab={resultsView}>
@@ -878,20 +918,26 @@ export function ResultsPanel({
             </label>
             </div>
             <div className="mt-6 space-y-4">
-              {pinned.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <h4 className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'shortlist_title')} ({pinned.length})</h4>
-                    {listedHours != null ? (
-                      <p className="shrink-0 text-xs font-bold tabular-nums text-[#f6cf7a]">{t(lang, 'stats_session')} {listedHours}</p>
-                    ) : null}
+              {canPin ? (
+                <div className="space-y-2" data-shortlist="">
+                  <div className="flex items-center justify-between gap-3">
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-[#f6cf7a]">{t(lang, 'shortlist_title')} ({shortlist.length})</h4>
+                    <button
+                      type="button"
+                      data-confirm-shortlist=""
+                      disabled={shortlist.length === 0}
+                      onClick={confirmShortlist}
+                      className="btn-glow btn-primary min-h-11 rounded-full px-4 text-xs font-bold disabled:opacity-40"
+                    >
+                      {t(lang, 'confirm_shortlist')}
+                    </button>
                   </div>
                   {pinned.map(renderSlot)}
                 </div>
-              )}
+              ) : null}
               {others.length > 0 && (
-                <div className="space-y-2">
-                  {pinned.length > 0 && <h4 className="text-xs font-bold uppercase tracking-widest text-zinc-400">{t(lang, 'all_results_title')} ({others.length})</h4>}
+                <div className="space-y-2" data-all-options="">
+                  {(canPin || pinned.length > 0) && <h4 className="text-xs font-bold uppercase tracking-widest text-zinc-400">{t(lang, 'all_results_title')} ({others.length})</h4>}
                   {others.map(renderSlot)}
                 </div>
               )}
