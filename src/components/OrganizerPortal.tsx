@@ -3,7 +3,7 @@ import { t } from '../i18n'
 import { analyzeEvent } from '../lib/analysis'
 import { membershipChanges, peopleForTray } from '../lib/groups'
 import { preferredInviteCode, preferredInviteLink, shortInviteUrl } from '../lib/invites'
-import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
+import { cardClass, groupSurface, inputClass, textMuted, textPrimary } from '../lib/ui'
 import type { Campaign, CampaignInput, Language } from '../types'
 import { AnalysisPanel } from './AnalysisPanel'
 import { AssignBoard, AssignChips, AssignTarget, AssignTray, useAssigning } from './GroupAssign'
@@ -119,37 +119,39 @@ export function OrganizerPortal({
 
       {tab === 'people' ? (
         <div className="space-y-4">
-          <section className={`${cardClass(isDarkMode)} space-y-5 rounded-[1.5rem] p-4 sm:p-5`} data-codes-section="">
+          <div className="space-y-3" data-codes-section="">
             <AssignBoard onMove={(personId, fromGroupId, toGroupId) => void moveDancer(personId, fromGroupId, toGroupId)}>
               <div className="space-y-3" data-participants-block="">
-                <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
+                <h3 className={`inline-flex items-center gap-2 px-1 text-base font-semibold ${textPrimary(isDarkMode)}`}>
                   {t(lang, 'participants_label')}
                   <InfoTip lang={lang} name="participants" text={t(lang, 'participants_hint')} />
                 </h3>
-                <InviteCode
-                  lang={lang}
-                  isDarkMode={isDarkMode}
-                  label={t(lang, 'all_participants')}
-                  code={preferredInviteCode(campaign.participantShort, campaign.participantCode)}
-                  empty={t(lang, 'organizer_after_create')}
-                  onCopy={(_value, kind) =>
-                    copyInvite(
-                      preferredInviteCode(campaign.participantShort, campaign.participantCode),
-                      preferredInviteLink(campaign.participantShort, campaign.participantCode, 'participant'),
-                      kind,
-                    )
-                  }
-                />
-                {campaign.groups.length > 0 && campaign.dancers.length > 0 ? (
-                  <AssignTray
-                    targetId={null}
-                    people={peopleForTray(campaign.dancers, campaign.groups, null)}
+                <div className={groupSurface('space-y-3')}>
+                  <InviteCode
+                    lang={lang}
                     isDarkMode={isDarkMode}
-                    ariaLabel={t(lang, 'all_participants')}
+                    label={t(lang, 'all_participants')}
+                    code={preferredInviteCode(campaign.participantShort, campaign.participantCode)}
+                    empty={t(lang, 'organizer_after_create')}
+                    onCopy={(_value, kind) =>
+                      copyInvite(
+                        preferredInviteCode(campaign.participantShort, campaign.participantCode),
+                        preferredInviteLink(campaign.participantShort, campaign.participantCode, 'participant'),
+                        kind,
+                      )
+                    }
                   />
-                ) : null}
-                <div className="space-y-3 border-l border-current/15 pl-3">
-                  <p className={`text-[13px] font-medium ${textMuted(isDarkMode)}`}>{t(lang, 'groups_label')}</p>
+                  {campaign.groups.length > 0 && campaign.dancers.length > 0 ? (
+                    <AssignTray
+                      targetId={null}
+                      people={peopleForTray(campaign.dancers, campaign.groups, null)}
+                      isDarkMode={isDarkMode}
+                      ariaLabel={t(lang, 'all_participants')}
+                    />
+                  ) : null}
+                </div>
+                <div className="space-y-3">
+                  <p className={`px-1 text-[13px] font-medium ${textMuted(isDarkMode)}`}>{t(lang, 'groups_label')}</p>
                   <form onSubmit={addGroup} className="flex gap-2">
                     <input
                       value={groupName}
@@ -162,17 +164,17 @@ export function OrganizerPortal({
                       {t(lang, 'add_group')}
                     </button>
                   </form>
-                  {campaign.groups.length === 0 ? <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_groups')}</p> : null}
-                  {campaign.groups.map((group) => (
-                    <div key={group.id} className="space-y-1.5 border-t border-current/10 pt-3" data-group-id={group.id}>
-                      <AssignTarget targetId={group.id} ariaLabel={group.name}>
+                  {campaign.groups.length === 0 ? <p className={`px-1 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'no_groups')}</p> : null}
+                  {campaign.groups.map((danceGroup) => (
+                    <div key={danceGroup.id} className={groupSurface('space-y-1.5')} data-group-id={danceGroup.id}>
+                      <AssignTarget targetId={danceGroup.id} ariaLabel={danceGroup.name}>
                         <div className="flex min-h-11 items-center justify-between gap-3">
-                          <GroupName lang={lang} isDarkMode={isDarkMode} name={group.name} onRename={(name) => onRenameGroup(group.id, name)} />
+                          <GroupName lang={lang} isDarkMode={isDarkMode} name={danceGroup.name} onRename={(name) => onRenameGroup(danceGroup.id, name)} />
                           <button
                             type="button"
                             className="shrink-0 text-sm font-bold text-[#f19ba8]"
                             onClick={() => {
-                              if (window.confirm(t(lang, 'delete_group'))) onDeleteGroup(group.id)
+                              if (window.confirm(t(lang, 'delete_group'))) onDeleteGroup(danceGroup.id)
                             }}
                           >
                             {t(lang, 'remove')}
@@ -182,14 +184,14 @@ export function OrganizerPortal({
                           lang={lang}
                           isDarkMode={isDarkMode}
                           label=""
-                          code={group.inviteCode ?? null}
+                          code={danceGroup.inviteCode ?? null}
                           empty={t(lang, 'organizer_after_create')}
-                          onCopy={(_value, kind) => copyInvite(group.inviteCode ?? null, group.inviteCode ? shortInviteUrl(group.inviteCode) : '', kind)}
+                          onCopy={(_value, kind) => copyInvite(danceGroup.inviteCode ?? null, danceGroup.inviteCode ? shortInviteUrl(danceGroup.inviteCode) : '', kind)}
                         />
                         {campaign.dancers.length > 0 ? (
                           <AssignChips
-                            people={peopleForTray(campaign.dancers, campaign.groups, group.id)}
-                            fromGroupId={group.id}
+                            people={peopleForTray(campaign.dancers, campaign.groups, danceGroup.id)}
+                            fromGroupId={danceGroup.id}
                             isDarkMode={isDarkMode}
                           />
                         ) : null}
@@ -199,7 +201,7 @@ export function OrganizerPortal({
                 </div>
               </div>
             </AssignBoard>
-            <div className="space-y-3 border-t border-current/10 pt-4" data-organizer-block="">
+            <div className={groupSurface('space-y-3')} data-organizer-block="">
               <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
                 {t(lang, 'choreographer')}
                 <InfoTip lang={lang} name="organizer" text={t(lang, 'organizer_link_hint')} />
@@ -219,7 +221,7 @@ export function OrganizerPortal({
                 }
               />
             </div>
-            <div className="space-y-3 border-t border-current/10 pt-4" data-admins-block="">
+            <div className={groupSurface('space-y-3')} data-admins-block="">
               <h3 className={`inline-flex items-center gap-2 text-base font-semibold ${textPrimary(isDarkMode)}`}>
                 {t(lang, 'admins_label')}
                 <InfoTip lang={lang} name="admins" text={t(lang, 'invite_admin_hint')} />
@@ -255,7 +257,7 @@ export function OrganizerPortal({
                 </div>
               ))}
             </div>
-          </section>
+          </div>
 
           <section className={`${cardClass(isDarkMode)} space-y-4 rounded-[1.5rem] p-4 sm:p-5`}>
             <PeopleList

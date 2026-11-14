@@ -3,8 +3,8 @@ import { InfoTip } from './Guide'
 import { formatPeopleCount, t } from '../i18n'
 import { canManageRoster, isAdmin, isChoreographer, isOwner } from '../lib/access'
 import { formatDate, isPast } from '../lib/dates'
-import { preferredInviteCode, preferredInviteLink } from '../lib/invites'
-import { cardClass, inputClass, primaryButton, textMuted, textPrimary } from '../lib/ui'
+import { preferredInviteCode, preferredInviteLink, shortInviteUrl } from '../lib/invites'
+import { cardClass, groupSurface, inputClass, primaryButton, textMuted, textPrimary } from '../lib/ui'
 import type { Campaign, Language, PersonRole } from '../types'
 
 export function CampaignList({
@@ -222,13 +222,28 @@ function EventDetail({
   onCopy: (value: string, kind?: 'code' | 'link') => void
 }) {
   const admin = isAdmin(campaign, userId, email)
-  const owner = isOwner(campaign, userId)
   const choreographer = isChoreographer(campaign, userId)
   const participantCode = preferredInviteCode(campaign.participantShort, campaign.participantCode)
   const participantLink = preferredInviteLink(campaign.participantShort, campaign.participantCode, 'participant')
   const organizerLink = preferredInviteLink(campaign.organizerShort, campaign.organizerCode, 'organizer')
   const adminLink = preferredInviteLink(campaign.adminShort, campaign.adminCode, 'admin')
-  const quiet = 'glass-well min-h-12 w-full rounded-full px-5 text-[15px] font-medium'
+  const action = 'glass-well min-h-12 w-full rounded-full px-5 text-[15px] font-medium'
+  const inviteCard = groupSurface('space-y-3')
+  const inviteTitle = `text-[15px] font-semibold ${textPrimary(isDarkMode)}`
+  const participantInvites = [
+    {
+      key: 'participant',
+      heading: t(lang, 'all_participants'),
+      code: participantCode,
+      link: participantLink,
+    },
+    ...campaign.groups.map((group) => ({
+      key: group.id,
+      heading: group.name,
+      code: group.inviteCode ?? null,
+      link: group.inviteCode ? shortInviteUrl(group.inviteCode) : '',
+    })),
+  ]
 
   return (
     <div
@@ -256,47 +271,54 @@ function EventDetail({
             {t(lang, 'hub_open')}
           </button>
           {admin ? (
-            <button type="button" onClick={() => onOpen(campaign, 'edit')} className={quiet}>
+            <button type="button" onClick={() => onOpen(campaign, 'edit')} className={action}>
               {t(lang, 'edit_event')}
             </button>
           ) : null}
-          <button type="button" onClick={() => onPortal(campaign, choreographer ? 'choreographer' : 'dancer')} className={quiet}>
+          <button type="button" onClick={() => onPortal(campaign, choreographer ? 'choreographer' : 'dancer')} className={action}>
             {t(lang, 'enter_availability')}
           </button>
         </div>
 
-        <div className="mt-8 space-y-6 border-t border-current/10 pt-6">
-          <div className="inline-flex items-center gap-1.5">
+        <div className="mt-6 space-y-3">
+          <div className="inline-flex items-center gap-1.5 px-1">
             <h4 className={`text-[15px] font-semibold ${textPrimary(isDarkMode)}`}>{t(lang, 'participants_label')}</h4>
             <InfoTip lang={lang} name="card-invites" text={t(lang, 'card_invites_hint')} />
           </div>
-          <section data-invite="participant" className="space-y-3">
-            <h5 className={`text-[13px] font-medium ${textMuted(isDarkMode)}`}>{t(lang, 'all_participants')}</h5>
-            {participantCode ? (
-              <p className={`font-mono text-[15px] font-medium tracking-[0.14em] ${participantCode.length > 8 ? 'break-all tracking-wide' : ''} ${textPrimary(isDarkMode)}`}>
-                {participantCode}
-              </p>
-            ) : (
-              <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
-            )}
-            <div className="flex gap-2">
-              <button type="button" disabled={!participantCode} onClick={() => participantCode && onCopy(participantCode, 'code')} className={primaryButton('min-h-11 flex-1 px-4 text-sm disabled:opacity-40')}>
-                {t(lang, 'copy_code')}
-              </button>
-              <button type="button" disabled={!participantLink} onClick={() => participantLink && onCopy(participantLink, 'link')} className="glass-well min-h-11 flex-1 rounded-full px-4 text-sm font-medium disabled:opacity-40">
-                {t(lang, 'copy_short_link')}
-              </button>
-            </div>
-          </section>
-          <section data-invite="organizer" className="space-y-3 border-t border-current/10 pt-5">
-            <h5 className={`text-[13px] font-medium ${textMuted(isDarkMode)}`}>{t(lang, 'choreographer')}</h5>
+          {participantInvites.map((invite) => (
+            <section
+              key={invite.key}
+              data-invite={invite.key === 'participant' ? 'participant' : 'group'}
+              data-group-id={invite.key === 'participant' ? undefined : invite.key}
+              className={inviteCard}
+            >
+              <h5 className={inviteTitle}>{invite.heading}</h5>
+              {invite.code ? (
+                <p className={`font-mono text-[15px] font-medium tracking-[0.14em] ${invite.code.length > 8 ? 'break-all tracking-wide' : ''} ${textPrimary(isDarkMode)}`}>
+                  {invite.code}
+                </p>
+              ) : (
+                <p className={`text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
+              )}
+              <div className="flex gap-2">
+                <button type="button" disabled={!invite.code} onClick={() => invite.code && onCopy(invite.code, 'code')} className={primaryButton('min-h-11 flex-1 px-4 text-sm disabled:opacity-40')}>
+                  {t(lang, 'copy_code')}
+                </button>
+                <button type="button" disabled={!invite.link} onClick={() => invite.link && onCopy(invite.link, 'link')} className="glass-well min-h-11 flex-1 rounded-full px-4 text-sm font-medium disabled:opacity-40">
+                  {t(lang, 'copy_short_link')}
+                </button>
+              </div>
+            </section>
+          ))}
+          <section data-invite="organizer" className={inviteCard}>
+            <h5 className={inviteTitle}>{t(lang, 'organizer_invite')}</h5>
             <button type="button" disabled={!organizerLink} onClick={() => organizerLink && onCopy(organizerLink, 'link')} className="glass-well min-h-11 w-full rounded-full px-4 text-sm font-medium disabled:opacity-40">
               {t(lang, 'copy_link_leader')}
             </button>
           </section>
           {admin && adminLink ? (
-            <section data-invite="admin" className="space-y-3 border-t border-current/10 pt-5">
-              <h5 className={`text-[13px] font-medium ${textMuted(isDarkMode)}`}>{t(lang, 'admins_label')}</h5>
+            <section data-invite="admin" className={inviteCard}>
+              <h5 className={inviteTitle}>{t(lang, 'invite_admin')}</h5>
               <button type="button" onClick={() => onCopy(adminLink, 'link')} className="glass-well min-h-11 w-full rounded-full px-4 text-sm font-medium">
                 {t(lang, 'copy_admin_link')}
               </button>
@@ -304,16 +326,16 @@ function EventDetail({
           ) : null}
         </div>
 
-        <div className="mt-8 flex flex-col gap-2.5 border-t border-current/10 pt-6">
-          <button type="button" onClick={() => onChoreographers(campaign)} className={quiet}>
-            {t(lang, 'manage_leadership')}
+        <div className="mt-4 flex flex-wrap gap-x-5 px-1">
+          <button type="button" onClick={() => onChoreographers(campaign)} className={`min-h-11 text-sm font-medium ${textMuted(isDarkMode)}`}>
+            {t(lang, 'manage_organizers')}
           </button>
-          <button type="button" onClick={() => onDancers(campaign)} className={quiet}>
-            {t(lang, 'manage_members')}
+          <button type="button" onClick={() => onDancers(campaign)} className={`min-h-11 text-sm font-medium ${textMuted(isDarkMode)}`}>
+            {t(lang, 'manage_participants')}
           </button>
         </div>
-        {owner ? (
-          <button type="button" onClick={() => onDelete(campaign)} className="mt-6 min-h-11 w-full text-left text-sm font-medium text-[#f19ba8]">
+        {admin ? (
+          <button type="button" data-delete-event="" onClick={() => onDelete(campaign)} className="mt-4 min-h-11 w-full text-left text-sm font-medium text-[#f19ba8]">
             {t(lang, 'delete_event')}
           </button>
         ) : null}

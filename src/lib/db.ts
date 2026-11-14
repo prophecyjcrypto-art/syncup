@@ -422,8 +422,9 @@ export async function updateCampaign(campaignId: string, input: CampaignInput): 
 }
 
 export async function deleteCampaign(campaignId: string): Promise<void> {
-  const { error } = await client().from('hupaak_campaigns').delete().eq('id', campaignId)
+  const { data, error } = await client().from('hupaak_campaigns').delete().eq('id', campaignId).select('id')
   fail(error)
+  if (!Array.isArray(data) || data.length === 0) throw new Error('delete_blocked')
 }
 
 export async function setSavedSlots(campaignId: string, savedSlots: string[]): Promise<void> {

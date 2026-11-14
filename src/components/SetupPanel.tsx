@@ -3,7 +3,7 @@ import { formatHourCount, t } from '../i18n'
 import { formatHourOption, formatLongDate, getDaysArray, parseISODate, rangeOptions, toISODateString } from '../lib/dates'
 import { preferredInviteCode, preferredInviteLink, shortInviteUrl } from '../lib/invites'
 import { normalizeDurationHours } from '../lib/schedule'
-import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
+import { groupSurface, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { FieldLabel, InfoTip } from './Guide'
 import { InviteCode } from './InviteCode'
 import type { AppConfig, Campaign, CampaignInput, Language } from '../types'
@@ -75,7 +75,7 @@ export function SetupPanel({
   const labelClass = `text-[13px] font-medium leading-5 ${textMuted(isDarkMode)}`
   const fieldClass = `w-full rounded-xl px-3 py-2.5 text-[15px] font-medium leading-5 ${inputClass(isDarkMode)} ${lock}`
   const sectionTitle = `inline-flex items-center gap-1.5 text-[15px] font-semibold leading-5 ${textPrimary(isDarkMode)}`
-  const sectionRule = 'space-y-4 border-t border-current/10 pt-6'
+  const group = groupSurface('space-y-4')
 
   function setRange(field: 'startDate' | 'endDate', value: string) {
     setConfig((current) => {
@@ -143,8 +143,8 @@ export function SetupPanel({
         {readOnly ? <p className={`mt-1 text-[13px] leading-5 ${textMuted(isDarkMode)}`}>{t(lang, 'view_only')}</p> : null}
       </div>
       )}
-      <div className={`${cardClass(isDarkMode)} space-y-6 rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-8`}>
-        <section data-setup-section="timing" className="space-y-4">
+      <div className="space-y-6">
+        <section data-setup-section="timing" className={group}>
           <label className="block space-y-1.5">
             <span className={labelClass}>{t(lang, 'campaign_name')}</span>
             <input
@@ -248,7 +248,7 @@ export function SetupPanel({
           </label>
         </section>
 
-        <section data-setup-section="days" className={sectionRule}>
+        <section data-setup-section="days" className={group}>
           <div className="flex flex-wrap items-center gap-3">
             <h3 className={sectionTitle}>
               {t(lang, 'on_days')} / {t(lang, 'compulsory_days')}
@@ -267,7 +267,7 @@ export function SetupPanel({
               </button>
             </div>
           </div>
-          <div className="w-full max-w-md">
+          <div data-setup-calendar="" className="w-full">
           <MonthBoards
             days={days}
             lang={lang}
@@ -296,7 +296,7 @@ export function SetupPanel({
         </section>
 
         {showGroups || showInvites ? (
-          <section data-setup-section="people" className={sectionRule}>
+          <section data-setup-section="people" className="space-y-4">
           <div className="space-y-5" data-codes-section="">
             <div className="space-y-3" data-participants-block="">
               <h3 className={sectionTitle}>
@@ -304,28 +304,30 @@ export function SetupPanel({
                 <InfoTip lang={lang} name="participants" text={t(lang, showGroups && !showInvites ? 'groups_setup_hint' : 'participants_hint')} />
               </h3>
               {showInvites && initial ? (
-                <InviteCode
-                  lang={lang}
-                  isDarkMode={isDarkMode}
-                  label={t(lang, 'all_participants')}
-                  code={preferredInviteCode(initial.participantShort, initial.participantCode)}
-                  empty={t(lang, 'organizer_after_create')}
-                  onCopy={(_value, kind) =>
-                    share(
-                      preferredInviteCode(initial.participantShort, initial.participantCode),
-                      preferredInviteLink(initial.participantShort, initial.participantCode, 'participant'),
-                      kind,
-                    )
-                  }
-                />
+                <div className={group}>
+                  <InviteCode
+                    lang={lang}
+                    isDarkMode={isDarkMode}
+                    label={t(lang, 'all_participants')}
+                    code={preferredInviteCode(initial.participantShort, initial.participantCode)}
+                    empty={t(lang, 'organizer_after_create')}
+                    onCopy={(_value, kind) =>
+                      share(
+                        preferredInviteCode(initial.participantShort, initial.participantCode),
+                        preferredInviteLink(initial.participantShort, initial.participantCode, 'participant'),
+                        kind,
+                      )
+                    }
+                  />
+                </div>
               ) : showInvites ? (
-                <div className="space-y-1">
+                <div className={group}>
                   <p className={labelClass}>{t(lang, 'all_participants')}</p>
                   <p className={`text-sm leading-5 ${textMuted(isDarkMode)}`}>{t(lang, 'organizer_after_create')}</p>
                 </div>
               ) : null}
               {showGroups ? (
-              <div className="space-y-3 border-l border-current/15 pl-4">
+              <div className="space-y-3">
                 <p className={labelClass}>{t(lang, 'groups_label')}</p>
                 {!readOnly ? (
                   <form onSubmit={addDraftGroup} className={`flex gap-2 ${lock}`}>
@@ -347,18 +349,18 @@ export function SetupPanel({
                 {(initial ? initial.groups.length : draftGroups.length) > 0 ? (
                   <div className="space-y-3">
                     {initial
-                      ? initial.groups.map((group) => (
-                          <div key={group.id} className="space-y-1.5 border-t border-current/10 pt-3" data-group-id={group.id}>
+                      ? initial.groups.map((danceGroup) => (
+                          <div key={danceGroup.id} className={group} data-group-id={danceGroup.id}>
                             <div className="flex items-center justify-between gap-3">
-                              {renamingId === group.id && onRenameGroup ? (
+                              {renamingId === danceGroup.id && onRenameGroup ? (
                                 <input
                                   autoFocus
-                                  defaultValue={group.name}
+                                  defaultValue={danceGroup.name}
                                   aria-label={t(lang, 'group_placeholder')}
                                   onBlur={(event) => {
                                     setRenamingId(null)
                                     const next = event.target.value.trim()
-                                    if (next && next !== group.name) onRenameGroup(group.id, next)
+                                    if (next && next !== danceGroup.name) onRenameGroup(danceGroup.id, next)
                                   }}
                                   onKeyDown={(event) => {
                                     if (event.key === 'Enter') event.currentTarget.blur()
@@ -367,8 +369,8 @@ export function SetupPanel({
                                   className={`min-w-0 flex-1 rounded-xl px-3 py-2 text-[15px] font-medium ${inputClass(isDarkMode)}`}
                                 />
                               ) : (
-                                <button type="button" onClick={() => !readOnly && onRenameGroup && setRenamingId(group.id)} className={`truncate text-left text-[15px] font-medium ${textPrimary(isDarkMode)}`}>
-                                  {group.name}
+                                <button type="button" onClick={() => !readOnly && onRenameGroup && setRenamingId(danceGroup.id)} className={`truncate text-left text-[15px] font-medium ${textPrimary(isDarkMode)}`}>
+                                  {danceGroup.name}
                                 </button>
                               )}
                               {!readOnly && onDeleteGroup ? (
@@ -376,7 +378,7 @@ export function SetupPanel({
                                   type="button"
                                   className="text-sm font-medium text-[#f19ba8]"
                                   onClick={() => {
-                                    if (window.confirm(t(lang, 'delete_group'))) onDeleteGroup(group.id)
+                                    if (window.confirm(t(lang, 'delete_group'))) onDeleteGroup(danceGroup.id)
                                   }}
                                 >
                                   {t(lang, 'remove')}
@@ -387,17 +389,17 @@ export function SetupPanel({
                               lang={lang}
                               isDarkMode={isDarkMode}
                               label=""
-                              code={group.inviteCode ?? null}
+                              code={danceGroup.inviteCode ?? null}
                               empty={t(lang, 'organizer_after_create')}
                               onCopy={(_value, kind) =>
-                                share(group.inviteCode ?? null, group.inviteCode ? shortInviteUrl(group.inviteCode) : '', kind)
+                                share(danceGroup.inviteCode ?? null, danceGroup.inviteCode ? shortInviteUrl(danceGroup.inviteCode) : '', kind)
                               }
                             />
                           </div>
                         ))
-                      : draftGroups.map((group, index) => (
-                          <div key={`${group}-${index}`} className="flex items-center justify-between gap-3">
-                            <p className={`truncate text-[15px] font-medium ${textPrimary(isDarkMode)}`}>{group}</p>
+                      : draftGroups.map((draft, index) => (
+                          <div key={`${draft}-${index}`} className={`${group} flex items-center justify-between gap-3`}>
+                            <p className={`truncate text-[15px] font-medium ${textPrimary(isDarkMode)}`}>{draft}</p>
                             <button type="button" className="text-sm font-medium text-[#f19ba8]" onClick={() => setDraftGroups((current) => current.filter((_, item) => item !== index))}>
                               {t(lang, 'remove')}
                             </button>
@@ -409,7 +411,7 @@ export function SetupPanel({
             ) : null}
             </div>
             {showInvites ? (
-              <div className="space-y-3 border-t border-current/10 pt-5" data-organizer-block="">
+              <div className={group} data-organizer-block="">
                 <h3 className={sectionTitle}>
                   {t(lang, 'choreographer')}
                   <InfoTip lang={lang} name="organizer" text={t(lang, 'organizer_link_hint')} />
@@ -435,7 +437,7 @@ export function SetupPanel({
               </div>
             ) : null}
             {showInvites ? (
-              <div className="space-y-3 border-t border-current/10 pt-5" data-admins-block="">
+              <div className={group} data-admins-block="">
                 <h3 className={sectionTitle}>
                   {t(lang, 'admins_label')}
                   <InfoTip lang={lang} name="admins" text={t(lang, 'invite_admin_hint')} />
@@ -482,7 +484,7 @@ export function SetupPanel({
           </section>
         ) : null}
 
-        <section data-setup-section="notes" className={sectionRule}>
+        <section data-setup-section="notes" className={group}>
           <label className="block space-y-1.5">
             <span className={labelClass}>{t(lang, 'remarks_label')}</span>
             <textarea

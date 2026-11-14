@@ -468,6 +468,20 @@ assert(!/\bdelete\s+from\b/i.test(migrationBody), 'applying the migration does n
 assert(!/update\s+public\.hupaak_(campaigns|people|blocks|admins|access|groups|group_members)\b/i.test(migrationBody), 'applying the migration does not rewrite events or people')
 assert(!/set\s+code\s*=/i.test(migrationBody), 'applying the migration does not rotate existing long codes')
 
+const deleteMigration = readFileSync(new URL('../supabase/migrations/20261114120000_admins_delete_campaign.sql', import.meta.url), 'utf8')
+const deleteBody = deleteMigration.replace(/--.*$/gm, '')
+assert(deleteMigration.includes('hupaak_campaigns_delete'), 'the new migration names the delete policy')
+assert(deleteMigration.includes('hupaak_private.can_edit_campaign(id)'), 'admins who can edit may delete')
+assert(!deleteMigration.includes('is_campaign_choreographer'), 'choreographers are not granted delete')
+assert(!/hupaak_campaigns_(select|insert|update)\b/.test(deleteMigration), 'the migration does not rewrite other campaign policies')
+assert(!/\bdrop\s+table\b/i.test(deleteMigration), 'the delete migration does not drop a table')
+assert(!/\bdelete\s+from\b/i.test(deleteBody), 'the delete migration does not delete rows')
+assert(!/\bupdate\s+public\./i.test(deleteBody), 'the delete migration does not rewrite event rows')
+assert(/deleteCampaign[\s\S]*\.select\('id'\)[\s\S]*delete_blocked/.test(dbSource), 'a delete that removes no row is an error')
+assert(appSource.includes("raw === 'delete_blocked'") && appSource.includes("t(lang, 'delete_failed')"), 'a blocked delete is shown to the user')
+assert(!setupUi.includes('max-w-md'), 'the setup calendar is not locked to a narrow column')
+assert(!setupUi.includes('border-t border-current/10'), 'setup sections do not use hairline rules')
+
 const pairGroups = [
   { id: 'a', memberIds: ['ada', 'bea'] },
   { id: 'b', memberIds: ['bea'] },
