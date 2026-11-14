@@ -10,6 +10,7 @@ import { emailForAdminGrant, grantRole } from '../src/lib/roles.ts'
 import { paintBlocks, spansFromDrag } from '../src/lib/paint.ts'
 import { datesInRange, paintRange } from '../src/lib/dayDrag.ts'
 import { startsAtOrAfter } from '../src/lib/schedule.ts'
+import { publishedSlotKeys, readSessionNotes } from '../src/lib/sessionNotes.ts'
 import { SHORT_CODE_ALPHABET, normalizeLongCode, normalizeShortCode, parseInviteInput, shortCodeFromPath } from '../src/lib/invites.ts'
 import { buildCampaign, sampleShortlist } from '../src/dev/resultsPreview.tsx'
 import { commitSessions, pinsToSave, type SessionRange } from '../src/lib/sessions.ts'
@@ -556,6 +557,10 @@ assert(paintRange(new Set(['a', 'b', 'c']), ['a', 'b', 'c'], 'a', 'b', false).jo
 assert(startsAtOrAfter(setTime(parseISODate('2026-11-12'), 14), 14), 'a 2pm slot matches a 2pm start')
 assert(!startsAtOrAfter(setTime(parseISODate('2026-11-12'), 9), 14), 'a morning slot is hidden when sessions must start from 2pm')
 assert(startsAtOrAfter(setTime(parseISODate('2026-11-12'), 9), null), 'a blank start time keeps every slot')
+const publishedNotes = readSessionNotes({ '2026-11-12T06:00:00.000Z': { venue: '二號舞蹈室', remarks: '' } })
+assert(publishedNotes['2026-11-12T06:00:00.000Z']?.venue === '二號舞蹈室' && publishedNotes['2026-11-12T06:00:00.000Z']?.remarks === '', 'a published session keeps its venue when remarks are blank')
+assert(publishedSlotKeys([], publishedNotes).length === 1, 'participants read published times from the notes when the shortlist is hidden')
+assert(publishedSlotKeys(['saved'], publishedNotes)[0] === 'saved', 'organizers keep the saved shortlist')
 const headerSpans = spansFromDrag(
   { iso: paintDay, index: 0, header: true },
   { iso: paintDay, index: 0, header: true },

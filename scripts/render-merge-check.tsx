@@ -300,7 +300,7 @@ const hubResults = renderToStaticMarkup(
   ),
 )
 assert(hubResults.includes('data-hub="results"') && hubResults.includes('data-hub-tabs'), 'results uses the hub tab bar')
-assert(hubResults.includes('data-hub-step="participants"') && hubResults.includes('Dancer overlap'), 'results stays under the same tabs')
+assert(hubResults.includes('data-hub-step="participants"') && hubResults.includes('data-slot-grid'), 'results stays under the same tabs')
 assert(!hubResults.includes('Connect Google Calendar'), 'the results tab keeps Google Calendar hidden')
 assert(!hubResults.includes('data-hub-steps'), 'results does not bring back the numbered steps')
 
@@ -318,7 +318,8 @@ const results = renderToStaticMarkup(
     }),
   ),
 )
-assert(results.includes('Dancer overlap'), 'results show the half-hour overlap heatmap')
+assert(results.includes('data-slot-grid') && !results.includes('Dancer overlap'), 'results show the heatmap without the overlap heading')
+assert(!results.includes('data-attendance') && !results.includes('data-suggest-dates'), 'date and attendance filters stay in Suggest')
 assert(results.includes('1 of 1 free'), 'heatmap cells count free dancers')
 assert(results.includes('data-pick="manual"') && results.includes('data-pick="suggest"'), 'results can switch between manual and suggested times')
 assert(!results.includes('data-duration-step'), 'the manual view does not include the suggestion stepper')
@@ -339,6 +340,8 @@ const suggested = renderToStaticMarkup(
   ),
 )
 assert(suggested.includes('Best times') && suggested.includes('data-earliest-start'), 'suggestions can be limited by when they start')
+assert(suggested.includes('Minimum availability') && suggested.includes('data-attendance') && suggested.includes('data-suggest-dates'), 'suggestions can be limited by date and attendance')
+assert(suggested.includes('data-dancer-id="all"') && suggested.includes('data-dancer-id="d1"'), 'suggestions can be limited to selected dancers')
 assert(!suggested.includes('data-slot-grid'), 'suggestions are not the heatmap')
 const ownerUp = suggested.match(/<button\b[^>]*data-duration-step="up"[^>]*>/)
 const ownerDown = suggested.match(/<button\b[^>]*data-duration-step="down"[^>]*>/)
@@ -363,7 +366,7 @@ const memberResults = renderToStaticMarkup(
     }),
   ),
 )
-assert(memberResults.includes('參加者重疊'), 'members still see the overlap heatmap')
+assert(memberResults.includes('data-slot-grid') && !memberResults.includes('參加者重疊'), 'members still see the heatmap without the overlap heading')
 assert(!/<select\b/.test(memberResults), 'the manual view does not use a length dropdown')
 const memberSuggest = renderToStaticMarkup(
   withCalendar(
@@ -383,7 +386,40 @@ const memberSuggest = renderToStaticMarkup(
 const memberSteps = memberSuggest.match(/<button\b[^>]*data-duration-step="(?:up|down)"[^>]*>/g) ?? []
 assert(memberSteps.length === 2 && memberSteps.every((button) => /\sdisabled=/.test(button)), 'members cannot change the shared duration')
 assert(memberResults.includes('disabled=""'), 'members cannot pin the shortlist')
-assert(!memberResults.includes('用這個時段'), 'members do not get the shortlist button')
+assert(!memberResults.includes('用這個時段') && !memberResults.includes('用這些時段') && !memberResults.includes('發佈'), 'members do not get the publish button')
+const publishedSlot = setTime(parseISODate('2026-11-12'), 14).toISOString()
+const publishManual = renderToStaticMarkup(
+  withCalendar(
+    createElement(ResultsPanel, {
+      lang: 'zh',
+      isDarkMode: true,
+      campaign: { ...campaign, savedSlots: [publishedSlot], config: { ...config, durationHours: 2, sessionNotes: { [publishedSlot]: { venue: '二號舞蹈室', remarks: '請準時到達。' } } } },
+      onBack: () => undefined,
+      onSaveSlots: () => undefined,
+      canPin: true,
+      canSetDuration: true,
+      onSaveDuration: () => undefined,
+    }),
+  ),
+)
+const publishSuggest = renderToStaticMarkup(
+  withCalendar(
+    createElement(ResultsPanel, {
+      lang: 'en',
+      isDarkMode: true,
+      campaign: { ...campaign, savedSlots: [publishedSlot], config: { ...config, durationHours: 2 } },
+      onBack: () => undefined,
+      onSaveSlots: () => undefined,
+      canPin: true,
+      canSetDuration: true,
+      onSaveDuration: () => undefined,
+      initialPick: 'suggest',
+    }),
+  ),
+)
+assert(publishManual.includes('data-publish') && publishManual.includes('發佈') && publishManual.includes('data-venue') && publishManual.includes('二號舞蹈室'), 'manual publish includes the venue and remarks')
+assert(!publishManual.includes('用這些時段') && !publishManual.includes('用這些時間') && !publishManual.includes('發佈給所有人'), 'publish does not use the old shortlist wording')
+assert(publishSuggest.includes('data-publish') && publishSuggest.includes('Publish') && publishSuggest.includes('data-venue') && publishSuggest.includes('data-session-remarks'), 'suggest publish uses the same button')
 
 const list = renderToStaticMarkup(
   createElement(CampaignList, {
@@ -569,7 +605,12 @@ const portalView = renderToStaticMarkup(
     isDarkMode: false,
     campaign: {
       ...campaign,
-      config: { ...config, durationHours: 2, dayEndHour: 22 },
+      config: {
+        ...config,
+        durationHours: 2,
+        dayEndHour: 22,
+        sessionNotes: { [portalSession.toISOString()]: { venue: '二號舞蹈室', remarks: '請準時到達。' } },
+      },
       savedSlots: [portalSession.toISOString()],
       dancers: [
         {
@@ -601,6 +642,7 @@ assert(portalView.includes('已定時段') && portalView.includes('出席時數'
 assert(portalView.includes('data-attended-hours="2"') && portalView.includes('data-confirmed-session'), 'the afternoon session counts as attended')
 assert(portalView.includes('OK') && !portalView.includes('參加者重疊') && !portalView.includes('data-slot-grid'), 'the participant portal is not the organizer results grid')
 assert(portalView.includes('data-confirmed-day="2026-11-12"') && portalView.includes('14:00'), 'confirmed times are marked on the calendar')
+assert(portalView.includes('二號舞蹈室') && portalView.includes('請準時到達。') && portalView.includes('data-venue="二號舞蹈室"'), 'participants see the venue and remarks on the session')
 function hubAccent(html: string, id: string): string {
   const button = html.match(new RegExp(`<button\\b[^>]*data-hub-step="${id}"[^>]*>`))?.[0] ?? ''
   return button.match(/data-accent="([^"]+)"/)?.[1] ?? ''

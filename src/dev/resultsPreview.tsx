@@ -6,7 +6,7 @@ import { CalendarProvider } from '../lib/calendarContext'
 import { parseISODate, setTime, toISODateString } from '../lib/dates'
 import { calculateBestSlots } from '../lib/schedule'
 import { textMuted, textPrimary } from '../lib/ui'
-import type { BlockKind, Campaign, Language, Person, TimeBlock } from '../types'
+import type { BlockKind, Campaign, Language, Person, SessionNote, TimeBlock } from '../types'
 
 const days = ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20']
 
@@ -137,10 +137,11 @@ function DevResults() {
   const [lang, setLang] = useState<Language>('zh')
   const [savedSlots, setSavedSlots] = useState<string[]>(sampleShortlist)
   const [durationHours, setDurationHours] = useState<number | null>(2)
-  const campaign = useMemo(
-    () => buildCampaign(lang, savedSlots, durationHours),
-    [lang, savedSlots, durationHours],
-  )
+  const [notes, setNotes] = useState<Record<string, SessionNote>>({})
+  const campaign = useMemo(() => {
+    const built = buildCampaign(lang, savedSlots, durationHours)
+    return { ...built, config: { ...built.config, sessionNotes: notes } }
+  }, [lang, savedSlots, durationHours, notes])
 
   return (
     <div className="theme-dark min-h-dvh" data-preview="" data-dev-results="">
@@ -185,6 +186,10 @@ function DevResults() {
               campaign={campaign}
               onBack={() => undefined}
               onSaveSlots={setSavedSlots}
+              onPublish={(slots, next) => {
+                setSavedSlots(slots)
+                setNotes(next)
+              }}
               canPin
               canSetDuration
               onSaveDuration={setDurationHours}

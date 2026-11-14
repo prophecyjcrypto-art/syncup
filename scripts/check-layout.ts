@@ -294,8 +294,16 @@ async function main() {
         const paint = await cdp.eval<number>(`document.querySelectorAll('[data-avail-grid], [data-avail-cell]').length`)
         assert(paint === 0, `${item.name} still uses the paint grid`)
       } else if (item.path.includes('results') || item.path.includes('setup')) {
-        const height = await cdp.eval<number | null>(`document.querySelector('.cal-day')?.getBoundingClientRect().height ?? null`)
-        assert(height != null && height <= 44, `${item.name} calendar cells are ${height}px tall`)
+        const height = await cdp.eval<number | string | null>(`(async () => {
+          if (${item.path.includes('results')}) {
+            document.querySelector('[data-pick="suggest"]')?.click()
+            await new Promise((resolve) => setTimeout(resolve, 60))
+          }
+          const day = document.querySelector('.cal-day')
+          if (day) return day.getBoundingClientRect().height
+          return document.body.innerText.slice(0, 160)
+        })()`)
+        assert(typeof height === 'number' && height <= 44, `${item.name} calendar cells are ${height}px tall`)
       }
       if (item.path.includes('availability') || item.path.includes('setup')) {
         const grids = await cdp.eval<number>(`document.querySelectorAll('[data-slot-grid]').length`)
@@ -319,6 +327,8 @@ async function main() {
     }
 
     await openPage(cdp, '/?preview=results&lang=zh', 390, 844)
+    await cdp.eval(`document.querySelector('[data-pick="suggest"]')?.click()`)
+    await delay(40)
     await cdp.eval(`document.querySelector('.cal-day')?.scrollIntoView({ block: 'center' })`)
     await delay(100)
     const calendarHeight = await cdp.eval<number>(`document.querySelector('.cal-day')?.getBoundingClientRect().height ?? 0`)
@@ -607,6 +617,8 @@ async function main() {
     assert(eventsTip.includes('主辦人連結可以管理名單'), `events tip dropped the link note: "${eventsTip}"`)
 
     await openPage(cdp, '/?preview=results&lang=zh', 390, 844)
+    await cdp.eval(`document.querySelector('[data-pick="suggest"]')?.click()`)
+    await delay(40)
     const datesTip = await cdp.eval<string>(`(async () => {
       const button = document.querySelector('[data-info="dates"]')
       if (!(button instanceof HTMLElement)) return 'missing'
@@ -721,12 +733,19 @@ async function main() {
     }
     await cdp.eval(`document.querySelector('[data-grid-expand]')?.click()`)
     await delay(40)
-    const expanded = await cdp.eval<string>(`JSON.stringify({
-      full: document.querySelector('[data-grid-full]') != null,
-      sheet: document.querySelector('[data-grid-sheet]')?.textContent ?? '',
-    })`)
-    const expandedParsed = JSON.parse(expanded) as { full: boolean; sheet: string }
-    assert(expandedParsed.full && expandedParsed.sheet.includes('候選'), `full calendar was ${expanded}`)
+    const expanded = await cdp.eval<string>(`(() => {
+      const node = document.querySelector('[data-grid-full]')
+      const box = node?.getBoundingClientRect()
+      return JSON.stringify({
+        full: node != null,
+        sheet: document.querySelector('[data-grid-sheet]')?.textContent ?? '',
+        covers: Boolean(box && box.top <= 1 && box.left <= 1 && box.width >= window.innerWidth - 2 && box.height >= window.innerHeight - 2),
+        heading: document.body.innerText.includes('參加者重疊'),
+        close: document.querySelector('[data-grid-expand]')?.textContent ?? '',
+      })
+    })()`)
+    const expandedParsed = JSON.parse(expanded) as { full: boolean; sheet: string; covers: boolean; heading: boolean; close: string }
+    assert(expandedParsed.full && expandedParsed.covers && expandedParsed.sheet.includes('候選') && !expandedParsed.heading && expandedParsed.close.includes('關閉'), `full calendar was ${expanded}`)
     await cdp.eval(`document.querySelector('[data-grid-expand]')?.click()`)
     await delay(40)
     const closed = await cdp.eval<boolean>(`document.querySelector('[data-grid-full]') == null`)

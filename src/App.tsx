@@ -690,6 +690,22 @@ export default function App() {
               setCampaigns((current) => current.map((campaign) => (campaign.id === active.id ? { ...campaign, savedSlots: slots } : campaign)))
               void run(() => setSavedSlots(active.id, slots))
             }}
+            onPublish={(slots, notes) => {
+              if (!canManageRoster(active, user.id, user.email)) return
+              const config = { ...active.config, sessionNotes: notes }
+              setCampaigns((current) => current.map((campaign) => (campaign.id === active.id ? { ...campaign, savedSlots: slots, config } : campaign)))
+              void run(async () => {
+                await setSavedSlots(active.id, slots)
+                await updateCampaign(active.id, {
+                  name: active.name,
+                  remarks: active.remarks,
+                  config,
+                  expiryDate: active.expiryDate,
+                  onDays: active.onDays,
+                  compulsoryDays: active.compulsoryDays,
+                })
+              })
+            }}
             onSaveDuration={(hours) => {
               if (!canEditEvent(active, user.id, user.email)) return
               const config = { ...active.config, durationHours: hours }

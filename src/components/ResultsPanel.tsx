@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { t } from '../i18n'
 import { useCalendar } from '../lib/calendarContext'
 import { buildIcs, formatSlotText } from '../lib/export'
@@ -7,11 +7,11 @@ import { formatHourOption, formatLongDate, formatTime, getDaysArray, parseISODat
 import { durationHours, fitDuration, roundHour, SLOT_STEP } from '../lib/timeRange'
 import { availabilityHeatmap, calculateBestSlots, classifySessionWindow, compulsoryReport, sharedFreeByDay, shortlistSessionHours, startsAtOrAfter, type MarkFilter } from '../lib/schedule'
 import { consumeDayClick } from '../lib/dayDrag'
-import { commitSessions, pinsToSave, toggleSessionDay, type SessionRange } from '../lib/sessions'
+import { commitSessions, toggleSessionDay, type SessionRange } from '../lib/sessions'
 import { organizersOf } from '../lib/roles'
 import { cardClass, inputClass, textMuted, textPrimary } from '../lib/ui'
 import { InfoTip } from './Guide'
-import type { Campaign, Language, TimeSlot } from '../types'
+import type { Campaign, Language, SessionNote, TimeSlot } from '../types'
 import { MonthBoards } from './MonthBoards'
 import { AnalysisPanel } from './AnalysisPanel'
 import { HeatBook, slotMatchesSession } from './HeatBook'
@@ -40,6 +40,7 @@ export function ResultsPanel({
   canPin = true,
   canSetDuration = true,
   onSaveDuration,
+  onPublish,
   embedded = false,
   initialPick = 'manual',
 }: {
@@ -51,6 +52,7 @@ export function ResultsPanel({
   canPin?: boolean
   canSetDuration?: boolean
   onSaveDuration?: (hours: number) => void
+  onPublish?: (slots: string[], notes: Record<string, SessionNote>) => void
   embedded?: boolean
   initialPick?: 'manual' | 'suggest'
 }) {
@@ -73,10 +75,11 @@ export function ResultsPanel({
   const [resultsView, setResultsView] = useState<'schedule' | 'analysis'>('schedule')
   const [pickMode, setPickMode] = useState<'manual' | 'suggest'>(initialPick)
   const [earliestStart, setEarliestStart] = useState<number | null>(null)
+  const [notes, setNotes] = useState<Record<string, SessionNote>>(() => ({ ...(campaign.config.sessionNotes ?? {}) }))
+  const [draftPins, setDraftPins] = useState<string[]>(campaign.savedSlots)
   const calendar = useCalendar()
-  const saveSlotsRef = useRef(onSaveSlots)
-  const armPin = useRef(false)
-  saveSlotsRef.current = onSaveSlots
+  const notesKey = JSON.stringify(campaign.config.sessionNotes ?? {})
+  const savedKey = campaign.savedSlots.join('|')
 
   useEffect(() => {
     setRequiredIds(choreoKey ? choreoKey.split('|') : [])
@@ -87,6 +90,12 @@ export function ResultsPanel({
   useEffect(() => {
     setDraftHours(campaign.config.durationHours)
   }, [campaign.config.durationHours])
+  useEffect(() => {
+    setNotes({ ...(campaign.config.sessionNotes ?? {}) })
+  }, [notesKey])
+  useEffect(() => {
+    setDraftPins(campaign.savedSlots)
+  }, [savedKey])
 
   const days = useMemo(
     () => getDaysArray(parseISODate(campaign.config.startDate), parseISODate(campaign.config.endDate)),
@@ -114,46 +123,26 @@ export function ResultsPanel({
   }, [sessions, slots, dancers, slotConfig.attendanceTolerance])
   const shownSlots = useMemo(() => [...slots, ...windowSlots], [slots, windowSlots])
 
-  const dated = shownSlots.filter((slot) => {
+  const listed = shownSlots.filter((slot) => {
     const iso = toISODateString(slot.start)
-    if (onDaysOnly && !campaign.onDays.includes(iso)) return false
     if (selectedDates.size > 0 && !selectedDates.has(iso)) return false
-    return slot.attendanceScore >= minAttendance
-  })
-  const listed = dated.filter((slot) => {
+    if (slot.attendanceScore < minAttendance) return false
     if (dancerFilter.length > 0 && !dancerFilter.every((id) => slot.availableMembers.includes(id))) return false
     return startsAtOrAfter(slot.start, earliestStart)
   })
   const pinned = listed
-    .filter((slot) => campaign.savedSlots.includes(slotKey(slot)))
+    .filter((slot) => draftPins.includes(slotKey(slot)))
     .sort((left, right) => left.start.getTime() - right.start.getTime())
-  const others = listed.filter((slot) => !campaign.savedSlots.includes(slotKey(slot)))
+  const others = listed.filter((slot) => !draftPins.includes(slotKey(slot)))
 
-  const overlapDates = (selectedDates.size > 0
-    ? [...selectedDates]
-    : onDaysOnly
-      ? campaign.onDays
-      : days.map((day) => toISODateString(day))
-  ).sort()
+  const heatDates = (onDaysOnly ? campaign.onDays : days.map((day) => toISODateString(day))).sort()
   const listedHours = shortlistSessionHours(campaign.config.durationHours, campaign.savedSlots)
-  const overlap = sharedFreeByDay(campaign.config, required, overlapDates)
-  const heat = availabilityHeatmap(campaign.config, dancers, overlapDates, markFilter)
-  const pinKeys = sessions.flatMap((session) => {
-    const slot = slots.find((item) => slotMatchesSession(item, session))
-    return slot ? [slotKey(slot)] : []
-  })
-  const pinKey = pinKeys.join('|')
-
+  const overlap = sharedFreeByDay(campaign.config, required, heatDates)
+  const heat = availabilityHeatmap(campaign.config, dancers, heatDates, markFilter)
   useEffect(() => {
     if (groupId && !campaign.groups.some((group) => group.id === groupId)) setGroupId(null)
   }, [campaign.groups, groupId])
 
-  useEffect(() => {
-    if (!armPin.current) return
-    armPin.current = false
-    const next = pinsToSave(canPin, campaign.savedSlots, pinKeys)
-    if (next) saveSlotsRef.current(next)
-  }, [canPin, pinKey, campaign.savedSlots])
   const openDays = overlap.filter((day) => day.windows.length > 0)
   const closedDays = overlap.length - openDays.length
   const report = compulsoryReport(campaign.config, everyone, campaign.compulsoryDays)
@@ -182,12 +171,9 @@ export function ResultsPanel({
     return daySlots.reduce((sum, slot) => sum + slot.attendanceScore, 0) / daySlots.length
   }
 
-  function toggleSaved(key: string) {
+  function toggleDraft(key: string) {
     if (!canPin) return
-    const next = campaign.savedSlots.includes(key)
-      ? campaign.savedSlots.filter((item) => item !== key)
-      : [...campaign.savedSlots, key]
-    onSaveSlots(next)
+    setDraftPins((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]))
   }
 
   const maxHours = roundHour(Math.max(SLOT_STEP, campaign.config.dayEndHour - campaign.config.dayStartHour))
@@ -200,7 +186,6 @@ export function ResultsPanel({
   }
 
   function commitSession(block: SessionRange, sourceId: string | null) {
-    armPin.current = true
     const result = commitSessions(sessions, block, sourceId)
     setSessions(result.sessions)
     setFocusId(result.focusId)
@@ -244,7 +229,6 @@ export function ResultsPanel({
       return
     }
     const addedId = crypto.randomUUID()
-    armPin.current = true
     setSessions((current) => {
       const base = current.find((item) => item.id === source.id) ?? source
       return toggleSessionDay(current, iso, base, addedId).sessions
@@ -288,13 +272,16 @@ export function ResultsPanel({
     setLength(roundHour(draftHours + delta * SLOT_STEP))
   }
 
-  function toggleSavedMany(keys: string[]) {
+  function publish(keys: string[]) {
     if (!canPin || keys.length === 0) return
-    const allSaved = keys.every((key) => campaign.savedSlots.includes(key))
-    const next = allSaved
-      ? campaign.savedSlots.filter((key) => !keys.includes(key))
-      : [...new Set([...campaign.savedSlots, ...keys])]
-    onSaveSlots(next)
+    const next: Record<string, SessionNote> = {}
+    for (const key of keys) {
+      const note = notes[key] ?? { venue: '', remarks: '' }
+      next[key] = { venue: note.venue.trim(), remarks: note.remarks.trim() }
+    }
+    if (onPublish) onPublish(keys, next)
+    else onSaveSlots(keys)
+    setNotice(t(lang, 'published_done'))
   }
 
   function toggleDancer(id: string) {
@@ -315,8 +302,8 @@ export function ResultsPanel({
   }
 
   function targets(): TimeSlot[] {
-    const chosen = dated.filter((slot) => picked.has(slotKey(slot)))
-    const source = chosen.length > 0 ? chosen : pinned.length > 0 ? pinned : dated
+    const chosen = listed.filter((slot) => picked.has(slotKey(slot)))
+    const source = chosen.length > 0 ? chosen : pinned.length > 0 ? pinned : listed
     return [...source].sort((left, right) => left.start.getTime() - right.start.getTime())
   }
 
@@ -405,10 +392,10 @@ export function ResultsPanel({
               type="button"
               title={t(lang, 'pin_hint')}
               disabled={!canPin}
-              onClick={() => toggleSaved(key)}
-              className={`flex h-11 w-11 items-center justify-center text-xl disabled:cursor-default ${campaign.savedSlots.includes(key) ? 'text-[#f6cf7a]' : 'text-zinc-500'}`}
+              onClick={() => toggleDraft(key)}
+              className={`flex h-11 w-11 items-center justify-center text-xl disabled:cursor-default ${draftPins.includes(key) ? 'text-[#f6cf7a]' : 'text-zinc-500'}`}
             >
-              {campaign.savedSlots.includes(key) ? '★' : '☆'}
+              {draftPins.includes(key) ? '★' : '☆'}
             </button>
             <button
               type="button"
@@ -442,6 +429,131 @@ export function ResultsPanel({
           </div>
         )}
       </article>
+    )
+  }
+
+  function manualKeys(): string[] {
+    const painted = sessions.map((session) => setTime(parseISODate(session.iso), session.startHour).toISOString())
+    const source = painted.length > 0 ? painted : campaign.savedSlots
+    return [...new Set(source)]
+  }
+
+  function setNote(key: string, patch: Partial<SessionNote>) {
+    setNotes((current) => {
+      const prev = current[key] ?? { venue: '', remarks: '' }
+      return { ...current, [key]: { venue: prev.venue, remarks: prev.remarks, ...patch } }
+    })
+  }
+
+  function peopleFilters() {
+    return (
+      <div className="space-y-2" data-people-filters="">
+        {campaign.groups.length > 0 ? (
+          <div className="chip-row py-1">
+            <button
+              type="button"
+              data-group-id="all"
+              aria-pressed={groupId === null}
+              onClick={() => setGroupId(null)}
+              className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${groupId === null ? 'chip-on' : 'glass-well'}`}
+            >
+              {t(lang, 'filter_all')}
+            </button>
+            {campaign.groups.map((group) => {
+              const on = groupId === group.id
+              return (
+                <button
+                  key={group.id}
+                  type="button"
+                  data-group-id={group.id}
+                  aria-pressed={on}
+                  onClick={() => {
+                    setGroupId(group.id)
+                    setDancerFilter([])
+                  }}
+                  className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'chip-on' : 'glass-well'}`}
+                >
+                  {group.name}
+                </button>
+              )
+            })}
+          </div>
+        ) : null}
+        <p className={`inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>
+          {t(lang, 'filter_dancers')}
+          <InfoTip lang={lang} name="dancers" text={t(lang, dancerFilter.length === 0 ? 'filter_hint' : 'filter_active')} />
+        </p>
+        <div className="chip-row py-1">
+          <button
+            type="button"
+            data-dancer-id="all"
+            aria-pressed={dancerFilter.length === 0}
+            onClick={() => setDancerFilter([])}
+            className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${dancerFilter.length === 0 ? 'chip-on' : 'glass-well'}`}
+          >
+            {t(lang, 'filter_all')}
+          </button>
+          {population.map((person) => {
+            const on = dancerFilter.includes(person.id)
+            return (
+              <button
+                key={person.id}
+                type="button"
+                data-dancer-id={person.id}
+                aria-pressed={on}
+                onClick={() => toggleDancer(person.id)}
+                className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'chip-on' : 'glass-well'}`}
+              >
+                {person.name}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  function draftFields(keys: string[]) {
+    if (!canPin || keys.length === 0) return null
+    return (
+      <div className="mt-4 space-y-3" data-session-draft="">
+        {keys.map((key) => {
+          const start = new Date(key)
+          const hours = draftHours ?? campaign.config.durationHours ?? 0
+          const end = new Date(start.getTime() + hours * 3600000)
+          const note = notes[key] ?? { venue: '', remarks: '' }
+          const when = Number.isNaN(start.getTime())
+            ? key
+            : `${formatLongDate(start, lang)} · ${formatTime(start, lang)}${hours > 0 ? ` – ${formatTime(end, lang)}` : ''}`
+          return (
+            <div key={key} className="space-y-2">
+              <p className={`text-sm font-bold ${textPrimary(isDarkMode)}`}>{when}</p>
+              <label className="block space-y-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                {t(lang, 'venue_label')}
+                <input
+                  data-venue=""
+                  value={note.venue}
+                  onChange={(event) => setNote(key, { venue: event.target.value })}
+                  className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+                />
+              </label>
+              <label className="block space-y-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                {t(lang, 'remarks_label')}
+                <textarea
+                  data-session-remarks=""
+                  rows={2}
+                  value={note.remarks}
+                  onChange={(event) => setNote(key, { remarks: event.target.value })}
+                  className={`w-full rounded-xl px-3 py-3 text-sm font-bold ${inputClass(isDarkMode)}`}
+                />
+              </label>
+            </div>
+          )
+        })}
+        <button type="button" data-publish="" onClick={() => publish(keys)} className="btn-glow btn-primary min-h-11 rounded-full px-4 text-xs font-bold">
+          {t(lang, 'publish')}
+        </button>
+      </div>
     )
   }
 
@@ -552,62 +664,6 @@ export function ResultsPanel({
               {t(lang, 'on_days_only')}
             </label>
           </section>
-          <section className={`${cardClass(isDarkMode)} rounded-[1.5rem] p-4 sm:p-5`}>
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className={`inline-flex items-center gap-2 font-bold ${textPrimary(isDarkMode)}`}>
-                {t(lang, 'availability_map')}
-                <InfoTip lang={lang} name="dates" text={t(lang, 'tip_click_dates')} />
-              </h3>
-              {(selectedDates.size > 0 || minAttendance !== 70 || onDaysOnly) && (
-                <button
-                  type="button"
-                  className="text-xs font-bold text-[#f19ba8]"
-                  onClick={() => {
-                    setSelectedDates(new Set())
-                    setMinAttendance(70)
-                    setOnDaysOnly(false)
-                  }}
-                >
-                  {t(lang, 'reset_filters')}
-                </button>
-              )}
-            </div>
-            <MonthBoards
-              days={days}
-              lang={lang}
-              isDarkMode={isDarkMode}
-              selected={[...selectedDates]}
-              onSelectRange={(next) => setSelectedDates(new Set(next))}
-              renderDay={(day) => {
-                const iso = toISODateString(day)
-                const score = scoreFor(iso)
-                const selected = selectedDates.has(iso)
-                return (
-                  <button
-                    type="button"
-                    data-cal-iso={iso}
-                    data-day-on={selected ? '' : undefined}
-                    aria-label={formatLongDate(day, lang)}
-                    onClick={() => {
-                      if (consumeDayClick()) return
-                      const next = new Set(selectedDates)
-                      if (next.has(iso)) next.delete(iso)
-                      else next.add(iso)
-                      setSelectedDates(next)
-                    }}
-                    className={`cal-day flex w-full items-center justify-center rounded-md text-xs font-bold leading-none ${scoreTone(score, isDarkMode)} ${selected ? 'ring-2 ring-white' : ''} ${campaign.compulsoryDays.includes(iso) ? 'outline outline-2 outline-[#f19ba8]' : ''}`}
-                  >
-                    {campaign.onDays.includes(iso) ? '★' : ''}
-                    {day.getDate()}
-                  </button>
-                )
-              }}
-            />
-            <label className="mt-4 block text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-              {t(lang, 'attendance_threshold')}: {minAttendance}%
-              <input type="range" min={0} max={100} step={10} value={minAttendance} onChange={(event) => setMinAttendance(Number(event.target.value))} className="mt-2 w-full accent-[#7c7bb9]" />
-            </label>
-          </section>
           {report.length > 0 && (
             <section className={`${cardClass(isDarkMode)} space-y-3 rounded-[1.5rem] p-4 sm:p-5`}>
               <h3 className={`font-bold ${textPrimary(isDarkMode)}`}>{t(lang, 'compulsory_report')}</h3>
@@ -623,69 +679,7 @@ export function ResultsPanel({
           )}
         </div>
         <section className={`${cardClass(isDarkMode)} order-1 min-w-0 rounded-[1.5rem] p-4 sm:p-5 md:order-2`}>
-          <div className="space-y-2">
-            {campaign.groups.length > 0 ? (
-              <div className="chip-row py-1">
-                <button
-                  type="button"
-                  data-group-id="all"
-                  aria-pressed={groupId === null}
-                  onClick={() => setGroupId(null)}
-                  className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${groupId === null ? 'chip-on' : 'glass-well'}`}
-                >
-                  {t(lang, 'filter_all')}
-                </button>
-                {campaign.groups.map((group) => {
-                  const on = groupId === group.id
-                  return (
-                    <button
-                      key={group.id}
-                      type="button"
-                      data-group-id={group.id}
-                      aria-pressed={on}
-                      onClick={() => {
-                        setGroupId(group.id)
-                        setDancerFilter([])
-                      }}
-                      className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'chip-on' : 'glass-well'}`}
-                    >
-                      {group.name}
-                    </button>
-                  )
-                })}
-              </div>
-            ) : null}
-            <p className={`inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>
-              {t(lang, 'filter_dancers')}
-              <InfoTip lang={lang} name="dancers" text={t(lang, dancerFilter.length === 0 ? 'filter_hint' : 'filter_active')} />
-            </p>
-            <div className="chip-row py-1">
-              <button
-                type="button"
-                data-dancer-id="all"
-                aria-pressed={dancerFilter.length === 0}
-                onClick={() => setDancerFilter([])}
-                className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${dancerFilter.length === 0 ? 'chip-on' : 'glass-well'}`}
-              >
-                {t(lang, 'filter_all')}
-              </button>
-              {population.map((person) => {
-                const on = dancerFilter.includes(person.id)
-                return (
-                  <button
-                    key={person.id}
-                    type="button"
-                    data-dancer-id={person.id}
-                    aria-pressed={on}
-                    onClick={() => toggleDancer(person.id)}
-                    className={`min-h-11 shrink-0 rounded-full px-3 text-xs font-bold ${on ? 'chip-on' : 'glass-well'}`}
-                  >
-                    {person.name}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+          {peopleFilters()}
           <HeatBook
             lang={lang}
             isDarkMode={isDarkMode}
@@ -698,7 +692,6 @@ export function ResultsPanel({
             markFilter={markFilter}
             durationHours={draftHours}
             editable={canSetDuration}
-            canPin={canPin}
             windowStart={campaign.config.dayStartHour}
             windowEnd={campaign.config.dayEndHour}
             nameOf={nameOf}
@@ -711,7 +704,7 @@ export function ResultsPanel({
               setSessions([])
               setFocusId(null)
             }}
-            onToggleSaved={toggleSavedMany}
+            footer={draftFields(manualKeys())}
             filter={<MarkFilterControl lang={lang} value={markFilter} onChange={setMarkFilter} wide />}
             sheet={
               <div className="space-y-1">
@@ -761,6 +754,62 @@ export function ResultsPanel({
               {selectedDates.size > 0 ? t(lang, 'dates_selected', { n: selectedDates.size }) : t(lang, 'rehearsal_recommendations')}
             </h3>
             {durationUnset ? null : <p className={`mt-1 text-sm ${textMuted(isDarkMode)}`}>{t(lang, 'found_slots', { n: listed.length })}</p>}
+            {peopleFilters()}
+            <div className="mt-4" data-suggest-dates="">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className={`inline-flex items-center gap-2 font-bold ${textPrimary(isDarkMode)}`}>
+                  {t(lang, 'availability_map')}
+                  <InfoTip lang={lang} name="dates" text={t(lang, 'tip_click_dates')} />
+                </h4>
+                {(selectedDates.size > 0 || minAttendance !== 70) && (
+                  <button
+                    type="button"
+                    className="text-xs font-bold text-[#f19ba8]"
+                    onClick={() => {
+                      setSelectedDates(new Set())
+                      setMinAttendance(70)
+                    }}
+                  >
+                    {t(lang, 'reset_filters')}
+                  </button>
+                )}
+              </div>
+              <MonthBoards
+                days={days}
+                lang={lang}
+                isDarkMode={isDarkMode}
+                selected={[...selectedDates]}
+                onSelectRange={(next) => setSelectedDates(new Set(next))}
+                renderDay={(day) => {
+                  const iso = toISODateString(day)
+                  const score = scoreFor(iso)
+                  const selected = selectedDates.has(iso)
+                  return (
+                    <button
+                      type="button"
+                      data-cal-iso={iso}
+                      data-day-on={selected ? '' : undefined}
+                      aria-label={formatLongDate(day, lang)}
+                      onClick={() => {
+                        if (consumeDayClick()) return
+                        const next = new Set(selectedDates)
+                        if (next.has(iso)) next.delete(iso)
+                        else next.add(iso)
+                        setSelectedDates(next)
+                      }}
+                      className={`cal-day flex w-full items-center justify-center rounded-md text-xs font-bold leading-none ${scoreTone(score, isDarkMode)} ${selected ? 'ring-2 ring-white' : ''} ${campaign.compulsoryDays.includes(iso) ? 'outline outline-2 outline-[#f19ba8]' : ''}`}
+                    >
+                      {campaign.onDays.includes(iso) ? '★' : ''}
+                      {day.getDate()}
+                    </button>
+                  )
+                }}
+              />
+              <label className="mt-4 block text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                {t(lang, 'attendance_threshold')}: {minAttendance}%
+                <input data-attendance="" type="range" min={0} max={100} step={10} value={minAttendance} onChange={(event) => setMinAttendance(Number(event.target.value))} className="mt-2 w-full accent-[#7c7bb9]" />
+              </label>
+            </div>
             <div className="mt-4 flex flex-wrap items-end gap-4">
             <div data-duration-hours="" className="flex scroll-mt-24 items-center gap-3">
               <p className={`text-xs font-bold uppercase tracking-widest ${textMuted(isDarkMode)}`}>{t(lang, 'rehearsal_length')}</p>
@@ -805,6 +854,7 @@ export function ResultsPanel({
               </select>
             </label>
             </div>
+            {draftFields(draftPins)}
             <div className="mt-6 space-y-4">
               {pinned.length > 0 && (
                 <div className="space-y-2">

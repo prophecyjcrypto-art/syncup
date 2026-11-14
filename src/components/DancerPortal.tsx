@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { AvailabilityEditor } from './AvailabilityEditor'
 import { t } from '../i18n'
 import { analyzeEvent } from '../lib/analysis'
+import { publishedSlotKeys } from '../lib/sessionNotes'
 import { formatLongDate, formatTime, isPast, parseISODate } from '../lib/dates'
 import { classifySessionAttendance, incompleteCompulsoryDays, uncoveredDays } from '../lib/schedule'
 import { groupSurface, inputClass, textMuted, textPrimary } from '../lib/ui'
@@ -45,7 +46,7 @@ export function DancerPortal({
         dancers: mine ? [mine] : [],
         choreographers: [],
         groups: [],
-        savedSlots: campaign.savedSlots,
+        savedSlots: publishedSlotKeys(campaign.savedSlots, campaign.config.sessionNotes),
         sessions: [],
       }),
     [campaign, mine],
@@ -124,16 +125,21 @@ export function DancerPortal({
                     campaign.config.attendanceTolerance,
                   ).status
                 : null
+              const note = campaign.config.sessionNotes?.[session.id]
               return (
-                <li key={session.id} data-confirmed-session="" className="flex items-baseline justify-between gap-3 text-sm">
-                  <span className={textPrimary(isDarkMode)}>
-                    {formatLongDate(session.start, lang)} · {formatTime(session.start, lang)} – {formatTime(session.end, lang)}
-                  </span>
-                  {status ? (
-                    <span className={status === 'na' ? 'tone-danger font-semibold' : 'font-semibold text-[#93ba8c]'}>
-                      {status === 'ok' ? t(lang, 'mode_available') : status === 'partial' ? t(lang, 'partial_label') : t(lang, 'mode_unavailable')}
+                <li key={session.id} data-confirmed-session="" className="space-y-1 text-sm">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className={textPrimary(isDarkMode)}>
+                      {formatLongDate(session.start, lang)} · {formatTime(session.start, lang)} – {formatTime(session.end, lang)}
                     </span>
-                  ) : null}
+                    {status ? (
+                      <span className={status === 'na' ? 'tone-danger font-semibold' : 'font-semibold text-[#93ba8c]'}>
+                        {status === 'ok' ? t(lang, 'mode_available') : status === 'partial' ? t(lang, 'partial_label') : t(lang, 'mode_unavailable')}
+                      </span>
+                    ) : null}
+                  </div>
+                  {note?.venue ? <p data-venue={note.venue} className={textPrimary(isDarkMode)}>{note.venue}</p> : null}
+                  {note?.remarks ? <p data-session-remarks={note.remarks} className={`whitespace-pre-wrap ${textMuted(isDarkMode)}`}>{note.remarks}</p> : null}
                 </li>
               )
             })}
@@ -158,7 +164,12 @@ export function DancerPortal({
         blocks={blocks}
         onChange={setBlocks}
         disabled={locked}
-        confirmed={plan.sessions}
+        confirmed={plan.sessions.map((session) => ({
+          start: session.start,
+          end: session.end,
+          venue: campaign.config.sessionNotes?.[session.id]?.venue,
+          remarks: campaign.config.sessionNotes?.[session.id]?.remarks,
+        }))}
       />
       {!locked && (
         <div className="dock">

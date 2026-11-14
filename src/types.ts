@@ -11,6 +11,11 @@ export type AppStep =
   | 'portal'
   | 'hub'
 
+export interface SessionNote {
+  venue: string
+  remarks: string
+}
+
 export interface AppConfig {
   startDate: string
   endDate: string
@@ -18,6 +23,8 @@ export interface AppConfig {
   dayStartHour: number
   dayEndHour: number
   attendanceTolerance: number
+  /** Published session details, keyed by the slot start ISO. Readable with the event. */
+  sessionNotes?: Record<string, SessionNote>
 }
 
 export interface TimeBlock {

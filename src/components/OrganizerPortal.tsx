@@ -4,7 +4,7 @@ import { analyzeEvent } from '../lib/analysis'
 import { membershipChanges, peopleForTray } from '../lib/groups'
 import { preferredInviteCode, preferredInviteLink, shortInviteUrl } from '../lib/invites'
 import { groupSurface, inputClass, textMuted, textPrimary } from '../lib/ui'
-import type { Campaign, CampaignInput, Language } from '../types'
+import type { Campaign, CampaignInput, Language, SessionNote } from '../types'
 import { AssignBoard, AssignChips, AssignRoleTarget, AssignTarget, AssignTray, useAssigning } from './GroupAssign'
 import { organizersOf, type RoleGrantKind } from '../lib/roles'
 import { InfoTip } from './Guide'
@@ -41,6 +41,7 @@ export function OrganizerPortal({
   onAdminTime,
   onSaveSlots,
   onSaveDuration,
+  onPublish,
   canPin = true,
   canSetDuration = true,
 }: {
@@ -63,6 +64,7 @@ export function OrganizerPortal({
   onAdminTime?: () => void
   onSaveSlots?: (slots: string[]) => void
   onSaveDuration?: (hours: number) => void
+  onPublish?: (slots: string[], notes: Record<string, SessionNote>) => void
   canPin?: boolean
   canSetDuration?: boolean
 }) {
@@ -433,6 +435,7 @@ export function OrganizerPortal({
             canSetDuration={canSetDuration}
             onSaveSlots={onSaveSlots ?? (() => undefined)}
             onSaveDuration={onSaveDuration}
+            onPublish={onPublish}
           />
         ) : null}
       </div>

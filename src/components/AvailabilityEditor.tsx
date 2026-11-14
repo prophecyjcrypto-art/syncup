@@ -42,7 +42,7 @@ export function AvailabilityEditor({
   blocks: TimeBlock[]
   onChange: (blocks: TimeBlock[]) => void
   disabled?: boolean
-  confirmed?: { start: Date; end: Date }[]
+  confirmed?: { start: Date; end: Date; venue?: string; remarks?: string }[]
 }) {
   const [mode, setMode] = useState<BlockKind>('unavailable')
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -54,7 +54,7 @@ export function AvailabilityEditor({
     [config.startDate, config.endDate],
   )
   const confirmedByDay = useMemo(() => {
-    const grouped = new Map<string, { start: Date; end: Date }[]>()
+    const grouped = new Map<string, { start: Date; end: Date; venue?: string; remarks?: string }[]>()
     for (const session of confirmed) {
       const iso = toISODateString(session.start)
       const list = grouped.get(iso) ?? []
@@ -251,6 +251,8 @@ export function AvailabilityEditor({
             const kinds = new Set(blocks.filter((block) => toISODateString(block.start) === iso).map((block) => block.kind))
             const booked = confirmedByDay.get(iso) ?? []
             const bookedLabel = booked.map((session) => clockLabel(session.start)).join(' · ')
+            const venueLabel = booked.map((session) => session.venue).filter(Boolean).join(' · ')
+            const remarksLabel = booked.map((session) => session.remarks).filter(Boolean).join(' · ')
             return (
               <button
                 type="button"
@@ -260,6 +262,8 @@ export function AvailabilityEditor({
                 aria-label={bookedLabel ? `${formatLongDate(day, lang)} ${bookedLabel}` : formatLongDate(day, lang)}
                 data-day-selected={chosen ? '' : undefined}
                 data-confirmed-day={booked.length > 0 ? iso : undefined}
+                data-venue={venueLabel || undefined}
+                data-remarks={remarksLabel || undefined}
                 className={`cal-day relative flex w-full flex-col items-center justify-center rounded-lg text-xs font-bold leading-none ${
                   chosen ? (positive ? 'tone-fill-sage' : 'tone-fill-pink') : `glass-well ${isDarkMode ? 'text-zinc-100' : 'text-zinc-800'}`
                 } ${onDays.includes(iso) ? 'ring-2 ring-[#f6cf7a]' : ''} ${
@@ -269,8 +273,10 @@ export function AvailabilityEditor({
                 {onDays.includes(iso) ? '★' : ''}
                 {day.getDate()}
                 {bookedLabel ? (
-                  <span className={`mt-0.5 text-[8px] font-semibold leading-none ${chosen ? 'opacity-90' : isDarkMode ? 'text-[color:var(--logo-gold)]' : 'text-[color:var(--logo-gold-ink)]'}`}>
+                  <span className={`mt-0.5 max-w-full truncate text-[8px] font-semibold leading-none ${chosen ? 'opacity-90' : isDarkMode ? 'text-[color:var(--logo-gold)]' : 'text-[color:var(--logo-gold-ink)]'}`}>
                     {bookedLabel}
+                    {venueLabel ? ` ${venueLabel}` : ''}
+                    {remarksLabel ? ` ${remarksLabel}` : ''}
                   </span>
                 ) : null}
                 <span className="mt-0.5 flex gap-1">
